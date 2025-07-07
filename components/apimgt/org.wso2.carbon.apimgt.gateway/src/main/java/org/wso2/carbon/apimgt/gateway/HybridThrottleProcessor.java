@@ -56,6 +56,7 @@ public class HybridThrottleProcessor implements DistributedThrottleProcessor {
     private static final String SYNC_MODE_MSG_PART_DELIMITER = "___";
 
     public HybridThrottleProcessor() {
+        log.info("HybridThrottleProcessor redis init");
         redisPool = ServiceReferenceHolder.getInstance().getRedisPool();
         RedisConfig redisConfig = org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder.getInstance()
                 .getAPIManagerConfigurationService().getAPIManagerConfiguration().getRedisConfig();
@@ -92,6 +93,7 @@ public class HybridThrottleProcessor implements DistributedThrottleProcessor {
                 @Override
                 public void onUnsubscribe(String channel, int subscribedChannels) {
                     super.onUnsubscribe(channel, subscribedChannels);
+                    log.info("Gateway client is Unsubscribed from channel: " + channel);
                     if (log.isWarnEnabled()) {
                         log.warn("Gateway client is Unsubscribed from channel: " + channel);
                     }
@@ -100,6 +102,8 @@ public class HybridThrottleProcessor implements DistributedThrottleProcessor {
                 @Override
                 public void onMessage(String channel, String syncModeInitMsg) {
                     super.onMessage(channel, syncModeInitMsg);
+                    log.info("Sync mode changed message received to this node " + gatewayId + ". Channel: "
+                            + channel + " " + "Msg : " + syncModeInitMsg);
                     if (log.isTraceEnabled()) {
                         log.trace("Sync mode changed message received to this node " + gatewayId + ". Channel: "
                                 + channel + " " + "Msg : " + syncModeInitMsg);
@@ -234,6 +238,8 @@ public class HybridThrottleProcessor implements DistributedThrottleProcessor {
     @Override
     public boolean canAccessBasedOnUnitTime(CallerContext callerContext, CallerConfiguration configuration,
             ThrottleContext throttleContext, RequestContext requestContext) {
+        log.info("Starting evaluating whether can access based on unit time.");
+
         if (log.isTraceEnabled()) {
             log.trace("Starting evaluating whether can access based on unit time.");
         }
@@ -333,6 +339,8 @@ public class HybridThrottleProcessor implements DistributedThrottleProcessor {
     @Override
     public boolean canAccessIfUnitTimeNotOver(CallerContext callerContext, CallerConfiguration configuration,
             ThrottleContext throttleContext, RequestContext requestContext) {
+        log.info("Starting evaluating whether can access if unit time is not over. ");
+
         if (log.isTraceEnabled()) {
             log.trace("Starting evaluating whether can access if unit time is not over. ");
         }
@@ -540,6 +548,8 @@ public class HybridThrottleProcessor implements DistributedThrottleProcessor {
     @Override
     public boolean canAccessIfUnitTimeOver(CallerContext callerContext, CallerConfiguration configuration,
             ThrottleContext throttleContext, RequestContext requestContext) {
+        log.info("Evaluating whether can access if unit time is over. ");
+
         if (log.isTraceEnabled()) {
             log.trace("Evaluating whether can access if unit time is over. ");
         }
@@ -743,6 +753,8 @@ public class HybridThrottleProcessor implements DistributedThrottleProcessor {
     @Override
     public void syncThrottleCounterParams(CallerContext callerContext, boolean isInvocationFlow,
             RequestContext requestContext) {
+        log.info("When running syncing throttle counter params: isInvocationFlow = " + isInvocationFlow);
+
         if (log.isTraceEnabled()) {
             log.trace("When running syncing throttle counter params: isInvocationFlow = " + isInvocationFlow);
         }
@@ -806,6 +818,8 @@ public class HybridThrottleProcessor implements DistributedThrottleProcessor {
      */
     @Override
     public void syncThrottleWindowParams(CallerContext callerContext, boolean isInvocationFlow) {
+        log.info("syncThrottleWindowParams When running syncing throttle window params: isInvocationFlow = " + isInvocationFlow);
+
         synchronized (callerContext.getId().intern()) {
             long syncingStartTime = System.currentTimeMillis();
             if (log.isTraceEnabled()) {
@@ -920,6 +934,7 @@ public class HybridThrottleProcessor implements DistributedThrottleProcessor {
      * can be changed dynamically.
      */
     public void setLocalQuota(CallerContext callerContext, CallerConfiguration configuration) {
+        log.info("setLocalQuota");
         long maxRequests = configuration.getMaximumRequestPerUnitTime();
         int gatewayCount = ServiceReferenceHolder.getInstance().getGatewayCount();
 

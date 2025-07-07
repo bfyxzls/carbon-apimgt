@@ -1442,7 +1442,7 @@ public class APIMappingUtil {
         if (model.getVisibleOrganizations() != null && !model.getVisibleOrganizations().isEmpty()) {
             dto.setVisibleOrganizations(Arrays.asList(model.getVisibleOrganizations().split(",")));
         } else {
-            dto.setVisibleOrganizations(new ArrayList<>(List.of(APIConstants.VISIBLE_ORG_NONE)));
+            dto.setVisibleOrganizations(new ArrayList<>(Arrays.asList(APIConstants.VISIBLE_ORG_NONE)));
         }
 
         if (model.getAdditionalProperties() != null) {

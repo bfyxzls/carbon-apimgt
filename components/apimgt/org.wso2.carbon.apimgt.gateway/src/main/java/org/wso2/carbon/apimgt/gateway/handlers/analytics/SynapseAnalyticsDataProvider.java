@@ -29,6 +29,7 @@ import org.apache.synapse.commons.CorrelationConstants;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.rest.RESTConstants;
 import org.apache.synapse.transport.passthru.util.RelayUtils;
+import org.wso2.carbon.apimgt.api.APIConstants.AIAPIConstants;
 import org.wso2.carbon.apimgt.api.model.OperationPolicy;
 import org.wso2.carbon.apimgt.api.model.subscription.URLMapping;
 import org.wso2.carbon.apimgt.common.analytics.collectors.AnalyticsCustomDataProvider;
@@ -56,7 +57,6 @@ import org.wso2.carbon.apimgt.keymgt.SubscriptionDataHolder;
 import org.wso2.carbon.apimgt.keymgt.model.SubscriptionDataStore;
 import org.wso2.carbon.apimgt.keymgt.model.exception.DataLoadingException;
 import org.wso2.carbon.apimgt.keymgt.model.impl.SubscriptionDataLoaderImpl;
-import org.wso2.carbon.apimgt.api.APIConstants.AIAPIConstants;
 import org.wso2.carbon.utils.multitenancy.MultitenantConstants;
 import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 
@@ -76,12 +76,19 @@ import java.util.Optional;
 import static org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS;
 import static org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants.API_OBJECT;
 import static org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.UNKNOWN_VALUE;
+import static org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler.MCP_METHOD;
+import static org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler.MCP_NO_AUTH_REQUEST;
+import static org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler.MCP_REQUEST_BODY;
+import static org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler.MCP_TOOL_PARAMS;
 
 public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
 
     private static final Log log = LogFactory.getLog(SynapseAnalyticsDataProvider.class);
+
     private MessageContext messageContext;
+
     private AnalyticsCustomDataProvider analyticsCustomDataProvider;
+
     private Boolean buildResponseMessage = null;
 
     public SynapseAnalyticsDataProvider(MessageContext messageContext) {
@@ -105,6 +112,13 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         // sorting alphabetical order
         Arrays.sort(list);
         return String.join(",", list);
+    }
+
+    public static int getHourByUTC(long timestampMillis) {
+        OffsetDateTime offsetDateTime = OffsetDateTime
+                .ofInstant(Instant.ofEpochMilli(timestampMillis), ZoneOffset.UTC);
+
+        return offsetDateTime.getHour();
     }
 
     @Override
@@ -414,6 +428,11 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         } else {
             customProperties = new HashMap<>();
         }
+
+
+        if (messageContext.getPropertyKeySet().contains("URL_POSTFIX")) {
+            customProperties.put("urlPostfix", (String) messageContext.getProperty("URL_POSTFIX"));
+        }
         customProperties.put(Constants.API_USER_NAME_KEY, getUserName());
         customProperties.put(Constants.API_CONTEXT_KEY, getApiContext());
         customProperties.put(Constants.RESPONSE_SIZE, getResponseSize());
@@ -422,8 +441,33 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
 
         org.wso2.carbon.apimgt.keymgt.model.entity.API api =
                 (org.wso2.carbon.apimgt.keymgt.model.entity.API) messageContext.getProperty(API_OBJECT);
-        customProperties.put(Constants.IS_EGRESS, api.getEgress());
-        customProperties.put(Constants.SUBTYPE, api.getSubtype());
+        if(api!=null) {
+            customProperties.put(Constants.IS_EGRESS, api.getEgress());
+            customProperties.put(Constants.SUBTYPE, api.getSubtype());
+        }
+        // MCP工具调用检测 - 检查请求体中是否包含 "method": "tools/call"
+        if (messageContext.getPropertyKeySet().contains(MCP_METHOD)) {
+            customProperties.put("mcpMethod", messageContext.getProperty(MCP_METHOD));
+        }
+        if (messageContext.getPropertyKeySet().contains("MCP_HTTP_METHOD")) {
+            customProperties.put("mcpHttpMethod", messageContext.getProperty("MCP_HTTP_METHOD"));
+        }
+        if (messageContext.getPropertyKeySet().contains("MCP_API_ELECTED_RESOURCE")) {
+            customProperties.put("mcpApiElectedResource",
+                    messageContext.getProperty("MCP_API_ELECTED_RESOURCE"));
+        }
+        if(messageContext.getPropertyKeySet().contains( MCP_NO_AUTH_REQUEST)){
+            customProperties.put("mcpNoAuthRequest",
+                    messageContext.getProperty(MCP_NO_AUTH_REQUEST));
+        }
+        if(messageContext.getPropertyKeySet().contains( MCP_REQUEST_BODY)){
+            customProperties.put("mcpRequestBody",
+                    messageContext.getProperty(MCP_REQUEST_BODY));
+        }
+        if(messageContext.getPropertyKeySet().contains("isMcp")){
+            customProperties.put("isMcp",
+                    messageContext.getProperty("isMcp"));
+        }
 
         if (messageContext.getProperty(AIAPIConstants.AI_API_RESPONSE_METADATA) != null) {
             Object requestStartTimeObj = messageContext.getProperty(Constants.REQUEST_START_TIME_PROPERTY);
@@ -436,13 +480,6 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
             );
         }
         return customProperties;
-    }
-
-    public static int getHourByUTC(long timestampMillis) {
-        OffsetDateTime offsetDateTime = OffsetDateTime
-                .ofInstant(Instant.ofEpochMilli(timestampMillis), ZoneOffset.UTC);
-
-        return offsetDateTime.getHour();
     }
 
     private void getAiAnalyticsData(Map aiApiResponseMetadata, int requestStartHour,
@@ -461,7 +498,7 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         aiMetadata.put(
                 Constants.AI_MODEL,
                 Optional.ofNullable(aiApiResponseMetadata.get(
-                            AIAPIConstants.LLM_PROVIDER_SERVICE_METADATA_RESPONSE_MODEL)
+                                AIAPIConstants.LLM_PROVIDER_SERVICE_METADATA_RESPONSE_MODEL)
                         )
                         .map(Object::toString)
                         .orElse(null)
@@ -470,7 +507,7 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         aiTokenUsage.put(
                 Constants.AI_PROMPT_TOKEN_USAGE,
                 Optional.ofNullable(aiApiResponseMetadata.get(
-                            AIAPIConstants.LLM_PROVIDER_SERVICE_METADATA_PROMPT_TOKEN_COUNT)
+                                AIAPIConstants.LLM_PROVIDER_SERVICE_METADATA_PROMPT_TOKEN_COUNT)
                         )
                         .map(tokenCount -> Integer.parseInt(tokenCount.toString()))
                         .orElse(0)
@@ -478,7 +515,7 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         aiTokenUsage.put(
                 Constants.AI_COMPLETION_TOKEN_USAGE,
                 Optional.ofNullable(aiApiResponseMetadata.get(
-                            AIAPIConstants.LLM_PROVIDER_SERVICE_METADATA_COMPLETION_TOKEN_COUNT)
+                                AIAPIConstants.LLM_PROVIDER_SERVICE_METADATA_COMPLETION_TOKEN_COUNT)
                         )
                         .map(tokenCount -> Integer.parseInt(tokenCount.toString()))
                         .orElse(0)
@@ -487,7 +524,7 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         aiTokenUsage.put(
                 Constants.AI_TOTAL_TOKEN_USAGE,
                 Optional.ofNullable(aiApiResponseMetadata.get(
-                            AIAPIConstants.LLM_PROVIDER_SERVICE_METADATA_TOTAL_TOKEN_COUNT)
+                                AIAPIConstants.LLM_PROVIDER_SERVICE_METADATA_TOTAL_TOKEN_COUNT)
                         )
                         .map(tokenCount -> Integer.parseInt(tokenCount.toString()))
                         .orElse(0)
@@ -597,7 +634,7 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
     public int getResponseSize() {
         int responseSize = 0;
         if (buildResponseMessage == null) {
-            Map<String,String> configs = APIManagerConfiguration.getAnalyticsProperties();
+            Map<String, String> configs = APIManagerConfiguration.getAnalyticsProperties();
             if (configs.containsKey(Constants.BUILD_RESPONSE_MESSAGE_CONFIG)) {
                 buildResponseMessage = Boolean.parseBoolean(configs.get(Constants.BUILD_RESPONSE_MESSAGE_CONFIG));
             } else {
@@ -606,7 +643,7 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         }
         Map headers = (Map) ((Axis2MessageContext) messageContext).getAxis2MessageContext()
                 .getProperty(TRANSPORT_HEADERS);
-        if (headers != null  && headers.get(HttpHeaders.CONTENT_LENGTH) != null) {
+        if (headers != null && headers.get(HttpHeaders.CONTENT_LENGTH) != null) {
             responseSize = Integer.parseInt(headers.get(HttpHeaders.CONTENT_LENGTH).toString());
         }
         if (responseSize == 0 && buildResponseMessage) {
@@ -626,7 +663,7 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
                 SOAPBody soapbody = env.getBody();
                 if (soapbody != null) {
                     byte[] size = soapbody.toString().getBytes(Charset.defaultCharset());
-                    responseSize =  size.length;
+                    responseSize = size.length;
                 }
             }
         }
@@ -634,7 +671,8 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
     }
 
     public String getResponseContentType() {
-        Map headers = (Map) ((Axis2MessageContext) messageContext).getAxis2MessageContext().getProperty(TRANSPORT_HEADERS);
+        Map headers =
+                (Map) ((Axis2MessageContext) messageContext).getAxis2MessageContext().getProperty(TRANSPORT_HEADERS);
         if (headers != null && headers.get(HttpHeaders.CONTENT_TYPE) != null) {
             return headers.get(HttpHeaders.CONTENT_TYPE).toString();
         }
@@ -647,4 +685,5 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         }
         return Constants.NOT_APPLICABLE_VALUE;
     }
+
 }

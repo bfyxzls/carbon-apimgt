@@ -38,6 +38,8 @@ public class RedisBaseDistributedCountManager implements DistributedCounterManag
     long keyLockRetrievalTimeout;
 
     public RedisBaseDistributedCountManager(JedisPool redisPool) {
+        log.info("redis RedisBaseDistributedCountManager");
+
         this.redisPool = redisPool;
         RedisConfig redisConfig = org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder.
                 getInstance().getAPIManagerConfigurationService().getAPIManagerConfiguration().getRedisConfig();
@@ -46,7 +48,7 @@ public class RedisBaseDistributedCountManager implements DistributedCounterManag
 
     @Override
     public long getCounter(String key) {
-
+log.info("redis getCounter");
         long startTime = 0;
         try {
             String count = null;
@@ -80,6 +82,7 @@ public class RedisBaseDistributedCountManager implements DistributedCounterManag
 
     @Override
     public void setCounter(String key, long value) {
+        log.info("redis setCounter");
         long startTime = 0;
         try {
             startTime = System.currentTimeMillis();
@@ -92,6 +95,8 @@ public class RedisBaseDistributedCountManager implements DistributedCounterManag
     }
     @Override
     public void setCounterWithExpiry(String key, long value, long expiryTime) {
+        log.info("redis setCounterWithExpiry");
+
         long startTime = 0;
         try {
             startTime = System.currentTimeMillis();
@@ -107,7 +112,7 @@ public class RedisBaseDistributedCountManager implements DistributedCounterManag
 
     @Override
     public long addAndGetCounter(String key, long value) {
-
+        log.info("redis addAndGetCounter");
         long startTime = 0;
         try {
             startTime = System.currentTimeMillis();
@@ -153,6 +158,7 @@ public class RedisBaseDistributedCountManager implements DistributedCounterManag
 
     @Override
     public long asyncGetAndAddCounter(String key, long value) {
+        log.info("redis asyncGetAndAddCounter");
 
         long startTime = 0;
         try {
@@ -182,7 +188,7 @@ public class RedisBaseDistributedCountManager implements DistributedCounterManag
 
     @Override
     public long asyncAddCounter(String key, long value) {
-
+        log.info("redis asyncAddCounter");
         long startTime = 0;
         try {
             startTime = System.currentTimeMillis();
@@ -212,6 +218,7 @@ public class RedisBaseDistributedCountManager implements DistributedCounterManag
 
     @Override
     public long asyncGetAndAlterCounter(String key, long value) {
+        log.info("redis asyncGetAndAlterCounter");
 
         long startTime = 0;
         try {
@@ -243,6 +250,7 @@ public class RedisBaseDistributedCountManager implements DistributedCounterManag
 
     @Override
     public long asyncGetAlterAndSetExpiryOfCounter(String key, long value, long expiryTimeStamp) {
+        log.info("redis asyncGetAlterAndSetExpiryOfCounter");
 
         long startTime = 0;
         try {

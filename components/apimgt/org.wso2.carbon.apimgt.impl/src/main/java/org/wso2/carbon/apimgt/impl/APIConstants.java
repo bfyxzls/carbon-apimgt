@@ -1015,8 +1015,8 @@ public final class APIConstants {
 
     public static final String BILLING_AND_USAGE_CONFIGURATION = "EnableBillingAndUsage";
 
-    public static final String DEFAULT_APPLICATION_NAME = "DefaultApplication";
-    public static final String DEFAULT_APPLICATION_DESCRIPTION = "This is the default application";
+    public static final String DEFAULT_APPLICATION_NAME = "默认应用";
+    public static final String DEFAULT_APPLICATION_DESCRIPTION = "系统为您创建的默认应用，可快速开始使用北大法宝MCP服务";
     public static final String BASIC_AUTH_APPLICATION_NAME = "BasicAuthApplication";
     public static final String BASIC_AUTH_APPLICATION_OWNER = " BasicAuthApplicationOwner";
     public static final String MUTUAL_SSL_AUTH_APPLICATION_NAME = "MutualSSLAuthApplication";
@@ -3297,7 +3297,7 @@ public final class APIConstants {
         public static final String TOKEN_VALIDATION_CONFIG = "TokenValidation";
         public static final String ENFORCE_JWT_TYPE_HEADER_VALIDATION = "EnforceTypeHeaderValidation";
     }
-    
+
     // For Organization access control Configuration
     public static final String ORG_BASED_ACCESS_CONTROL = "OrganizationBasedAccessControl";
     public static final String ORG_BASED_ACCESS_CONTROL_ENABLE = "Enable";

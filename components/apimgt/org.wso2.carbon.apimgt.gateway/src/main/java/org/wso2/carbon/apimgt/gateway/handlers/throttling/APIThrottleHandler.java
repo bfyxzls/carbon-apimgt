@@ -76,6 +76,8 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 
+import static org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler.MCP_METHOD;
+
 /**
  * This API handler is responsible for evaluating authenticated user requests against their
  * corresponding access tiers (SLAs) and deciding whether the requests should be accepted
@@ -88,16 +90,20 @@ import java.util.concurrent.TimeUnit;
  */
 public class APIThrottleHandler extends AbstractHandler {
 
+    public static final String RESOURCE_THROTTLE_KEY = "resource_throttle_context";
+
     private static final Log log = LogFactory.getLog(APIThrottleHandler.class);
 
     /**
      * The Throttle object - holds all runtime and configuration data
      */
     private volatile Throttle throttle;
+
     /**
      * ConcurrentAccessController - limit the remote callers concurrent access
      */
     private ConcurrentAccessController concurrentAccessController = null;
+
     /**
      * Access rate controller - limit the remote caller access
      */
@@ -107,8 +113,6 @@ public class APIThrottleHandler extends AbstractHandler {
 
     private RoleBasedAccessRateController applicationRoleBasedAccessController;
 
-    public static final String RESOURCE_THROTTLE_KEY = "resource_throttle_context";
-
     private Map<String, Boolean> continueOnLimitReachedMap;
 
     /**
@@ -116,6 +120,7 @@ public class APIThrottleHandler extends AbstractHandler {
      * look up from ConfigurationContext
      */
     private String key;
+
     /**
      * The key for getting the throttling policy - key refers to a/an [registry] Api entry
      */
@@ -135,6 +140,7 @@ public class APIThrottleHandler extends AbstractHandler {
      * The concurrent access control group id
      */
     private String id;
+
     /**
      * Version number of the throttle policy
      */
@@ -243,8 +249,7 @@ public class APIThrottleHandler extends AbstractHandler {
             // never create ,just get the existing one
             concurrentAccessController = (ConcurrentAccessController) cc.getProperty(key);
         }
-
-
+        
         // perform concurrency throttling
         boolean canAccess = doThrottleByConcurrency(isResponse);
         // if the access is success through concurrency throttle and if this is a request message
@@ -342,7 +347,7 @@ public class APIThrottleHandler extends AbstractHandler {
             int concurrentLimit = concurrentAccessController.getLimit();
             if (log.isDebugEnabled()) {
                 log.debug("Concurrent access controller for ID: " + id +
-                          " allows: " + concurrentLimit + " concurrent accesses");
+                        " allows: " + concurrentLimit + " concurrent accesses");
             }
             int available;
             if (!isResponse) {
@@ -350,14 +355,14 @@ public class APIThrottleHandler extends AbstractHandler {
                 canAccess = available > 0;
                 if (log.isDebugEnabled()) {
                     log.debug("Concurrency Throttle: Access " +
-                              (canAccess ? "allowed" : "denied") + " :: " + available
-                              + " of available of " + concurrentLimit + " connections");
+                            (canAccess ? "allowed" : "denied") + " :: " + available
+                            + " of available of " + concurrentLimit + " connections");
                 }
             } else {
                 available = concurrentAccessController.incrementAndGet();
                 if (log.isDebugEnabled()) {
                     log.debug("Concurrency Throttle : Connection returned" + " :: " +
-                              available + " of available of " + concurrentLimit + " connections");
+                            available + " of available of " + concurrentLimit + " connections");
                 }
             }
         }
@@ -410,7 +415,7 @@ public class APIThrottleHandler extends AbstractHandler {
                             canAccess = accessInformation.isAccessAllowed();
                             if (log.isDebugEnabled()) {
                                 log.debug("Access " + (canAccess ? "allowed" : "denied")
-                                          + " for Domain Name : " + domainName);
+                                        + " for Domain Name : " + domainName);
                             }
                             //In the case of both of concurrency throttling and
                             //rate based throttling have enabled ,
@@ -470,7 +475,7 @@ public class APIThrottleHandler extends AbstractHandler {
                                 canAccess = accessInformation.isAccessAllowed();
                                 if (log.isDebugEnabled()) {
                                     log.debug("Access " + (canAccess ? "allowed" : "denied")
-                                              + " for IP : " + remoteIP);
+                                            + " for IP : " + remoteIP);
                                 }
                                 //In the case of both of concurrency throttling and
                                 //rate based throttling have enabled ,
@@ -533,12 +538,12 @@ public class APIThrottleHandler extends AbstractHandler {
 
                 if (accessToken == null || roleID == null) {
                     log.warn("No consumer key or role information found on the request - " +
-                             "Throttling not applied");
+                            "Throttling not applied");
                     return true;
                 }
             } else {
                 log.warn("No authentication context information found on the request - " +
-                         "Throttling not applied");
+                        "Throttling not applied");
                 return true;
             }
 
@@ -564,7 +569,8 @@ public class APIThrottleHandler extends AbstractHandler {
                 AccessInformation info = null;
                 //If application level throttling is applied
                 if (applicationRoleId != null) {
-                    ThrottleContext applicationThrottleContext = getApplicationThrottleContext(synCtx, dataHolder, applicationId);
+                    ThrottleContext applicationThrottleContext =
+                            getApplicationThrottleContext(synCtx, dataHolder, applicationId);
                     if (isClusteringEnable) {
                         applicationThrottleContext.setConfigurationContext(cc);
                         applicationThrottleContext.setThrottleId(id);
@@ -572,14 +578,15 @@ public class APIThrottleHandler extends AbstractHandler {
                     //First throttle by application
                     try {
                         info = applicationRoleBasedAccessController.canAccess(applicationThrottleContext,
-                                                                              applicationId, applicationRoleId);
+                                applicationId, applicationRoleId);
                         if (log.isDebugEnabled()) {
                             log.debug("Throttle by Application " + applicationId);
                             log.debug("Allowed = " + (info != null ? info.isAccessAllowed() : "false"));
                         }
                     } catch (ThrottleException e) {
                         log.warn("Exception occurred while performing role " + "based throttling", e);
-                        synCtx.setProperty(APIThrottleConstants.THROTTLED_OUT_REASON, APIThrottleConstants.APPLICATION_LIMIT_EXCEEDED);
+                        synCtx.setProperty(APIThrottleConstants.THROTTLED_OUT_REASON,
+                                APIThrottleConstants.APPLICATION_LIMIT_EXCEEDED);
                         return false;
                     }
 
@@ -599,13 +606,14 @@ public class APIThrottleHandler extends AbstractHandler {
                                 resourceContext.setConfigurationContext(cc);
                                 //replicate the current state of ConcurrentAccessController
                                 try {
-                                    Replicator.replicate(cc, new String[]{key});
+                                    Replicator.replicate(cc, new String[] {key});
                                 } catch (ClusteringFault clusteringFault) {
                                     log.error("Error during replicating states", clusteringFault);
                                 }
                             }
                         }
-                        synCtx.setProperty(APIThrottleConstants.THROTTLED_OUT_REASON, APIThrottleConstants.APPLICATION_LIMIT_EXCEEDED);
+                        synCtx.setProperty(APIThrottleConstants.THROTTLED_OUT_REASON,
+                                APIThrottleConstants.APPLICATION_LIMIT_EXCEEDED);
                         return false;
                     }
                 }
@@ -630,7 +638,7 @@ public class APIThrottleHandler extends AbstractHandler {
                     //If there no any tier then we need to set it as unlimited
                     if (resourceAndHTTPVerbThrottlingTier == null) {
                         log.warn("Unable to find throttling information for resource and http verb. Throttling will " +
-                                 "not apply");
+                                "not apply");
                     } else {
                         resourceLevelRoleId = resourceAndHTTPVerbThrottlingTier;
                     }
@@ -638,7 +646,7 @@ public class APIThrottleHandler extends AbstractHandler {
                     //This avoids sending more than the permitted number of requests in a unit time by
                     // regenerating the access token
                     String resourceAndHTTPVerbKey = verbInfoDTO.getRequestKey() + '-' + consumerKey + ':' +
-                                                    authorizedUser;
+                            authorizedUser;
                     //resourceLevelTier should get from auth context or request synapse context
                     // getResourceAuthenticationScheme(apiContext, apiVersion, requestPath, httpMethod);
                     //api + resource+http verb combination as verb_resource_api_combined_key
@@ -656,11 +664,12 @@ public class APIThrottleHandler extends AbstractHandler {
                                     resourceContext.setThrottleId(id + "resource");
                                 }
                                 info = roleBasedAccessController.canAccess(resourceContext, resourceAndHTTPVerbKey,
-                                                                           resourceAndHTTPVerbThrottlingTier);
+                                        resourceAndHTTPVerbThrottlingTier);
                             }
                         } catch (ThrottleException e) {
                             log.warn("Exception occurred while performing resource" + "based throttling", e);
-                            synCtx.setProperty(APIThrottleConstants.THROTTLED_OUT_REASON, APIThrottleConstants.RESOURCE_LIMIT_EXCEEDED);
+                            synCtx.setProperty(APIThrottleConstants.THROTTLED_OUT_REASON,
+                                    APIThrottleConstants.RESOURCE_LIMIT_EXCEEDED);
                             return false;
                         }
 
@@ -679,7 +688,7 @@ public class APIThrottleHandler extends AbstractHandler {
                                     cc.setProperty(key, cac);
                                     //replicate the current state of ConcurrentAccessController
                                     try {
-                                        Replicator.replicate(cc, new String[]{key});
+                                        Replicator.replicate(cc, new String[] {key});
                                     } catch (ClusteringFault clusteringFault) {
                                         log.error("Error during replicating states", clusteringFault);
                                     }
@@ -692,7 +701,8 @@ public class APIThrottleHandler extends AbstractHandler {
                                     synCtx.setProperty(APIConstants.API_USAGE_THROTTLE_OUT_PROPERTY_KEY, Boolean.TRUE);
                                 }
                             } else {
-                                synCtx.setProperty(APIThrottleConstants.THROTTLED_OUT_REASON, APIThrottleConstants.RESOURCE_LIMIT_EXCEEDED);
+                                synCtx.setProperty(APIThrottleConstants.THROTTLED_OUT_REASON,
+                                        APIThrottleConstants.RESOURCE_LIMIT_EXCEEDED);
                                 return false;
                             }
                         }
@@ -740,7 +750,8 @@ public class APIThrottleHandler extends AbstractHandler {
                     }
                 } catch (ThrottleException e) {
                     log.warn("Exception occurred while performing role " + "based throttling", e);
-                    synCtx.setProperty(APIThrottleConstants.THROTTLED_OUT_REASON, APIThrottleConstants.API_LIMIT_EXCEEDED);
+                    synCtx.setProperty(APIThrottleConstants.THROTTLED_OUT_REASON,
+                            APIThrottleConstants.API_LIMIT_EXCEEDED);
                     return false;
                 }
 
@@ -759,7 +770,7 @@ public class APIThrottleHandler extends AbstractHandler {
                             cc.setProperty(key, cac);
                             //replicate the current state of ConcurrentAccessController
                             try {
-                                Replicator.replicate(cc, new String[]{key});
+                                Replicator.replicate(cc, new String[] {key});
                             } catch (ClusteringFault clusteringFault) {
                                 log.error("Error during replicating states", clusteringFault);
                             }
@@ -776,7 +787,8 @@ public class APIThrottleHandler extends AbstractHandler {
                                     + ". But role " + consumerRoleID + "allows to continue to serve requests");
                         }
                     } else {
-                        synCtx.setProperty(APIThrottleConstants.THROTTLED_OUT_REASON, APIThrottleConstants.API_LIMIT_EXCEEDED);
+                        synCtx.setProperty(APIThrottleConstants.THROTTLED_OUT_REASON,
+                                APIThrottleConstants.API_LIMIT_EXCEEDED);
                         return false;
                     }
                 }
@@ -821,7 +833,8 @@ public class APIThrottleHandler extends AbstractHandler {
                 }
 
                 if (info != null && !info.isAccessAllowed()) {
-                    synCtx.setProperty(APIThrottleConstants.THROTTLED_OUT_REASON, APIThrottleConstants.HARD_LIMIT_EXCEEDED);
+                    synCtx.setProperty(APIThrottleConstants.THROTTLED_OUT_REASON,
+                            APIThrottleConstants.HARD_LIMIT_EXCEEDED);
                     log.info("Hard Throttling limit exceeded.");
                     return false;
                 }
@@ -905,10 +918,12 @@ public class APIThrottleHandler extends AbstractHandler {
                         if (hardThrottlingPolicy != null) {
                             Throttle tempThrottle = ThrottleFactory.createMediatorThrottle(
                                     PolicyEngine.getPolicy(hardThrottlingPolicy));
-                            ThrottleConfiguration newThrottleConfig = tempThrottle.getThrottleConfiguration(ThrottleConstants
-                                    .ROLE_BASED_THROTTLE_KEY);
+                            ThrottleConfiguration newThrottleConfig =
+                                    tempThrottle.getThrottleConfiguration(ThrottleConstants
+                                            .ROLE_BASED_THROTTLE_KEY);
                             ThrottleContext hardThrottling = createThrottleContext(newThrottleConfig);
-                            throttle.addThrottleContext(APIThrottleConstants.HARD_THROTTLING_CONFIGURATION, hardThrottling);
+                            throttle.addThrottleContext(APIThrottleConstants.HARD_THROTTLING_CONFIGURATION,
+                                    hardThrottling);
                         }
 
                         // We check to what tiers allows to continue on quota reached.
@@ -967,13 +982,13 @@ public class APIThrottleHandler extends AbstractHandler {
         }
     }
 
+    public String getId() {
+        return id;
+    }
+
     public void setId(String id) {
         this.id = id;
         this.key = ThrottleConstants.THROTTLE_PROPERTY_PREFIX + id + ThrottleConstants.CAC_SUFFIX;
-    }
-
-    public String getId() {
-        return id;
     }
 
     public void setPolicyKey(String policyKey) {
@@ -1036,16 +1051,19 @@ public class APIThrottleHandler extends AbstractHandler {
 
         OMElement parsedPolicy = null;
 
-        StringBuilder policy = new StringBuilder("<wsp:Policy xmlns:wsp=\"http://schemas.xmlsoap.org/ws/2004/09/policy\" " +
-                "xmlns:throttle=\"http://www.wso2.org/products/wso2commons/throttle\">\n" +
-                "    <throttle:MediatorThrottleAssertion>\n");
+        StringBuilder policy =
+                new StringBuilder("<wsp:Policy xmlns:wsp=\"http://schemas.xmlsoap.org/ws/2004/09/policy\" " +
+                        "xmlns:throttle=\"http://www.wso2.org/products/wso2commons/throttle\">\n" +
+                        "    <throttle:MediatorThrottleAssertion>\n");
 
         if (productionMaxCount != null && productionUnitTime != null) {
-            policy.append(createPolicyForRole(APIThrottleConstants.PRODUCTION_HARD_LIMIT, productionUnitTime, productionMaxCount));
+            policy.append(createPolicyForRole(APIThrottleConstants.PRODUCTION_HARD_LIMIT, productionUnitTime,
+                    productionMaxCount));
         }
 
         if (sandboxMaxCount != null && sandboxUnitTime != null) {
-            policy.append(createPolicyForRole(APIThrottleConstants.SANDBOX_HARD_LIMIT, sandboxUnitTime, sandboxMaxCount));
+            policy.append(
+                    createPolicyForRole(APIThrottleConstants.SANDBOX_HARD_LIMIT, sandboxUnitTime, sandboxMaxCount));
         }
 
         policy.append("    </throttle:MediatorThrottleAssertion>\n" +
@@ -1125,7 +1143,8 @@ public class APIThrottleHandler extends AbstractHandler {
                 .getApplicationThrottleContext(synCtx, dataHolder, applicationId, policyKeyApplication);
     }
 
-    protected ThrottleContext createThrottleContext(ThrottleConfiguration throttleConfiguration) throws ThrottleException {
+    protected ThrottleContext createThrottleContext(ThrottleConfiguration throttleConfiguration)
+            throws ThrottleException {
         return ThrottleContextFactory.createThrottleContext(ThrottleConstants.ROLE_BASE, throttleConfiguration);
     }
 

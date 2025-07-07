@@ -1003,7 +1003,7 @@ public class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
                             System.currentTimeMillis(), APIConstants.EventType.SUBSCRIPTIONS_CREATE.name(), tenantId,
                             apiOrgId, subscriptionId, addedSubscription.getUUID(), apiId, apiUUID,
                             application.getId(), application.getUUID(), identifier.getTier(), subscriptionStatus,
-                            identifier.getName(), identifier.getVersion());
+                            identifier.getName(), identifier.getVersion(),application.getApplicationAttributes());
                     APIUtil.sendNotification(subscriptionEvent, APIConstants.NotifierType.SUBSCRIPTIONS.name());
                 }
             } else {
@@ -1011,7 +1011,7 @@ public class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
                         System.currentTimeMillis(), APIConstants.EventType.SUBSCRIPTIONS_CREATE.name(), tenantId,
                         apiOrgId, subscriptionId, addedSubscription.getUUID(), apiId, apiUUID,
                         application.getId(), application.getUUID(), identifier.getTier(), subscriptionStatus,
-                        identifier.getName(), identifier.getVersion());
+                        identifier.getName(), identifier.getVersion(),application.getApplicationAttributes());
                 APIUtil.sendNotification(subscriptionEvent, APIConstants.NotifierType.SUBSCRIPTIONS.name());
             }
 
@@ -2794,7 +2794,7 @@ APIConstants.AuditLogConstants.DELETED, this.username);
      * @param sortColumn   The sort column.
      * @param sortOrder    The sort order.
      * @param organization Identifier of an Organization
-     * @param sharedOrganization 
+     * @param sharedOrganization
      * @return Application[] The Applications.
      * @throws APIManagementException
      */
@@ -3873,7 +3873,7 @@ APIConstants.AuditLogConstants.DELETED, this.username);
     @Override
     public Map<String, Object> searchPaginatedAPIs(String searchQuery, String organization, int start, int end)
                                                  throws APIManagementException {
-    	
+
         Organization org = new Organization(organization);
         String userName = (userNameWithoutChange != null) ? userNameWithoutChange : username;
         String[] roles = APIUtil.getListOfRoles(userName);
@@ -3882,7 +3882,7 @@ APIConstants.AuditLogConstants.DELETED, this.username);
 
         return searchPaginatedAPIs(searchQuery, start, end, org, userCtx, null);
     }
-    
+
     @Override
     public Map<String, Object> searchPaginatedAPIs(String searchQuery, OrganizationInfo organizationInfo, int start, int end,
                                                    String sortBy, String sortOrder) throws APIManagementException {

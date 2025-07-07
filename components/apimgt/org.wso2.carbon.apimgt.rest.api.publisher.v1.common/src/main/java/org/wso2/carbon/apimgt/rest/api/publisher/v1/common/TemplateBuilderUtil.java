@@ -74,6 +74,8 @@ import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.APIDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.APIOperationsDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.MediationPolicyDTO;
 
+import javax.xml.namespace.QName;
+import javax.xml.stream.XMLStreamException;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
@@ -89,9 +91,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import javax.xml.namespace.QName;
-import javax.xml.stream.XMLStreamException;
-
 import static org.wso2.carbon.apimgt.impl.APIConstants.API_ENDPOINT_CONFIG_PROTOCOL_TYPE;
 
 /**
@@ -100,21 +99,31 @@ import static org.wso2.carbon.apimgt.impl.APIConstants.API_ENDPOINT_CONFIG_PROTO
 public class TemplateBuilderUtil {
 
     private static final String ENDPOINT_PRODUCTION = "_PRODUCTION_";
+
     private static final String ENDPOINT_SANDBOX = "_SANDBOX_";
 
     private static final Log log = LogFactory.getLog(TemplateBuilderUtil.class);
 
     public static APITemplateBuilderImpl getAPITemplateBuilder(API api, String tenantDomain,
-                                                           List<ClientCertificateDTO> clientCertificateDTOSProduction,
-                                                           List<ClientCertificateDTO> clientCertificateDTOSSandbox,
-                                                           List<SoapToRestMediationDto> soapToRestInMediationDtos,
-                                                           List<SoapToRestMediationDto> soapToRestMediationDtos)
+                                                               List<ClientCertificateDTO> clientCertificateDTOSProduction,
+                                                               List<ClientCertificateDTO> clientCertificateDTOSSandbox,
+                                                               List<SoapToRestMediationDto> soapToRestInMediationDtos,
+                                                               List<SoapToRestMediationDto> soapToRestMediationDtos)
             throws APIManagementException {
 
         int tenantId = APIUtil.getTenantIdFromTenantDomain(tenantDomain);
         APITemplateBuilderImpl vtb = new APITemplateBuilderImpl(api, soapToRestInMediationDtos,
                 soapToRestMediationDtos);
+
+        if (api.getApiCategories() != null
+                && api.getApiCategories().stream()
+                .anyMatch(o -> "MCP".equals(o.getName()))) {
+            log.info("register mcp api " + api.getId().getApiName());
+
+            vtb.addHandler("org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler", Collections.emptyMap());
+        }
         Map<String, String> latencyStatsProperties = new HashMap<String, String>();
+
         latencyStatsProperties.put(APIConstants.API_UUID, api.getUUID());
         if (!APIUtil.isStreamingApi(api)) {
             vtb.addHandler(
@@ -353,17 +362,23 @@ public class TemplateBuilderUtil {
                         Collections.emptyMap());
             }
         }
-
         return vtb;
     }
 
     public static APITemplateBuilderImpl getAPITemplateBuilder(APIProduct apiProduct, String tenantDomain,
-                   List<ClientCertificateDTO> clientCertificateDTOSProduction,
-                   List<ClientCertificateDTO> clientCertificateDTOSSandbox, Map<String, APIDTO> associatedAPIMap)
+                                                               List<ClientCertificateDTO> clientCertificateDTOSProduction,
+                                                               List<ClientCertificateDTO> clientCertificateDTOSSandbox,
+                                                               Map<String, APIDTO> associatedAPIMap)
             throws APIManagementException {
 
         int tenantId = APIUtil.getTenantIdFromTenantDomain(tenantDomain);
         APITemplateBuilderImpl vtb = new APITemplateBuilderImpl(apiProduct, associatedAPIMap);
+
+        // MCP请求体捕获Handler - 必须放在最前面
+        vtb.addHandlerPriority(
+                "org.wso2.carbon.apimgt.gateway.handlers.mcp.MCPRequestCaptureHandler",
+                Collections.emptyMap(), 1);
+
         Map<String, String> latencyStatsProperties = new HashMap<String, String>();
         latencyStatsProperties.put(APIConstants.API_UUID, apiProduct.getUuid());
         if (!APIUtil.isStreamingApi(apiProduct)) {
@@ -765,9 +780,10 @@ public class TemplateBuilderUtil {
     }
 
     private static GatewayAPIDTO createAPIGatewayDTOtoPublishAPI(Environment environment, APIProduct apiProduct,
-            APITemplateBuilder builder, String tenantDomain, Map<String, APIDTO> associatedAPIsMap,
-            List<ClientCertificateDTO> clientCertificatesDTOListProduction,
-            List<ClientCertificateDTO> clientCertificatesDTOListSandbox)
+                                                                 APITemplateBuilder builder, String tenantDomain,
+                                                                 Map<String, APIDTO> associatedAPIsMap,
+                                                                 List<ClientCertificateDTO> clientCertificatesDTOListProduction,
+                                                                 List<ClientCertificateDTO> clientCertificatesDTOListSandbox)
             throws APITemplateException, XMLStreamException, APIManagementException {
 
         APIProductIdentifier id = apiProduct.getId();
@@ -875,11 +891,11 @@ public class TemplateBuilderUtil {
     }
 
     private static GatewayAPIDTO createAPIGatewayDTOtoPublishAPI(Environment environment, API api,
-                                                         APITemplateBuilder builder, String tenantDomain,
-                                                         String extractedPath, APIDTO apidto,
-                                                         List<ClientCertificateDTO> productionClientCertificatesDTOList,
-                                                         List<ClientCertificateDTO> sandboxClientCertificatesDTOList,
-                                                         List<EndpointDTO> endpointList)
+                                                                 APITemplateBuilder builder, String tenantDomain,
+                                                                 String extractedPath, APIDTO apidto,
+                                                                 List<ClientCertificateDTO> productionClientCertificatesDTOList,
+                                                                 List<ClientCertificateDTO> sandboxClientCertificatesDTOList,
+                                                                 List<EndpointDTO> endpointList)
             throws APIManagementException, APITemplateException, XMLStreamException {
 
         GatewayAPIDTO gatewayAPIDTO = new GatewayAPIDTO();
@@ -1022,7 +1038,7 @@ public class TemplateBuilderUtil {
                             gatewayAPIDTO, builder);
                 }
                 apiConfig = builder.getConfigStringForAIAPI(environment, defaultProductionEndpoint,
-                 defaultSandboxEndpoint);
+                        defaultSandboxEndpoint);
             } else {
                 apiConfig = builder.getConfigStringForTemplate(environment);
             }
@@ -1072,7 +1088,7 @@ public class TemplateBuilderUtil {
      * @return The matching {@link EndpointDTO} if found, otherwise null
      */
     public static SimplifiedEndpoint findEndpointByUuid(List<SimplifiedEndpoint> endpointList,
-                                                           String endpointUuid) {
+                                                        String endpointUuid) {
 
         return endpointList.stream()
                 .filter(endpoint -> endpointUuid.equals(endpoint.getEndpointUuid()))
@@ -1234,7 +1250,7 @@ public class TemplateBuilderUtil {
     /**
      * To deploy client certificate in given API environment.
      *
-     * @param tenantDomain              Tenant domain.
+     * @param tenantDomain                        Tenant domain.
      * @param productionClientCertificatesDTOList
      * @param sandboxClientCertificatesDTOList
      */
@@ -1267,10 +1283,10 @@ public class TemplateBuilderUtil {
     }
 
     public static GatewayContentDTO[] addGatewayContentToList(GatewayContentDTO gatewayContentDTO,
-                                                               GatewayContentDTO[] gatewayContents) {
+                                                              GatewayContentDTO[] gatewayContents) {
 
         if (gatewayContents == null) {
-            return new GatewayContentDTO[]{gatewayContentDTO};
+            return new GatewayContentDTO[] {gatewayContentDTO};
         } else {
             Set<GatewayContentDTO> gatewayContentDTOList = new HashSet<>();
             Collections.addAll(gatewayContentDTOList, gatewayContents);
@@ -1537,7 +1553,7 @@ public class TemplateBuilderUtil {
     private static CredentialDto[] addCredentialsToList(CredentialDto credential, CredentialDto[] credentials) {
 
         if (credentials == null) {
-            return new CredentialDto[]{credential};
+            return new CredentialDto[] {credential};
         } else {
             Set<CredentialDto> credentialList = new HashSet<>();
             Collections.addAll(credentialList, credentials);
@@ -1662,15 +1678,15 @@ public class TemplateBuilderUtil {
                     operationPolicySequenceContentDto.setName(seqExt);
                     operationPolicySequenceContentDto.setContent(APIUtil.convertOMtoString(omElement));
                     switch (flow) {
-                    case APIConstants.OPERATION_SEQUENCE_TYPE_REQUEST:
-                        api.setInSequence(seqExt);
-                        break;
-                    case APIConstants.OPERATION_SEQUENCE_TYPE_RESPONSE:
-                        api.setOutSequence(seqExt);
-                        break;
-                    case APIConstants.OPERATION_SEQUENCE_TYPE_FAULT:
-                        api.setFaultSequence(seqExt);
-                        break;
+                        case APIConstants.OPERATION_SEQUENCE_TYPE_REQUEST:
+                            api.setInSequence(seqExt);
+                            break;
+                        case APIConstants.OPERATION_SEQUENCE_TYPE_RESPONSE:
+                            api.setOutSequence(seqExt);
+                            break;
+                        case APIConstants.OPERATION_SEQUENCE_TYPE_FAULT:
+                            api.setFaultSequence(seqExt);
+                            break;
                     }
                     return operationPolicySequenceContentDto;
                 }
@@ -1682,7 +1698,8 @@ public class TemplateBuilderUtil {
     }
 
     private static GatewayContentDTO retrieveSequenceBackendForAPIProduct(API api, APIProduct apiProduct,
-            String endpointType, String pathToAchieve) throws APIManagementException {
+                                                                          String endpointType, String pathToAchieve)
+            throws APIManagementException {
         GatewayContentDTO customBackendSequenceContentDto = new GatewayContentDTO();
         String customSequence = null;
         ApiMgtDAO apiMgtDAO = ApiMgtDAO.getInstance();
@@ -1770,7 +1787,7 @@ public class TemplateBuilderUtil {
         String policySequence = null;
         APIProductIdentifier apiProductIdentifier = apiProduct.getId();
         String seqExt = APIUtil.getSequenceExtensionName(apiProductIdentifier.getName(),
-                apiProductIdentifier.getVersion())
+                        apiProductIdentifier.getVersion())
                 .concat("--").concat(api.getUuid()).concat(SynapsePolicyAggregator.getSequenceExtensionFlow(flow));
         try {
             policySequence = SynapsePolicyAggregator.generatePolicySequenceForUriTemplateSet(applicableURITemplates,
@@ -1863,7 +1880,7 @@ public class TemplateBuilderUtil {
                 // first time)
                 endpointObj = prodEP.getJSONObject("config");
             } else {
-                return new String[]{"", "", ""};
+                return new String[] {"", "", ""};
             }
         } else if (ENDPOINT_SANDBOX.equalsIgnoreCase(urlType)) {
             org.json.JSONObject sandEP = obj.getJSONObject(APIConstants.API_DATA_SANDBOX_ENDPOINTS);
@@ -1872,7 +1889,7 @@ public class TemplateBuilderUtil {
                 // first time)
                 endpointObj = sandEP.getJSONObject("config");
             } else {
-                return new String[]{"", "", ""};
+                return new String[] {"", "", ""};
             }
         }
         String duration = validateJSONObjKey("actionDuration", endpointObj) ? "\t\t<duration>" +
@@ -1891,7 +1908,7 @@ public class TemplateBuilderUtil {
                         "\t\t<progressionFactor>1.0</progressionFactor>\n" +
                         "\t\t<maximumDuration>0</maximumDuration>";
                 String markForSuspension = "\t\t<errorCodes>-1</errorCodes>";
-                return new String[]{timeout, suspendOnFailure, markForSuspension};
+                return new String[] {timeout, suspendOnFailure, markForSuspension};
             }
         }
         suspendErrorCode = parseWsEndpointConfigErrorCodes(endpointObj, "suspendErrorCode");
@@ -1910,7 +1927,7 @@ public class TemplateBuilderUtil {
         String retryDelay = validateJSONObjKey("retryDelay", endpointObj) ? "\t\t<retryDelay>" +
                 endpointObj.get("retryDelay") + "</retryDelay>" : "";
         String markForSuspension = retryErrorCode + "\n" + retryTimeOut + "\n" + retryDelay;
-        return new String[]{timeout, suspendOnFailure, markForSuspension};
+        return new String[] {timeout, suspendOnFailure, markForSuspension};
     }
 
     /**

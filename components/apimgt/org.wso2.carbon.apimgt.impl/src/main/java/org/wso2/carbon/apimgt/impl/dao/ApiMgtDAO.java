@@ -1526,6 +1526,9 @@ public class ApiMgtDAO {
         subscribedAPI.setSubCreatedStatus(resultSet.getString("SUBS_CREATE_STATE"));
         subscribedAPI.setTier(new Tier(resultSet.getString(APIConstants.SUBSCRIPTION_FIELD_TIER_ID)));
         subscribedAPI.setRequestedTier(new Tier(resultSet.getString("TIER_ID_PENDING")));
+        subscribedAPI.setCreatedTime(resultSet.getString("SUB_CREATED_TIME"));
+        subscribedAPI.setUpdatedTime(resultSet.getString("SUB_UPDATED_TIME"));
+
     }
 
     /**
@@ -3519,7 +3522,7 @@ public class ApiMgtDAO {
                 application.getApplicationAttributes().put(APIConstants.ApplicationAttributes.USER_ORGANIZATION,
                         appOrg);
             }
-            
+
             //Adding data to AM_APPLICATION_ATTRIBUTES table
             if (application.getApplicationAttributes() != null) {
                 addApplicationAttributes(conn, application.getApplicationAttributes(), applicationId, tenantId);
@@ -3581,7 +3584,7 @@ public class ApiMgtDAO {
                 application.getApplicationAttributes().put(APIConstants.ApplicationAttributes.USER_ORGANIZATION,
                         appOrg);
             }
-            
+
             if (application.getApplicationAttributes() != null && !application.getApplicationAttributes().isEmpty()) {
                 addApplicationAttributes(conn, application.getApplicationAttributes(), application.getId(), tenantId);
             }
@@ -10498,7 +10501,7 @@ public class ApiMgtDAO {
                         .prepareStatement(SQLConstants.OrganizationSqlConstants.ORGANIZATIONS_EXIST)) {
             try (ResultSet resultSet = prepStmt.executeQuery()) {
                 resultSet.next();
-                int count = resultSet.getInt(1); 
+                int count = resultSet.getInt(1);
                 isExist = count > 0;
             }
         } catch (SQLException e) {
@@ -10506,7 +10509,7 @@ public class ApiMgtDAO {
         }
         return isExist;
     }
-    
+
     public API getLightWeightAPIInfoByAPIIdentifier(APIIdentifier apiIdentifier, String organization)
             throws APIManagementException {
 

@@ -23,31 +23,16 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.cxf.jaxrs.ext.MessageContext;
-import org.wso2.carbon.apimgt.api.APIConsumer;
-import org.wso2.carbon.apimgt.api.APIManagementException;
-import org.wso2.carbon.apimgt.api.APIMgtAuthorizationFailedException;
-import org.wso2.carbon.apimgt.api.ExceptionCodes;
-import org.wso2.carbon.apimgt.api.MonetizationException;
-import org.wso2.carbon.apimgt.api.SubscriptionAlreadyExistingException;
-import org.wso2.carbon.apimgt.api.SubscriptionBlockedException;
-import org.wso2.carbon.apimgt.api.WorkflowResponse;
+import org.wso2.carbon.apimgt.api.*;
 import org.wso2.carbon.apimgt.api.WorkflowStatus;
-import org.wso2.carbon.apimgt.api.model.APIIdentifier;
-import org.wso2.carbon.apimgt.api.model.ApiTypeWrapper;
-import org.wso2.carbon.apimgt.api.model.Application;
-import org.wso2.carbon.apimgt.api.model.Monetization;
-import org.wso2.carbon.apimgt.api.model.OrganizationInfo;
-import org.wso2.carbon.apimgt.api.model.SubscribedAPI;
-import org.wso2.carbon.apimgt.api.model.Subscriber;
-import org.wso2.carbon.apimgt.api.model.SubscriptionResponse;
+import org.wso2.carbon.apimgt.api.model.*;
 import org.wso2.carbon.apimgt.impl.APIConstants;
-import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.apimgt.impl.workflow.HttpWorkflowResponse;
 import org.wso2.carbon.apimgt.rest.api.common.RestApiCommonUtil;
 import org.wso2.carbon.apimgt.rest.api.common.RestApiConstants;
 import org.wso2.carbon.apimgt.rest.api.store.v1.SubscriptionsApiService;
-import org.wso2.carbon.apimgt.rest.api.store.v1.dto.AdditionalSubscriptionInfoListDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.dto.APIMonetizationUsageDTO;
+import org.wso2.carbon.apimgt.rest.api.store.v1.dto.AdditionalSubscriptionInfoListDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.dto.SubscriptionDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.dto.SubscriptionListDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.mappings.APIMappingUtil;
@@ -56,14 +41,10 @@ import org.wso2.carbon.apimgt.rest.api.store.v1.mappings.SubscriptionMappingUtil
 import org.wso2.carbon.apimgt.rest.api.util.utils.RestAPIStoreUtils;
 import org.wso2.carbon.apimgt.rest.api.util.utils.RestApiUtil;
 
+import javax.ws.rs.core.Response;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import javax.ws.rs.core.Response;
+import java.util.*;
 
 /**
  * This is the service implementation class for Store subscription related operations
@@ -207,6 +188,7 @@ public class SubscriptionsApiServiceImpl implements SubscriptionsApiService {
             Application application = apiConsumer.getApplicationByUUID(applicationId);
             if (application == null) {
                 //required application not found
+
                 RestApiUtil.handleResourceNotFoundError(RestApiConstants.RESOURCE_APPLICATION, applicationId, log);
                 return null;
             }
@@ -218,6 +200,23 @@ public class SubscriptionsApiServiceImpl implements SubscriptionsApiService {
                 return null;
             }
 
+            if (body.getApplicationInfo() != null) {
+
+                Map<String, String> map = application.getApplicationAttributes();
+                if (map == null) {
+                    map = new HashMap<>();
+                }
+
+                if (body.getApplicationInfo().getAttributes() != null) {
+                    Map<String, String> attributes = (Map<String, String>) body.getApplicationInfo().getAttributes();
+                    if (MapUtils.isNotEmpty(attributes)) {
+                        for (String key : attributes.keySet()) {
+                            map.put(key, attributes.get(key));
+                        }
+                    }
+                    application.setApplicationAttributes(map);
+                }
+            }
             if (APIConstants.DEFAULT_SUB_POLICY_SUBSCRIPTIONLESS.equalsIgnoreCase(body.getThrottlingPolicy())
                     || APIConstants.DEFAULT_SUB_POLICY_ASYNC_SUBSCRIPTIONLESS
                     .equalsIgnoreCase(body.getThrottlingPolicy())) {
@@ -583,16 +582,16 @@ public class SubscriptionsApiServiceImpl implements SubscriptionsApiService {
     /**
      * Get additional Info details of subscriptions attached with given API
      *
-     * @param apiId         apiId
-     * @param offset        starting index of the subscription list
-     * @param limit         max num of subscriptions returned
-     * @param ifNoneMatch   If-None-Match header value
+     * @param apiId          apiId
+     * @param offset         starting index of the subscription list
+     * @param limit          max num of subscriptions returned
+     * @param ifNoneMatch    If-None-Match header value
      * @param messageContext message context
      * @return Response with additional Info of the GraphQL API
      */
     @Override
     public Response getAdditionalInfoOfAPISubscriptions(String apiId, String groupId, String xWSO2Tenant, Integer offset,
-                    Integer limit, String ifNoneMatch, MessageContext messageContext) {
+                                                        Integer limit, String ifNoneMatch, MessageContext messageContext) {
 
         String username = RestApiCommonUtil.getLoggedInUsername();
         Subscriber subscriber = new Subscriber(username);

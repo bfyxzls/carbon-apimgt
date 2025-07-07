@@ -528,6 +528,8 @@ public class SQLConstants {
                     "   APP.APPLICATION_ID AS APP_ID, " +
                     "   SUBS.SUB_STATUS AS SUB_STATUS, " +
                     "   SUBS.UUID AS SUB_UUID, " +
+                    "   SUBS.CREATED_TIME AS SUB_CREATED_TIME, " +
+                    "   SUBS.UPDATED_TIME AS SUB_UPDATED_TIME, " +
                     "   SUBS.SUBS_CREATE_STATE AS SUBS_CREATE_STATE, " +
                     "   APP.NAME AS APP_NAME " +
                     " FROM " +
@@ -557,7 +559,10 @@ public class SQLConstants {
                     "   SUBS.SUB_STATUS AS SUB_STATUS, " +
                     "   SUBS.UUID AS SUB_UUID, " +
                     "   SUBS.SUBS_CREATE_STATE AS SUBS_CREATE_STATE, " +
-                    "   APP.NAME AS APP_NAME " +
+                    "   APP.NAME AS APP_NAME, " +
+                    "   SUBS.CREATED_TIME AS SUB_CREATED_TIME, " +
+                    "   SUBS.UPDATED_TIME AS SUB_UPDATED_TIME " +
+
                     " FROM " +
                     "   AM_APPLICATION APP, " +
                     "   AM_SUBSCRIPTION SUBS, " +
@@ -2140,7 +2145,7 @@ public class SQLConstants {
 
     public static final String GET_SUBSCRIPTION_STATUS_SQL =
             "SELECT SUB_STATUS FROM AM_SUBSCRIPTION WHERE API_ID = ? AND APPLICATION_ID = ?";
-    
+
     public static final String GET_SUBSCRIPTION_ID_SQL =
             "SELECT SUBSCRIPTION_ID FROM AM_SUBSCRIPTION WHERE API_ID = ? AND APPLICATION_ID = ?";
 
@@ -3912,7 +3917,7 @@ public class SQLConstants {
                         "AM_APPLICATION_KEY_MAPPING AAKM WHERE APPLICATION_ID=? AND AAKM.UUID = ? " +
                         "AND AKM.UUID=AAKM.KEY_MANAGER";
     }
-    
+
     public static class OrganizationSqlConstants {
         public static final String ADD_ORGANIZATION =
                 " INSERT INTO AM_ORGANIZATION_MAPPING" +
@@ -3928,16 +3933,16 @@ public class SQLConstants {
 
         public static final String GET_ORGANIZATIONS_BY_PARENT_ORG_ID =
                 "SELECT * FROM AM_ORGANIZATION_MAPPING WHERE PARENT_ORG_UUID=? AND ROOT_ORGANIZATION=?";
-        
+
         public static final String GET_ORGANIZATION_BY_ORG_ID =
                 "SELECT * FROM AM_ORGANIZATION_MAPPING WHERE ORG_UUID=? AND ROOT_ORGANIZATION=?";
-        
+
         public static final String GET_ORGANIZATION_BY_EXTERNAL_ORG_ID =
                 "SELECT * FROM AM_ORGANIZATION_MAPPING WHERE EXT_ORG_ID=? AND ROOT_ORGANIZATION=?";
-        
+
         public static final String GET_ORGANIZATIONS_BY_TENAND_DOMAIN =
                 "SELECT * FROM AM_ORGANIZATION_MAPPING WHERE ROOT_ORGANIZATION=?";
-        
+
         public static final String ORGANIZATIONS_EXIST = "SELECT COUNT(*) FROM AM_ORGANIZATION_MAPPING WHERE PARENT_ORG_UUID IS NOT NULL";
     }
 
@@ -3978,7 +3983,7 @@ public class SQLConstants {
                         " FROM AM_KEY_MANAGER_ALLOWED_ORGS " +
                         " WHERE KEY_MANAGER_UUID = ?";
     }
-    
+
     /**
      * Static class to hold database queries related to AM_TENANT_THEMES table
      */

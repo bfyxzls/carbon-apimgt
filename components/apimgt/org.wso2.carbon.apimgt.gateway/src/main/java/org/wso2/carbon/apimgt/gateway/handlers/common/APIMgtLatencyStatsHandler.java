@@ -29,6 +29,7 @@ import org.apache.axis2.Constants;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.synapse.MessageContext;
+import org.apache.synapse.commons.json.JsonUtil;
 import org.apache.synapse.config.Entry;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.rest.AbstractHandler;
@@ -61,7 +62,10 @@ public class APIMgtLatencyStatsHandler extends AbstractHandler {
     public void setApiUUID(String apiUUID) {
         this.apiUUID = apiUUID;
     }
-
+    /**
+     * MessageContext中保存请求体的key
+     */
+    public static final String MCP_REQUEST_BODY_KEY = "MCP_REQUEST_BODY";
     public boolean handleRequest(MessageContext messageContext) {
 
         if (TelemetryUtil.telemetryEnabled()) {

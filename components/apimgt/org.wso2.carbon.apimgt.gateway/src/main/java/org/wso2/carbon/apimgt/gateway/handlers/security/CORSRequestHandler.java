@@ -60,6 +60,12 @@ import java.util.regex.Pattern;
 public class CORSRequestHandler extends AbstractHandler implements ManagedLifecycle {
 
     private static final Log log = LogFactory.getLog(CORSRequestHandler.class);
+    
+    /**
+     * MessageContext中保存MCP请求体的key
+     */
+    public static final String MCP_REQUEST_BODY_KEY = "MCP_REQUEST_BODY";
+    
     private String apiImplementationType;
     private String allowHeaders;
     private String exposeHeaders;
@@ -460,4 +466,5 @@ public class CORSRequestHandler extends AbstractHandler implements ManagedLifecy
     public void setApiKeyHeader(String apiKeyHeader) {
         this.apiKeyHeader = apiKeyHeader;
     }
+
 }

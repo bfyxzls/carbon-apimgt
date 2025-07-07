@@ -30,6 +30,8 @@
     <url>http://wso2.org</url>
 
     <dependencies>
+
+
         <dependency>
             <groupId>org.wso2.carbon.analytics-common</groupId>
             <artifactId>org.wso2.carbon.databridge.agent</artifactId>

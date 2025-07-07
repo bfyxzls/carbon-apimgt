@@ -29,6 +29,8 @@ public class SubscriptionDTO   {
     private ApplicationInfoDTO applicationInfo = null;
     private String throttlingPolicy = null;
     private String requestedThrottlingPolicy = null;
+    private String createdTime = null;
+    private String updatedTime = null;
 
     @XmlType(name="StatusEnum")
     @XmlEnum(String.class)
@@ -196,6 +198,40 @@ return null;
 
   /**
    **/
+  public SubscriptionDTO createdTime(String createdTime) {
+    this.createdTime = createdTime;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "2021-02-11-09:57:25", value = "")
+  @JsonProperty("createdTime")
+  public String getCreatedTime() {
+    return createdTime;
+  }
+  public void setCreatedTime(String createdTime) {
+    this.createdTime = createdTime;
+  }
+
+  /**
+   **/
+  public SubscriptionDTO updatedTime(String updatedTime) {
+    this.updatedTime = updatedTime;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "2021-02-12-19:57:25", value = "")
+  @JsonProperty("updatedTime")
+  public String getUpdatedTime() {
+    return updatedTime;
+  }
+  public void setUpdatedTime(String updatedTime) {
+    this.updatedTime = updatedTime;
+  }
+
+  /**
+   **/
   public SubscriptionDTO status(StatusEnum status) {
     this.status = status;
     return this;
@@ -246,13 +282,15 @@ return null;
         Objects.equals(applicationInfo, subscription.applicationInfo) &&
         Objects.equals(throttlingPolicy, subscription.throttlingPolicy) &&
         Objects.equals(requestedThrottlingPolicy, subscription.requestedThrottlingPolicy) &&
+        Objects.equals(createdTime, subscription.createdTime) &&
+        Objects.equals(updatedTime, subscription.updatedTime) &&
         Objects.equals(status, subscription.status) &&
         Objects.equals(redirectionParams, subscription.redirectionParams);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(subscriptionId, applicationId, apiId, apiInfo, applicationInfo, throttlingPolicy, requestedThrottlingPolicy, status, redirectionParams);
+    return Objects.hash(subscriptionId, applicationId, apiId, apiInfo, applicationInfo, throttlingPolicy, requestedThrottlingPolicy, createdTime, updatedTime, status, redirectionParams);
   }
 
   @Override
@@ -267,6 +305,8 @@ return null;
     sb.append("    applicationInfo: ").append(toIndentedString(applicationInfo)).append("\n");
     sb.append("    throttlingPolicy: ").append(toIndentedString(throttlingPolicy)).append("\n");
     sb.append("    requestedThrottlingPolicy: ").append(toIndentedString(requestedThrottlingPolicy)).append("\n");
+    sb.append("    createdTime: ").append(toIndentedString(createdTime)).append("\n");
+    sb.append("    updatedTime: ").append(toIndentedString(updatedTime)).append("\n");
     sb.append("    status: ").append(toIndentedString(status)).append("\n");
     sb.append("    redirectionParams: ").append(toIndentedString(redirectionParams)).append("\n");
     sb.append("}");

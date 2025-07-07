@@ -15,12 +15,13 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 
 
 public class SubscriptionDTO   {
-  
+
     private Integer subscriptionId = null;
     private String policyId = null;
     private Integer apiId = null;
     private Integer appId = null;
     private String subscriptionState = null;
+
 
   /**
    **/
@@ -29,7 +30,7 @@ public class SubscriptionDTO   {
     return this;
   }
 
-  
+
   @ApiModelProperty(value = "")
   @JsonProperty("subscriptionId")
   public Integer getSubscriptionId() {
@@ -46,7 +47,7 @@ public class SubscriptionDTO   {
     return this;
   }
 
-  
+
   @ApiModelProperty(value = "")
   @JsonProperty("policyId")
   public String getPolicyId() {
@@ -63,7 +64,7 @@ public class SubscriptionDTO   {
     return this;
   }
 
-  
+
   @ApiModelProperty(value = "")
   @JsonProperty("apiId")
   public Integer getApiId() {
@@ -80,7 +81,7 @@ public class SubscriptionDTO   {
     return this;
   }
 
-  
+
   @ApiModelProperty(value = "")
   @JsonProperty("appId")
   public Integer getAppId() {
@@ -97,7 +98,7 @@ public class SubscriptionDTO   {
     return this;
   }
 
-  
+
   @ApiModelProperty(value = "")
   @JsonProperty("subscriptionState")
   public String getSubscriptionState() {
@@ -133,7 +134,7 @@ public class SubscriptionDTO   {
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class SubscriptionDTO {\n");
-    
+
     sb.append("    subscriptionId: ").append(toIndentedString(subscriptionId)).append("\n");
     sb.append("    policyId: ").append(toIndentedString(policyId)).append("\n");
     sb.append("    apiId: ").append(toIndentedString(apiId)).append("\n");

@@ -19,6 +19,8 @@
 package org.wso2.carbon.apimgt.common.gateway.jwtgenerator;
 
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.apimgt.common.gateway.constants.JWTConstants;
 import org.wso2.carbon.apimgt.common.gateway.dto.JWTInfoDto;
 
@@ -33,10 +35,11 @@ import java.util.concurrent.TimeUnit;
  * Default implementation of backend jwt generation.
  */
 public class APIMgtGatewayJWTGeneratorImpl extends AbstractAPIMgtGatewayJWTGenerator {
+    private static final Log log = LogFactory.getLog(APIMgtGatewayJWTGeneratorImpl.class);
 
     @Override
     public Map<String, Object> populateStandardClaims(JWTInfoDto jwtInfoDto) {
-
+        log.error("APIMgtGatewayJWTGeneratorImpl run...");
         long currentTime = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis());
         long expireIn = currentTime + super.jwtConfigurationDto.getTTL();
         String dialect = getDialectURI();
@@ -51,6 +54,8 @@ public class APIMgtGatewayJWTGeneratorImpl extends AbstractAPIMgtGatewayJWTGener
         if (StringUtils.isNotEmpty(jwtInfoDto.getSubscriber())) {
             claims.put(dialect + "subscriber", jwtInfoDto.getSubscriber());
         }
+        System.out.print("APIMgtGatewayJWTGeneratorImpl application " + jwtInfoDto.getApplicationId());
+
         if (StringUtils.isNotEmpty(jwtInfoDto.getApplicationId())) {
             claims.put(dialect + "applicationid", jwtInfoDto.getApplicationId());
         }
@@ -96,7 +101,7 @@ public class APIMgtGatewayJWTGeneratorImpl extends AbstractAPIMgtGatewayJWTGener
 
     @Override
     public Map<String, Object> populateCustomClaims(JWTInfoDto jwtInfoDto) {
-
+        log.error("APIMgtGatewayJWTGeneratorImpl populateCustomClaims run...");
         String[] restrictedClaims = {"iss", "sub", "aud", "exp", "nbf", "iat", "jti", "application", "tierInfo",
                 "subscribedAPIs", "aut"};
         Map<String, Object> claims = new HashMap<>();

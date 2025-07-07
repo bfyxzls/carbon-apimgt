@@ -18,6 +18,7 @@
 
 package org.wso2.carbon.apimgt.impl.notifier.events;
 
+import org.apache.commons.collections4.iterators.ObjectArrayIterator;
 import org.wso2.carbon.apimgt.api.model.SubscribedAPI;
 
 import java.util.Objects;
@@ -39,6 +40,7 @@ public class SubscriptionEvent extends Event {
     private String subscriptionState;
     private String apiName;
     private String apiVersion;
+    private Object attributes;
 
     public SubscriptionEvent(String eventId, long timestamp, String type, int tenantId, String tenantDomain,
                              int subscriptionId, String subscriptionUUID, int apiId, String apiUUID, int applicationId,
@@ -60,6 +62,29 @@ public class SubscriptionEvent extends Event {
         this.apiUUID = apiUUID;
         this.apiName = apiName;
         this.apiVersion = apiVersion;
+    }
+
+    public SubscriptionEvent(String eventId, long timestamp, String type, int tenantId, String tenantDomain,
+                             int subscriptionId, String subscriptionUUID, int apiId, String apiUUID, int applicationId,
+                             String applicationUUID,
+                             String policyId, String subscriptionState, String apiName, String apiVersion,Object attributes) {
+
+        this.eventId = eventId;
+        this.timeStamp = timestamp;
+        this.type = type;
+        this.tenantId = tenantId;
+        this.subscriptionId = subscriptionId;
+        this.subscriptionUUID = subscriptionUUID;
+        this.apiId = apiId;
+        this.applicationId = applicationId;
+        this.policyId = policyId;
+        this.subscriptionState = subscriptionState;
+        this.tenantDomain = tenantDomain;
+        this.applicationUUID = applicationUUID;
+        this.apiUUID = apiUUID;
+        this.apiName = apiName;
+        this.apiVersion = apiVersion;
+        this.attributes=attributes;
     }
 
     public SubscriptionEvent(String type, SubscribedAPI subscribedAPI, int tenantId, String tenantDomain) {

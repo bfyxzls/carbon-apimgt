@@ -83,6 +83,7 @@ public class AnalyticsDataPublisher {
                     throw new MetricCreationException("AnalyticsDataPublisher is not initialized.");
                 }
                 counterMetricsList.add(counterMetric);
+                log.info("analyticsDataPublisher initialized for the Reporter of name " + reporterClassName);
             } catch (MetricCreationException | IllegalArgumentException e) {
                 log.error("Error initializing event publisher for the Reporter of type " + reporterClassName, e);
             }

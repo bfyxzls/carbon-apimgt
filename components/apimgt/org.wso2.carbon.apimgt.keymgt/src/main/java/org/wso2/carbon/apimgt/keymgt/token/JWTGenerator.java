@@ -58,7 +58,7 @@ public class JWTGenerator extends AbstractJWTGenerator {
     @Override
     public Map<String, String> populateStandardClaims(TokenValidationContext validationContext)
             throws APIManagementException {
-
+        log.error("JWTGenerator populateStandardClaims");
         //generating expiring timestamp
         long currentTime = System.currentTimeMillis();
         long expireIn = currentTime + getTTL() * 1000;
@@ -127,6 +127,7 @@ public class JWTGenerator extends AbstractJWTGenerator {
     @Override
     public Map<String, String> populateCustomClaims(TokenValidationContext validationContext)
             throws APIManagementException {
+        log.error("JWTGenerator populateCustomClaims");
 
         APIManagerConfiguration apiManagerConfiguration =
                 ServiceReferenceHolder.getInstance().getAPIManagerConfigurationService()
