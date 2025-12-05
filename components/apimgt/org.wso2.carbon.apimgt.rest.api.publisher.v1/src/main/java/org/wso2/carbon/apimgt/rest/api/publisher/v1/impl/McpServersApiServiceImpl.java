@@ -1709,7 +1709,8 @@ public class McpServersApiServiceImpl implements McpServersApiService {
                         "Authorization failure while deleting : " + documentId + " of MCP Server " + mcpServerId, e,
                         log);
             } else {
-                String errorMessage = "Error while retrieving MCP Server : " + mcpServerId;
+                String errorMessage = "Error while deleting document : " + documentId + " of MCP Server "
+                        + mcpServerId;
                 RestApiUtil.handleInternalServerError(errorMessage, e, log);
             }
         }
@@ -2016,6 +2017,80 @@ public class McpServersApiServiceImpl implements McpServersApiService {
         apiKeyDTO.setApikey(token);
         apiKeyDTO.setValidityTime(60 * 1000);
         return Response.ok().entity(apiKeyDTO).build();
+    }
+
+    /**
+     * Refreshes MCP tool metadata from the configured backend (upstream MCP for {@code SERVER_PROXY},
+     * persisted / referenced OpenAPI for other subtypes) and persists the result like a regular update.
+     */
+    @Override
+    public Response refreshMCPServerTools(String mcpServerId, MessageContext messageContext)
+            throws APIManagementException {
+
+        String[] tokenScopes =
+                (String[]) PhaseInterceptorChain.getCurrentMessage().getExchange()
+                        .get(RestApiConstants.USER_REST_API_SCOPES);
+        String username = RestApiCommonUtil.getLoggedInUsername();
+        try {
+            String organization = RestApiUtil.getValidatedOrganization(messageContext);
+            OrganizationInfo organizationInfo = RestApiUtil.getOrganizationInfo(messageContext);
+            CommonUtils.validateMCPServerExistence(mcpServerId);
+            APIProvider apiProvider = RestApiCommonUtil.getProvider(username);
+            API originalAPI = apiProvider.getAPIbyUUID(mcpServerId, organization, APIConstants.API_TYPE_MCP);
+            originalAPI.setOrganization(organization);
+            validateAPIOperationsPerLC(originalAPI.getStatus());
+
+            MCPServerDTO mcpServerDTO = APIMappingUtil.fromAPItoMCPServerDTO(originalAPI, apiProvider);
+            if (APIConstants.API_SUBTYPE_SERVER_PROXY.equals(originalAPI.getSubtype())) {
+                PublisherCommonUtils.refreshThirdPartyProxyMCPServerOperations(originalAPI, mcpServerDTO, apiProvider,
+                        organization);
+            }
+
+            org.json.simple.JSONArray customProperties = APIUtil.getCustomProperties(organization);
+            List<String> errorProperties = PublisherCommonUtils.validateMandatoryProperties(customProperties,
+                    mcpServerDTO);
+            if (!errorProperties.isEmpty()) {
+                String errorString = " : " + String.join(", ", errorProperties);
+                RestApiUtil.handleBadRequest(
+                        ExceptionCodes.ERROR_WHILE_UPDATING_MANDATORY_PROPERTIES.getErrorMessage() + errorString,
+                        ExceptionCodes.ERROR_WHILE_UPDATING_MANDATORY_PROPERTIES.getErrorCode(), log);
+            }
+            if (!PublisherCommonUtils.validateEndpointConfigs(new APIDTOTypeWrapper(mcpServerDTO))) {
+                throw new APIManagementException("Invalid endpoint configs detected",
+                        ExceptionCodes.INVALID_ENDPOINT_CONFIG);
+            }
+            if (!PublisherCommonUtils.validateEndpoints(new APIDTOTypeWrapper(mcpServerDTO))) {
+                throw new APIManagementException("Invalid/Malformed endpoint URL(s) detected",
+                        ExceptionCodes.INVALID_ENDPOINT_URL);
+            }
+            API updatedApi = PublisherCommonUtils.updateApi(originalAPI, new APIDTOTypeWrapper(mcpServerDTO),
+                    apiProvider, tokenScopes, organizationInfo);
+            return Response.ok().entity(APIMappingUtil.fromAPItoMCPServerDTO(updatedApi, apiProvider)).build();
+        } catch (APIManagementException e) {
+            if (RestApiUtil.isDueToResourceNotFound(e) || RestApiUtil.isDueToAuthorizationFailure(e)) {
+                if (e.getErrorHandler()
+                        .getErrorCode() == ExceptionCodes.GLOBAL_MEDIATION_POLICIES_NOT_FOUND.getErrorCode()) {
+                    RestApiUtil.handleResourceNotFoundError(e.getErrorHandler().getErrorDescription(), e, log);
+                } else {
+                    RestApiUtil.handleResourceNotFoundError(RestApiConstants.RESOURCE_MCP_SERVER, mcpServerId, e, log);
+                }
+            } else if (isAuthorizationFailure(e)) {
+                RestApiUtil.handleAuthorizationFailure("Authorization failure while refreshing MCP server tools: "
+                        + mcpServerId, e, log);
+            } else {
+                throw e;
+            }
+        } catch (FaultGatewaysException e) {
+            String errorMessage = "Error while refreshing MCP server tools: " + mcpServerId;
+            RestApiUtil.handleInternalServerError(errorMessage, e, log);
+        } catch (CryptoException e) {
+            String errorMessage = "Error encrypting endpoint security while refreshing MCP tools: " + mcpServerId;
+            RestApiUtil.handleInternalServerError(errorMessage, e, log);
+        } catch (ParseException e) {
+            String errorMessage = "Error parsing endpoint config while refreshing MCP tools: " + mcpServerId;
+            RestApiUtil.handleInternalServerError(errorMessage, e, log);
+        }
+        return null;
     }
 
     @Override

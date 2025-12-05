@@ -5,6 +5,16 @@ import org.wso2.carbon.apimgt.impl.jwt.JWTValidator;
 
 public class KeyManagerDto {
 
+    @Override
+    public String toString() {
+        return "KeyManagerDto{" +
+                "name='" + name + '\'' +
+                ", issuer='" + issuer + '\'' +
+                ", keyManager=" + keyManager +
+                ", jwtValidator=" + jwtValidator +
+                '}';
+    }
+
     private String name;
     private String issuer;
     private KeyManager keyManager;

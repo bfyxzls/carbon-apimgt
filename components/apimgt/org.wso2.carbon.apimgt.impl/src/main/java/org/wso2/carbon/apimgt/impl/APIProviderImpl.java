@@ -25,8 +25,8 @@ import org.apache.axiom.om.OMElement;
 import org.apache.axiom.om.util.AXIOMUtil;
 import org.apache.axis2.Constants;
 import org.apache.axis2.util.JavaUtils;
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.collections.MapUtils;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
@@ -57,62 +57,9 @@ import org.wso2.carbon.apimgt.api.dto.EnvironmentPropertiesDTO;
 import org.wso2.carbon.apimgt.api.dto.KeyManagerConfigurationDTO;
 import org.wso2.carbon.apimgt.api.dto.OrganizationDetailsDTO;
 import org.wso2.carbon.apimgt.api.dto.UserApplicationAPIUsage;
-import org.wso2.carbon.apimgt.api.model.API;
-import org.wso2.carbon.apimgt.api.model.APIDefinitionContentSearchResult;
-import org.wso2.carbon.apimgt.api.model.APIEndpointInfo;
-import org.wso2.carbon.apimgt.api.model.APIIdentifier;
-import org.wso2.carbon.apimgt.api.model.APIInfo;
-import org.wso2.carbon.apimgt.api.model.APIOperationMapping;
-import org.wso2.carbon.apimgt.api.model.APIProduct;
-import org.wso2.carbon.apimgt.api.model.APIProductIdentifier;
-import org.wso2.carbon.apimgt.api.model.APIProductResource;
-import org.wso2.carbon.apimgt.api.model.APIPublisher;
-import org.wso2.carbon.apimgt.api.model.APIRevision;
-import org.wso2.carbon.apimgt.api.model.APIRevisionDeployment;
-import org.wso2.carbon.apimgt.api.model.APISearchResult;
-import org.wso2.carbon.apimgt.api.model.APIStateChangeResponse;
-import org.wso2.carbon.apimgt.api.model.APIStore;
-import org.wso2.carbon.apimgt.api.model.ApiTypeWrapper;
-import org.wso2.carbon.apimgt.api.model.Backend;
-import org.wso2.carbon.apimgt.api.model.BackendOperationMapping;
-import org.wso2.carbon.apimgt.api.model.BlockConditionsDTO;
-import org.wso2.carbon.apimgt.api.model.Comment;
-import org.wso2.carbon.apimgt.api.model.CommentList;
-import org.wso2.carbon.apimgt.api.model.LLMProvider;
-import org.wso2.carbon.apimgt.api.model.Label;
-import org.wso2.carbon.apimgt.api.model.SequenceBackendData;
-import org.wso2.carbon.apimgt.api.model.DeployedAPIRevision;
-import org.wso2.carbon.apimgt.api.model.Documentation;
+import org.wso2.carbon.apimgt.api.model.*;
 import org.wso2.carbon.apimgt.api.model.Documentation.DocumentSourceType;
 import org.wso2.carbon.apimgt.api.model.Documentation.DocumentVisibility;
-import org.wso2.carbon.apimgt.api.model.DocumentationContent;
-import org.wso2.carbon.apimgt.api.model.DocumentationType;
-import org.wso2.carbon.apimgt.api.model.EndpointSecurity;
-import org.wso2.carbon.apimgt.api.model.Environment;
-import org.wso2.carbon.apimgt.api.model.GatewayPolicyData;
-import org.wso2.carbon.apimgt.api.model.GatewayPolicyDeployment;
-import org.wso2.carbon.apimgt.api.model.Identifier;
-import org.wso2.carbon.apimgt.api.model.KeyManager;
-import org.wso2.carbon.apimgt.api.model.AIConfiguration;
-import org.wso2.carbon.apimgt.api.model.LifeCycleEvent;
-import org.wso2.carbon.apimgt.api.model.Mediation;
-import org.wso2.carbon.apimgt.api.model.Monetization;
-import org.wso2.carbon.apimgt.api.model.OperationPolicy;
-import org.wso2.carbon.apimgt.api.model.OperationPolicyData;
-import org.wso2.carbon.apimgt.api.model.OperationPolicySpecAttribute;
-import org.wso2.carbon.apimgt.api.model.OperationPolicySpecification;
-import org.wso2.carbon.apimgt.api.model.ResourceFile;
-import org.wso2.carbon.apimgt.api.model.ResourcePath;
-import org.wso2.carbon.apimgt.api.model.Scope;
-import org.wso2.carbon.apimgt.api.model.SOAPToRestSequence;
-import org.wso2.carbon.apimgt.api.model.SharedScopeUsage;
-import org.wso2.carbon.apimgt.api.model.SubscribedAPI;
-import org.wso2.carbon.apimgt.api.model.Subscriber;
-import org.wso2.carbon.apimgt.api.model.SwaggerData;
-import org.wso2.carbon.apimgt.api.model.Tier;
-import org.wso2.carbon.apimgt.api.model.TokenEndpointConnectionConfigType;
-import org.wso2.carbon.apimgt.api.model.URITemplate;
-import org.wso2.carbon.apimgt.api.model.Usage;
 import org.wso2.carbon.apimgt.api.model.policy.APIPolicy;
 import org.wso2.carbon.apimgt.api.model.policy.ApplicationPolicy;
 import org.wso2.carbon.apimgt.api.model.policy.Condition;
@@ -1237,8 +1184,8 @@ class APIProviderImpl extends AbstractAPIManager implements APIProvider {
         List<KeyManagerConfigurationDTO> keyManagerConfigurationsByOrganization =
                 apiMgtDAO.getKeyManagerConfigurationsByOrganization(organization);
         Set<String> disabledKeyManagers = keyManagerConfigurationsByOrganization.stream()
-                .filter(config -> !config.isEnabled()) 
-                .map(KeyManagerConfigurationDTO::getName) 
+                .filter(config -> !config.isEnabled())
+                .map(KeyManagerConfigurationDTO::getName)
                 .collect(Collectors.toSet());
 
         if (log.isDebugEnabled()) {
@@ -2791,7 +2738,7 @@ class APIProviderImpl extends AbstractAPIManager implements APIProvider {
             APIUtil.logAuditMessage(APIConstants.AuditLogConstants.DOCUMENT, apiLogObject.toString(),
                     APIConstants.AuditLogConstants.DELETED, this.username);
         } catch (DocumentationPersistenceException e) {
-            throw new APIManagementException("Error while deleting the document " + docId);
+            throw new APIManagementException("Error while deleting the document " + docId, e);
         }
 
     }
@@ -6302,8 +6249,8 @@ class APIProviderImpl extends AbstractAPIManager implements APIProvider {
         if (apiInfo != null) {
             apiProduct.setEgress(apiInfo.isEgress());
             apiProduct.setState(apiInfo.getStatus());
+            apiProduct.setDisplayName(apiInfo.getDisplayName());
         }
-        apiProduct.setDisplayName(apiInfo.getDisplayName());
     }
 
     public APIProduct getAPIProductbyUUID(String uuid, String organization) throws APIManagementException {

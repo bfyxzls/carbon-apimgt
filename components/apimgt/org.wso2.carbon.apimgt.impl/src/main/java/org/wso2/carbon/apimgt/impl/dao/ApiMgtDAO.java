@@ -1546,6 +1546,9 @@ public class ApiMgtDAO {
         subscribedAPI.setSubCreatedStatus(resultSet.getString("SUBS_CREATE_STATE"));
         subscribedAPI.setTier(new Tier(resultSet.getString(APIConstants.SUBSCRIPTION_FIELD_TIER_ID)));
         subscribedAPI.setRequestedTier(new Tier(resultSet.getString("TIER_ID_PENDING")));
+        subscribedAPI.setCreatedTime(resultSet.getString("SUB_CREATED_TIME"));
+        subscribedAPI.setUpdatedTime(resultSet.getString("SUB_UPDATED_TIME"));
+
     }
 
     /**
@@ -27031,20 +27034,22 @@ public class ApiMgtDAO {
             log.debug("Retrieving primary endpoint UUIDs for API: " + apiUUID + ", revision: " + revisionUUID);
         }
         List<String> endpointIds = new ArrayList<>();
-        try (Connection connection = APIMgtDBUtil.getConnection()) {
-            try (PreparedStatement preparedStatement = connection.prepareStatement(
-                    SQLConstants.APIEndpointsSQLConstants.GET_PRIMARY_ENDPOINT_MAPPINGS)) {
-                preparedStatement.setString(1, apiUUID);
-                preparedStatement.setString(2,
-                        Objects.requireNonNullElse(revisionUUID, APIConstants.API_REVISION_CURRENT_API));
-                try (ResultSet resultSet = preparedStatement.executeQuery()) {
-                    while (resultSet.next()) {
-                        endpointIds.add(resultSet.getString("ENDPOINT_UUID"));
+        if(revisionUUID!=null) {// 从老的4.5升级到4.6后，之前的api这个值可能是null
+            try (Connection connection = APIMgtDBUtil.getConnection()) {
+                try (PreparedStatement preparedStatement = connection.prepareStatement(
+                        SQLConstants.APIEndpointsSQLConstants.GET_PRIMARY_ENDPOINT_MAPPINGS)) {
+                    preparedStatement.setString(1, apiUUID);
+                    preparedStatement.setString(2,
+                            Objects.requireNonNull(revisionUUID, APIConstants.API_REVISION_CURRENT_API));
+                    try (ResultSet resultSet = preparedStatement.executeQuery()) {
+                        while (resultSet.next()) {
+                            endpointIds.add(resultSet.getString("ENDPOINT_UUID"));
+                        }
                     }
                 }
+            } catch (SQLException e) {
+                handleException("Error while getting primary endpoint mappings for API : " + apiUUID, e);
             }
-        } catch (SQLException e) {
-            handleException("Error while getting primary endpoint mappings for API : " + apiUUID, e);
         }
         return endpointIds;
     }

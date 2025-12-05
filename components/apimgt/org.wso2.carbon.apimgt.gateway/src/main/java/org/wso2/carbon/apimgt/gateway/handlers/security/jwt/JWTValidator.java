@@ -312,9 +312,10 @@ public class JWTValidator {
                             "User is NOT authorized to access the Resource. API Subscription validation failed.");
 
                 }
-                // Validate scopes
-                validateScopes(apiContext, apiVersion, matchingResource, httpMethod, jwtValidationInfo, signedJWTInfo,
-                        synCtx, includeTokenInfoInMsgCtx);
+                if (!Utils.isMcpToolsListRequest(synCtx)) {
+                    validateScopes(apiContext, apiVersion, matchingResource, httpMethod, jwtValidationInfo,
+                            signedJWTInfo, synCtx, includeTokenInfoInMsgCtx);
+                }
                 validateAudiences(signedJWTInfo);
                 synCtx.setProperty(APIMgtGatewayConstants.SCOPES, jwtValidationInfo.getScopes().toString());
                 synCtx.setProperty(APIMgtGatewayConstants.JWT_CLAIMS, jwtValidationInfo.getClaims());
@@ -822,6 +823,10 @@ public class JWTValidator {
                                 JWTValidationInfo jwtValidationInfo, SignedJWTInfo jwtToken, MessageContext synCtx,
                                 boolean includeTokenInfoInMsgCtx)
             throws APISecurityException {
+
+        if (Utils.isMcpToolsListRequest(synCtx)) {
+            return;
+        }
 
         String tenantDomain = PrivilegedCarbonContext.getThreadLocalCarbonContext().getTenantDomain();
 

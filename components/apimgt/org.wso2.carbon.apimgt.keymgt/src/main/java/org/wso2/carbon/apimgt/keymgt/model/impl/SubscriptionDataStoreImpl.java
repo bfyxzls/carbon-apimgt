@@ -43,10 +43,14 @@ import org.wso2.carbon.apimgt.keymgt.model.entity.SubscriptionPolicy;
 import org.wso2.carbon.apimgt.keymgt.model.exception.DataLoadingException;
 import org.wso2.carbon.apimgt.keymgt.model.util.SubscriptionDataStoreUtil;
 
+import java.util.AbstractMap;
+import java.util.AbstractSet;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.concurrent.*;
 import java.util.function.Supplier;
@@ -56,6 +60,7 @@ public class SubscriptionDataStoreImpl implements SubscriptionDataStore {
 
     public static final String DELEM_PERIOD = ":";
     public static final int LOADING_POOL_SIZE = 7;
+    private static final long SUBSCRIPTION_CACHE_TTL_MS = TimeUnit.MINUTES.toMillis(15);
     private static final Log log = LogFactory.getLog(SubscriptionDataStoreImpl.class);
     private final EventHubConfigurationDto eventHubConfiguration;
     private boolean scopesInitialized;
@@ -68,7 +73,7 @@ public class SubscriptionDataStoreImpl implements SubscriptionDataStore {
     private Map<String, ApiPolicy> apiPolicyMap;
     private Map<String, SubscriptionPolicy> subscriptionPolicyMap;
     private Map<String, ApplicationPolicy> appPolicyMap;
-    private Map<String, Subscription> subscriptionMap;
+    private ExpiringSubscriptionMap subscriptionMap;
     private Map<String, Scope> scopesMap;
     private boolean apisInitialized;
     private boolean apiPoliciesInitialized;
@@ -94,7 +99,7 @@ public class SubscriptionDataStoreImpl implements SubscriptionDataStore {
         this.subscriptionPolicyMap = new ConcurrentHashMap<>();
         this.appPolicyMap = new ConcurrentHashMap<>();
         this.apiPolicyMap = new ConcurrentHashMap<>();
-        this.subscriptionMap = new ConcurrentHashMap<>();
+        this.subscriptionMap = new ExpiringSubscriptionMap();
         this.scopesMap = new ConcurrentHashMap<>();
         this.apiNameVersionMap = new ConcurrentHashMap<>();
     }
@@ -418,6 +423,8 @@ public class SubscriptionDataStoreImpl implements SubscriptionDataStore {
                 });
 
         executorService.schedule(subscriptionLoadingTask, eventHubConfiguration.getInitDelay(), TimeUnit.MILLISECONDS);
+        executorService.scheduleAtFixedRate(subscriptionMap::evictExpiredEntries, SUBSCRIPTION_CACHE_TTL_MS,
+                SUBSCRIPTION_CACHE_TTL_MS, TimeUnit.MILLISECONDS);
 
         Runnable applicationLoadingTask = new PopulateTask<>(applicationMap,
                 () -> {
@@ -880,6 +887,145 @@ public class SubscriptionDataStoreImpl implements SubscriptionDataStore {
         SUBSCRIPTION,
         APPLICATION,
         API
+    }
+
+    /**
+     * In-memory subscription cache where each entry expires after {@link #SUBSCRIPTION_CACHE_TTL_MS}.
+     */
+    private static class ExpiringSubscriptionMap extends AbstractMap<String, Subscription> {
+
+        private final ConcurrentHashMap<String, SubscriptionCacheEntry> cache = new ConcurrentHashMap<>();
+
+        void evictExpiredEntries() {
+            cache.entrySet().removeIf(entry -> entry.getValue().isExpired());
+        }
+
+        @Override
+        public Subscription get(Object key) {
+            SubscriptionCacheEntry entry = cache.get(key);
+            if (entry == null) {
+                return null;
+            }
+            if (entry.isExpired()) {
+                cache.remove(key, entry);
+                return null;
+            }
+            return entry.getSubscription();
+        }
+
+        @Override
+        public Subscription put(String key, Subscription value) {
+            SubscriptionCacheEntry previousEntry =
+                    cache.put(key, new SubscriptionCacheEntry(value, SUBSCRIPTION_CACHE_TTL_MS));
+            if (previousEntry == null || previousEntry.isExpired()) {
+                return null;
+            }
+            return previousEntry.getSubscription();
+        }
+
+        @Override
+        public Subscription remove(Object key) {
+            SubscriptionCacheEntry entry = cache.remove(key);
+            if (entry == null || entry.isExpired()) {
+                return null;
+            }
+            return entry.getSubscription();
+        }
+
+        @Override
+        public void clear() {
+            cache.clear();
+        }
+
+        @Override
+        public Set<Entry<String, Subscription>> entrySet() {
+            return new ExpiringEntrySet();
+        }
+
+        @Override
+        public int size() {
+            evictExpiredEntries();
+            return cache.size();
+        }
+
+        private class ExpiringEntrySet extends AbstractSet<Entry<String, Subscription>> {
+
+            @Override
+            public Iterator<Entry<String, Subscription>> iterator() {
+                return new Iterator<Entry<String, Subscription>>() {
+                    private final Iterator<Entry<String, SubscriptionCacheEntry>> mapIterator =
+                            cache.entrySet().iterator();
+                    private Entry<String, Subscription> nextEntry;
+                    private Entry<String, Subscription> currentEntry;
+
+                    @Override
+                    public boolean hasNext() {
+                        prepareNext();
+                        return nextEntry != null;
+                    }
+
+                    @Override
+                    public Entry<String, Subscription> next() {
+                        prepareNext();
+                        if (nextEntry == null) {
+                            throw new NoSuchElementException();
+                        }
+                        currentEntry = nextEntry;
+                        nextEntry = null;
+                        return currentEntry;
+                    }
+
+                    @Override
+                    public void remove() {
+                        if (currentEntry == null) {
+                            throw new IllegalStateException();
+                        }
+                        cache.remove(currentEntry.getKey());
+                        currentEntry = null;
+                    }
+
+                    private void prepareNext() {
+                        if (nextEntry != null) {
+                            return;
+                        }
+                        while (mapIterator.hasNext()) {
+                            Entry<String, SubscriptionCacheEntry> mapEntry = mapIterator.next();
+                            SubscriptionCacheEntry cacheEntry = mapEntry.getValue();
+                            if (cacheEntry.isExpired()) {
+                                mapIterator.remove();
+                                continue;
+                            }
+                            nextEntry = new SimpleEntry<>(mapEntry.getKey(), cacheEntry.getSubscription());
+                            return;
+                        }
+                    }
+                };
+            }
+
+            @Override
+            public int size() {
+                return ExpiringSubscriptionMap.this.size();
+            }
+        }
+
+        private static class SubscriptionCacheEntry {
+
+            private final Subscription subscription;
+            private final long expireAt;
+
+            SubscriptionCacheEntry(Subscription subscription, long ttlMillis) {
+                this.subscription = subscription;
+                this.expireAt = System.currentTimeMillis() + ttlMillis;
+            }
+
+            boolean isExpired() {
+                return System.currentTimeMillis() >= expireAt;
+            }
+
+            Subscription getSubscription() {
+                return subscription;
+            }
+        }
     }
 
     private static class PopulateTask<K, V extends CacheableEntity<K>> implements Runnable {

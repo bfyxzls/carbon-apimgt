@@ -41,13 +41,12 @@ import org.wso2.carbon.apimgt.api.model.SubscribedAPI;
 import org.wso2.carbon.apimgt.api.model.Subscriber;
 import org.wso2.carbon.apimgt.api.model.SubscriptionResponse;
 import org.wso2.carbon.apimgt.impl.APIConstants;
-import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.apimgt.impl.workflow.HttpWorkflowResponse;
 import org.wso2.carbon.apimgt.rest.api.common.RestApiCommonUtil;
 import org.wso2.carbon.apimgt.rest.api.common.RestApiConstants;
 import org.wso2.carbon.apimgt.rest.api.store.v1.SubscriptionsApiService;
-import org.wso2.carbon.apimgt.rest.api.store.v1.dto.AdditionalSubscriptionInfoListDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.dto.APIMonetizationUsageDTO;
+import org.wso2.carbon.apimgt.rest.api.store.v1.dto.AdditionalSubscriptionInfoListDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.dto.SubscriptionDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.dto.SubscriptionListDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.mappings.APIMappingUtil;
@@ -56,14 +55,15 @@ import org.wso2.carbon.apimgt.rest.api.store.v1.mappings.SubscriptionMappingUtil
 import org.wso2.carbon.apimgt.rest.api.util.utils.RestAPIStoreUtils;
 import org.wso2.carbon.apimgt.rest.api.util.utils.RestApiUtil;
 
+import javax.ws.rs.core.Response;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import javax.ws.rs.core.Response;
 
 /**
  * This is the service implementation class for Store subscription related operations
@@ -182,7 +182,8 @@ public class SubscriptionsApiServiceImpl implements SubscriptionsApiService {
      * @return newly added subscription as a SubscriptionDTO if successful
      */
     @Override
-    public Response subscriptionsPost(SubscriptionDTO body, String xWSO2Tenant, MessageContext messageContext) throws APIManagementException {
+    public Response subscriptionsPost(SubscriptionDTO body, String xWSO2Tenant, MessageContext messageContext)
+            throws APIManagementException {
         String username = RestApiCommonUtil.getLoggedInUsername();
         APIConsumer apiConsumer;
 
@@ -207,6 +208,7 @@ public class SubscriptionsApiServiceImpl implements SubscriptionsApiService {
             Application application = apiConsumer.getApplicationByUUID(applicationId);
             if (application == null) {
                 //required application not found
+
                 RestApiUtil.handleResourceNotFoundError(RestApiConstants.RESOURCE_APPLICATION, applicationId, log);
                 return null;
             }
@@ -218,6 +220,25 @@ public class SubscriptionsApiServiceImpl implements SubscriptionsApiService {
                 return null;
             }
 
+
+            if (body.getApplicationInfo() != null) {
+
+                Map<String, String> map = application.getApplicationAttributes();
+                if (map == null) {
+                    map = new HashMap<>();
+                }
+                if (body.getApplicationInfo().getAttributes() != null) {
+                    Map<String, String> attributes =
+                            (Map<String, String>) body.getApplicationInfo().getAttributes();
+                    if (MapUtils.isNotEmpty(attributes)) {
+                        for (String key : attributes.keySet()) {
+                            map.put(key, attributes.get(key));
+                        }
+                    }
+                    application.setApplicationAttributes(map);
+                }
+
+            }
             if (APIConstants.DEFAULT_SUB_POLICY_SUBSCRIPTIONLESS.equalsIgnoreCase(body.getThrottlingPolicy())
                     || APIConstants.DEFAULT_SUB_POLICY_ASYNC_SUBSCRIPTIONLESS
                     .equalsIgnoreCase(body.getThrottlingPolicy())) {
@@ -362,6 +383,25 @@ public class SubscriptionsApiServiceImpl implements SubscriptionsApiService {
             }
 
             apiTypeWrapper.setTier(body.getThrottlingPolicy());
+
+            if (body.getApplicationInfo() != null) {
+
+                Map<String, String> map = application.getApplicationAttributes();
+                if (map == null) {
+                    map = new HashMap<>();
+                }
+                if (body.getApplicationInfo().getAttributes() != null) {
+                    Map<String, String> attributes =
+                            (Map<String, String>) body.getApplicationInfo().getAttributes();
+                    if (MapUtils.isNotEmpty(attributes)) {
+                        for (String key : attributes.keySet()) {
+                            map.put(key, attributes.get(key));
+                        }
+                    }
+                    application.setApplicationAttributes(map);
+                }
+
+            }
 
             SubscriptionResponse subscriptionResponse = apiConsumer
                     .updateSubscription(apiTypeWrapper, username, application, subscriptionId,
@@ -530,7 +570,8 @@ public class SubscriptionsApiServiceImpl implements SubscriptionsApiService {
             apiMonetizationUsageDTO.setProperties(billingEngineUsageData);
             return Response.ok().entity(apiMonetizationUsageDTO).build();
         } catch (APIManagementException e) {
-            String errorMessage = "Failed to retrieve billing engine usage data for subscription ID : " + subscriptionId;
+            String errorMessage =
+                    "Failed to retrieve billing engine usage data for subscription ID : " + subscriptionId;
             RestApiUtil.handleInternalServerError(errorMessage, e, log);
         } catch (MonetizationException e) {
             String errorMessage = "Failed to get current usage for subscription ID : " + subscriptionId;
@@ -587,16 +628,18 @@ public class SubscriptionsApiServiceImpl implements SubscriptionsApiService {
     /**
      * Get additional Info details of subscriptions attached with given API
      *
-     * @param apiId         apiId
-     * @param offset        starting index of the subscription list
-     * @param limit         max num of subscriptions returned
-     * @param ifNoneMatch   If-None-Match header value
+     * @param apiId          apiId
+     * @param offset         starting index of the subscription list
+     * @param limit          max num of subscriptions returned
+     * @param ifNoneMatch    If-None-Match header value
      * @param messageContext message context
      * @return Response with additional Info of the GraphQL API
      */
     @Override
-    public Response getAdditionalInfoOfAPISubscriptions(String apiId, String groupId, String xWSO2Tenant, Integer offset,
-                    Integer limit, String ifNoneMatch, MessageContext messageContext) {
+    public Response getAdditionalInfoOfAPISubscriptions(String apiId, String groupId, String xWSO2Tenant,
+                                                        Integer offset,
+                                                        Integer limit, String ifNoneMatch,
+                                                        MessageContext messageContext) {
 
         String username = RestApiCommonUtil.getLoggedInUsername();
         Subscriber subscriber = new Subscriber(username);
@@ -634,7 +677,8 @@ public class SubscriptionsApiServiceImpl implements SubscriptionsApiService {
                 RestApiUtil.handleResourceNotFoundError(RestApiConstants.RESOURCE_API, apiId, e, log);
             } else if (RestApiUtil.isDueToAuthorizationFailure(e)) {
                 RestApiUtil.handleAuthorizationFailure(
-                        "Authorization failure while retrieving additional information details of the API : " + apiId, e, log);
+                        "Authorization failure while retrieving additional information details of the API : " + apiId,
+                        e, log);
             } else {
                 String msg = "Error while retrieving additional information details of the API " + apiId;
                 RestApiUtil.handleInternalServerError(msg, e, log);

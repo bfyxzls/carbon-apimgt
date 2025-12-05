@@ -26,6 +26,7 @@ public class KeyManagerDTO   {
     private Boolean enabled = null;
     private String organization = null;
     private Object additionalProperties = null;
+    private java.util.List<String> allowedOrganizations = null;
 
     @XmlType(name="TokenTypeEnum")
     @XmlEnum(String.class)
@@ -161,6 +162,24 @@ return null;
   }
   public void setAdditionalProperties(Object additionalProperties) {
     this.additionalProperties = additionalProperties;
+  }
+
+  /**
+   * Organizations allowed to use this Key Manager ({@code AM_KEY_MANAGER_ALLOWED_ORGS.ALLOWED_ORGANIZATIONS}).
+   **/
+  public KeyManagerDTO allowedOrganizations(java.util.List<String> allowedOrganizations) {
+    this.allowedOrganizations = allowedOrganizations;
+    return this;
+  }
+
+  @ApiModelProperty(value = "Allowed organizations from AM_KEY_MANAGER_ALLOWED_ORGS")
+  @JsonProperty("allowedOrganizations")
+  public java.util.List<String> getAllowedOrganizations() {
+    return allowedOrganizations;
+  }
+
+  public void setAllowedOrganizations(java.util.List<String> allowedOrganizations) {
+    this.allowedOrganizations = allowedOrganizations;
   }
 
   /**

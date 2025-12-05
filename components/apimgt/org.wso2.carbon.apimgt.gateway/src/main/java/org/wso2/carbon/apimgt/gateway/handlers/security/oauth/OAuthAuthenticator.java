@@ -146,6 +146,8 @@ public class OAuthAuthenticator implements Authenticator {
             // From 1.0.7 version of this component onwards remove the OAuth authorization header from
             // the message is configurable. So we dont need to remove headers at this point.
             String authHeader = (String) headers.get(getSecurityHeader());
+            synCtx.setProperty("Authorization", authHeader);
+            synCtx.setProperty("headers", headers);
             if (authHeader == null) {
                 if (log.isDebugEnabled()) {
                     log.debug("OAuth2 Authentication: Expected authorization header with the name '"
@@ -224,8 +226,14 @@ public class OAuthAuthenticator implements Authenticator {
         String matchingResource = (String) synCtx.getProperty(APIConstants.API_ELECTED_RESOURCE);
 
         if (StringUtils.equals(APIConstants.API_TYPE_MCP, apiType)) {
-            httpMethod = synCtx.getProperty("MCP_HTTP_METHOD").toString();
-            matchingResource = (String) synCtx.getProperty("MCP_API_ELECTED_RESOURCE");
+            Object mcpHttpMethod = synCtx.getProperty("MCP_HTTP_METHOD");
+            if (mcpHttpMethod != null) {
+                httpMethod = mcpHttpMethod.toString();
+            }
+            String mcpElectedResource = (String) synCtx.getProperty("MCP_API_ELECTED_RESOURCE");
+            if (StringUtils.isNotEmpty(mcpElectedResource)) {
+                matchingResource = mcpElectedResource;
+            }
         }
         SignedJWTInfo signedJWTInfo = null;
 
@@ -296,12 +304,8 @@ public class OAuthAuthenticator implements Authenticator {
             return new AuthenticationResponse(false, isMandatory, true, ex.getErrorCode(), ex.getMessage());
         }
         context.stop();
-        APIKeyValidationInfoDTO info;
-        if (APIConstants.NO_MATCHING_AUTH_SCHEME.equals(authenticationScheme)) {
-            info = new APIKeyValidationInfoDTO();
-            info.setAuthorized(false);
-            info.setValidationStatus(900906);
-        } else if (accessToken == null || apiContext == null || apiVersion == null) {
+        // Missing credentials must be checked before resource/scheme errors so clients receive 401 (not 403).
+        if (accessToken == null || apiContext == null || apiVersion == null) {
             if (log.isDebugEnabled()) {
                 if (accessToken == null) {
                     log.debug("OAuth headers not found");
@@ -316,6 +320,12 @@ public class OAuthAuthenticator implements Authenticator {
             }
             return new AuthenticationResponse(false, isMandatory, true,
                     APISecurityConstants.API_AUTH_MISSING_CREDENTIALS, "Required OAuth credentials not provided");
+        }
+        APIKeyValidationInfoDTO info;
+        if (APIConstants.NO_MATCHING_AUTH_SCHEME.equals(authenticationScheme)) {
+            info = new APIKeyValidationInfoDTO();
+            info.setAuthorized(false);
+            info.setValidationStatus(APISecurityConstants.API_AUTH_INCORRECT_API_RESOURCE);
         } else {
             //Start JWT token validation
             if (isJwtToken) {

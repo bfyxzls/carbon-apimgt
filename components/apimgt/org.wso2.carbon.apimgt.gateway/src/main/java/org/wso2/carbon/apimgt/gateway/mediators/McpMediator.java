@@ -32,7 +32,9 @@ import org.apache.synapse.core.SynapseEnvironment;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.mediators.AbstractMediator;
 import org.apache.synapse.rest.RESTConstants;
+import org.apache.synapse.transport.nhttp.NhttpConstants;
 import org.apache.synapse.transport.passthru.util.RelayUtils;
+import org.wso2.carbon.apimgt.gateway.handlers.Utils;
 import org.wso2.carbon.apimgt.api.model.subscription.URLMapping;
 import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
 import org.wso2.carbon.apimgt.gateway.dto.OAuthProtectedResourceDTO;
@@ -56,6 +58,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Mediator for handling MCP (Model Context Protocol) requests and responses in the API Gateway.
@@ -93,8 +96,13 @@ public class McpMediator extends AbstractMediator implements ManagedLifecycle {
 
     @Override
     public boolean mediate(MessageContext messageContext) {
-        String path = (String) messageContext.getProperty(APIMgtGatewayConstants.API_ELECTED_RESOURCE);
+        String path = Utils.getMcpRequestPath(messageContext);
         String httpMethod = (String) messageContext.getProperty(APIMgtGatewayConstants.HTTP_METHOD);
+        org.apache.axis2.context.MessageContext axis2MessageContext =
+                ((Axis2MessageContext) messageContext).getAxis2MessageContext();
+        if (StringUtils.isEmpty(httpMethod)) {
+            httpMethod = (String) axis2MessageContext.getProperty(Constants.Configuration.HTTP_METHOD);
+        }
         API matchedAPI = GatewayUtils.getAPI(messageContext);
         if (matchedAPI == null) {
             log.error("No API matched for the request: " + path + " with method: " + httpMethod);
@@ -104,6 +112,16 @@ public class McpMediator extends AbstractMediator implements ManagedLifecycle {
         String mcpMethod = (String) messageContext.getProperty(APIMgtGatewayConstants.MCP_METHOD);
 
         if (IN_FLOW.equals(mcpDirection)) {
+            if (path != null && path.startsWith(APIMgtGatewayConstants.MCP_WELL_KNOWN_RESOURCE) &&
+                    APIConstants.HTTP_GET.equals(httpMethod)) {
+                return handleProtectedResourceMetadataResponse(messageContext, matchedAPI);
+            }
+            if (Utils.isMcpStreamableHttpGetRequest(path, httpMethod)) {
+                if (StringUtils.equals(subType, APIConstants.API_SUBTYPE_SERVER_PROXY)) {
+                    return true;
+                }
+                return MCPUtils.writeStreamableHttpGetResponse(messageContext);
+            }
             if (StringUtils.equals(subType, APIConstants.API_SUBTYPE_SERVER_PROXY) &&
                     !StringUtils.equals(APIConstants.MCP.METHOD_TOOL_LIST, mcpMethod)) {
                 // For server proxy APIs, we do not handle MCP requests
@@ -111,17 +129,9 @@ public class McpMediator extends AbstractMediator implements ManagedLifecycle {
                         matchedAPI.getVersion());
                 return true;
             }
-            if (path.startsWith(APIMgtGatewayConstants.MCP_RESOURCE) && httpMethod.equals(APIConstants.HTTP_POST)) {
+            if (path != null && path.startsWith(APIMgtGatewayConstants.MCP_RESOURCE) &&
+                    httpMethod.equals(APIConstants.HTTP_POST)) {
                 handleMcpRequest(messageContext, matchedAPI);
-            } else if (path.startsWith(APIMgtGatewayConstants.MCP_RESOURCE) &&
-                    httpMethod.equals(APIConstants.HTTP_GET)) {
-                McpResponseDto errorResponse = new McpResponseDto("Server-Sent Events (SSE) not supported",
-                        405, null);
-                MCPUtils.handleMCPFailure(messageContext, errorResponse);
-                return false;
-            } else if (path.startsWith(APIMgtGatewayConstants.MCP_WELL_KNOWN_RESOURCE) &&
-                    httpMethod.equals(APIConstants.HTTP_GET)) {
-                return handleProtectedResourceMetadataResponse(messageContext, matchedAPI);
             }
         } else if (OUT_FLOW.equals(mcpDirection)) {
             if (StringUtils.equals(subType, APIConstants.API_SUBTYPE_SERVER_PROXY)) {
@@ -135,7 +145,8 @@ public class McpMediator extends AbstractMediator implements ManagedLifecycle {
                 handleMcpResponse(messageContext);
             } catch (McpException e) {
                 log.error("Error while handling MCP response", e);
-                MCPUtils.handleMCPFailure(messageContext, new McpResponseDto(e.getErrorMessage(), e.getErrorCode(), null));
+                // Use HTTP 200 for JSON-RPC errors as per JSON-RPC 2.0 specification
+                MCPUtils.handleMCPFailure(messageContext, new McpResponseDto(e.toJsonRpcErrorPayload(), 200, null));
                 return false;
             }
         }
@@ -149,8 +160,12 @@ public class McpMediator extends AbstractMediator implements ManagedLifecycle {
                 ((Axis2MessageContext) messageContext).getAxis2MessageContext();
 
         McpResponseDto mcpResponse = McpRequestProcessor.processRequest(messageContext, matchedAPI, requestBody);
-        if (APIConstants.MCP.METHOD_INITIALIZE.equals(mcpMethod) || APIConstants.MCP.METHOD_TOOL_LIST.equals(mcpMethod)
-            || APIConstants.MCP.METHOD_PING.equals(mcpMethod) || APIConstants.MCP.METHOD_PROMPTS_LIST.equals(mcpMethod)
+        if (APIConstants.MCP.METHOD_INITIALIZE.equals(mcpMethod)
+            || APIConstants.MCP.METHOD_TOOL_LIST.equals(mcpMethod)
+            || APIConstants.MCP.METHOD_PING.equals(mcpMethod)
+            || APIConstants.MCP.METHOD_RESOURCES_LIST.equals(mcpMethod)
+            || APIConstants.MCP.METHOD_RESOURCE_TEMPLATE_LIST.equals(mcpMethod)
+            || APIConstants.MCP.METHOD_PROMPTS_LIST.equals(mcpMethod)
             || (APIConstants.MCP.METHOD_TOOL_CALL.equals(mcpMethod) && mcpResponse != null)) {
             messageContext.setProperty(MCP_PROCESSED, "true");
             if (mcpResponse != null) {
@@ -176,80 +191,9 @@ public class McpMediator extends AbstractMediator implements ManagedLifecycle {
     }
 
     private boolean handleProtectedResourceMetadataResponse(MessageContext messageContext, API matchedAPI) {
-        OAuthProtectedResourceDTO oAuthProtectedResourceDTO = new OAuthProtectedResourceDTO();
-        List<String> keyManagers = DataHolder.getInstance().getKeyManagersFromUUID(matchedAPI.getUuid());
-        boolean skipAuthServersAttribute = false;
-        if (keyManagers.isEmpty()) {
-            log.error("No Key Managers found for MCP Server: " + matchedAPI.getUuid());
-            skipAuthServersAttribute = true;
-        }
-        if (keyManagers.size() > 1) {
-            log.error("Multiple Key Managers found for MCP Server: " + matchedAPI.getUuid() + ".");
-            skipAuthServersAttribute = true;
-        }
-
-        // Derive the outward facing host and port from host header
-        org.apache.axis2.context.MessageContext axis2MC =
-                ((Axis2MessageContext) messageContext).getAxis2MessageContext();
-        Map headers = (Map) axis2MC.getProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS);
-        String hostHeader = headers != null ? (String) headers.get(APIMgtGatewayConstants.HOST) : null;
-        if (StringUtils.isBlank(hostHeader) || !validHostHeaderPattern.matcher(hostHeader).matches()) {
-            if (log.isDebugEnabled()) {
-                log.debug("Missing or malformed host header in request.Extracting host header from config.");
-            }
-            hostHeader = APIUtil.getHostAddress();
-        }
-
-
-        String contextPath = (String) messageContext.getProperty(RESTConstants.REST_API_CONTEXT);
-        String serverURL = MCPUtils.getGatewayServerURL(hostHeader, contextPath);
-
-        if (StringUtils.isEmpty(serverURL)) {
-            log.error("Error while generating mcp payload for resource metadata");
-            return false;
-        }
-
-        String resourceURL = serverURL + contextPath + APIMgtGatewayConstants.MCP_RESOURCE;
-        oAuthProtectedResourceDTO.setResource(resourceURL);
-
-        if (APIConstants.KeyManager.API_LEVEL_ALL_KEY_MANAGERS.equals(keyManagers.get(0))) {
-            Map<String, KeyManagerDto> keyManagerMap =
-                    KeyManagerHolder.getTenantKeyManagers(matchedAPI.getOrganization());
-            if (keyManagerMap.size() > 1) {
-                log.error("Multiple Key Managers found for MCP Server: " + matchedAPI.getUuid() + ".");
-            } else {
-                oAuthProtectedResourceDTO.addAuthorizationServer(keyManagerMap.values().iterator().next().getIssuer());
-            }
-        } else if (!skipAuthServersAttribute) {
-            KeyManagerDto keyManager =
-                    KeyManagerHolder.getKeyManagerByName(matchedAPI.getOrganization(), keyManagers.get(0));
-            if (keyManager != null) {
-                oAuthProtectedResourceDTO.addAuthorizationServer(keyManager.getIssuer());
-            } else {
-                log.error("Key Manager: " + keyManagers.get(0) + " not found for MCP Server: " +
-                        matchedAPI.getUuid() + ".");
-            }
-        }
-
-        oAuthProtectedResourceDTO.addScopesSupported(getAllScopes(matchedAPI));
-
         messageContext.setProperty(MCP_PROCESSED, "true");
-        org.apache.axis2.context.MessageContext axis2MessageContext =
-                ((Axis2MessageContext) messageContext).getAxis2MessageContext();
-        try {
-            JsonUtil.getNewJsonPayload(axis2MessageContext, new Gson().toJson(oAuthProtectedResourceDTO),
-                    true, true);
-            axis2MessageContext.setProperty(Constants.Configuration.MESSAGE_TYPE,
-                    APIConstants.APPLICATION_JSON_MEDIA_TYPE);
-            axis2MessageContext.setProperty(Constants.Configuration.CONTENT_TYPE,
-                    APIConstants.APPLICATION_JSON_MEDIA_TYPE);
-            axis2MessageContext.setProperty(APIMgtGatewayConstants.HTTP_SC, HttpStatus.SC_OK);
-            axis2MessageContext.removeProperty(APIConstants.NO_ENTITY_BODY);
-        } catch (AxisFault e) {
-            log.error("Error while generating mcp payload " + axis2MessageContext.getLogIDString(), e);
-            return false;
-        }
-        return true;
+        return MCPUtils.writeOAuthProtectedResourceMetadataResponse(messageContext, matchedAPI,
+                MCPUtils.getAllScopesFromApi(matchedAPI));
     }
 
     private void handleMcpResponse(MessageContext messageContext) throws McpException {
@@ -329,14 +273,6 @@ public class McpMediator extends AbstractMediator implements ManagedLifecycle {
      * @return List of all scopes
      */
     public static List<String> getAllScopes(API api) {
-        List<String> allScopes = new ArrayList<>();
-        if (api != null && api.getResources() != null) {
-            for (URLMapping urlMapping : api.getResources()) {
-                if (urlMapping.getScopes() != null) {
-                    allScopes.addAll(urlMapping.getScopes());
-                }
-            }
-        }
-        return allScopes;
+        return MCPUtils.getAllScopesFromApi(api);
     }
 }

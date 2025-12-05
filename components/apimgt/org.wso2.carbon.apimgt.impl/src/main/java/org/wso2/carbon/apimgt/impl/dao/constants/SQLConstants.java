@@ -529,6 +529,8 @@ public class SQLConstants {
                     "   SUBS.SUB_STATUS AS SUB_STATUS, " +
                     "   SUBS.UUID AS SUB_UUID, " +
                     "   SUBS.SUBS_CREATE_STATE AS SUBS_CREATE_STATE, " +
+                    "   SUBS.CREATED_TIME AS SUB_CREATED_TIME, " +
+                    "   SUBS.UPDATED_TIME AS SUB_UPDATED_TIME, " +
                     "   APP.NAME AS APP_NAME " +
                     " FROM " +
                     "   AM_APPLICATION APP, " +
@@ -557,6 +559,8 @@ public class SQLConstants {
                     "   SUBS.SUB_STATUS AS SUB_STATUS, " +
                     "   SUBS.UUID AS SUB_UUID, " +
                     "   SUBS.SUBS_CREATE_STATE AS SUBS_CREATE_STATE, " +
+                    "   SUBS.CREATED_TIME AS SUB_CREATED_TIME, " +
+                    "   SUBS.UPDATED_TIME AS SUB_UPDATED_TIME, " +
                     "   APP.NAME AS APP_NAME " +
                     " FROM " +
                     "   AM_APPLICATION APP, " +

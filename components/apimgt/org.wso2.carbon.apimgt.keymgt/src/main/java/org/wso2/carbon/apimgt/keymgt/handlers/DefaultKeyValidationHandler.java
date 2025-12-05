@@ -176,6 +176,14 @@ public class DefaultKeyValidationHandler extends AbstractKeyValidationHandler {
                 actualVersion);
         boolean scopesValidated = false;
         if (api != null) {
+            if (StringUtils.equals(APIConstants.API_TYPE_MCP, api.getApiType())
+                    && APIConstants.HTTP_POST.equalsIgnoreCase(httpVerb)) {
+                for (String resource : resourceArray) {
+                    if (APIConstants.MCP.MCP_RESOURCES_MCP.equals(resource) || "/*".equals(resource.trim())) {
+                        return true;
+                    }
+                }
+            }
 
             for (String resource : resourceArray) {
                 List<URLMapping> resources = api.getResources();

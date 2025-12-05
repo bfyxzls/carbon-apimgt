@@ -30,6 +30,7 @@ import org.apache.synapse.commons.CorrelationConstants;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.rest.RESTConstants;
 import org.apache.synapse.transport.passthru.util.RelayUtils;
+import org.wso2.carbon.apimgt.api.APIConstants.AIAPIConstants;
 import org.wso2.carbon.apimgt.api.model.OperationPolicy;
 import org.wso2.carbon.apimgt.api.model.subscription.URLMapping;
 import org.wso2.carbon.apimgt.common.analytics.collectors.AnalyticsCustomDataProvider;
@@ -57,7 +58,6 @@ import org.wso2.carbon.apimgt.keymgt.SubscriptionDataHolder;
 import org.wso2.carbon.apimgt.keymgt.model.SubscriptionDataStore;
 import org.wso2.carbon.apimgt.keymgt.model.exception.DataLoadingException;
 import org.wso2.carbon.apimgt.keymgt.model.impl.SubscriptionDataLoaderImpl;
-import org.wso2.carbon.apimgt.api.APIConstants.AIAPIConstants;
 import org.wso2.carbon.utils.multitenancy.MultitenantConstants;
 import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 
@@ -69,34 +69,30 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import static org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS;
 import static org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants.API_OBJECT;
-import static org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.MASK_VALUE;
-import static org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.REQUEST_HEADERS;
-import static org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.REQUEST_HEADER_MASK;
-import static org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.RESPONSE_HEADERS;
-import static org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.RESPONSE_HEADER_MASK;
-import static org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.SEND_HEADER;
 import static org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.UNKNOWN_VALUE;
+import static org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler.MCP_METHOD;
+import static org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler.MCP_NO_AUTH_REQUEST;
+import static org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler.MCP_REQUEST_BODY;
+import static org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler.MCP_RESULT_IS_ERROR;
 
 public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
 
     private static final Log log = LogFactory.getLog(SynapseAnalyticsDataProvider.class);
+
+    static Gson gson = new Gson();
+
     private MessageContext messageContext;
+
     private AnalyticsCustomDataProvider analyticsCustomDataProvider;
+
     private Boolean buildResponseMessage = null;
-    private static Map<String, String> reporterProperties = null;
-    private static final Gson gson = new Gson();
 
     public SynapseAnalyticsDataProvider(MessageContext messageContext) {
 
@@ -121,6 +117,13 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         return String.join(",", list);
     }
 
+    public static int getHourByUTC(long timestampMillis) {
+        OffsetDateTime offsetDateTime = OffsetDateTime
+                .ofInstant(Instant.ofEpochMilli(timestampMillis), ZoneOffset.UTC);
+
+        return offsetDateTime.getHour();
+    }
+
     @Override
     public EventCategory getEventCategory() {
 
@@ -135,6 +138,14 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
 
     @Override
     public boolean isAnonymous() {
+
+        // Check if this is an MCP request that doesn't require authentication
+        boolean isMcpNoAuthRequest = messageContext.getPropertyKeySet().contains(MCP_NO_AUTH_REQUEST)
+                && Boolean.TRUE.equals(messageContext.getProperty(MCP_NO_AUTH_REQUEST));
+        if (isMcpNoAuthRequest) {
+            // MCP no-auth requests (ping, resources/list, etc.) are treated as anonymous
+            return true;
+        }
 
         AuthenticationContext authContext = APISecurityUtils.getAuthenticationContext(messageContext);
         return isAuthenticated() && APIConstants.END_USER_ANONYMOUS.equalsIgnoreCase(authContext.getUsername());
@@ -420,87 +431,83 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public Map<String, Object> getProperties() {
-        log.debug("Building properties for analytics event");
-        final Map<String, Object> custom = analyticsCustomDataProvider != null
-                ? analyticsCustomDataProvider.getCustomProperties(messageContext)
-                : new LinkedHashMap<>();
+        Map<String, Object> customProperties;
 
-        // Core fields
-        custom.put(Constants.API_USER_NAME_KEY, getUserName());
-        custom.put(Constants.API_CONTEXT_KEY, getApiContext());
-        custom.put(Constants.RESPONSE_SIZE, getResponseSize());
-        custom.put(Constants.RESPONSE_CONTENT_TYPE, getResponseContentType());
-        custom.put(Constants.CERTIFICATE_COMMON_NAME, getCommonName());
-
-        // Headers (optional)
-        // Headers (optional)
-        if (shouldSendHeaders()) {
-            log.debug("Including headers in analytics event");
-            if (messageContext instanceof Axis2MessageContext) {
-                Axis2MessageContext axis2 = (Axis2MessageContext) messageContext;
-
-                // Request headers via analytics metadata
-                Map<String, Object> analyticsMeta = axis2.getAnalyticsMetadata();
-                if (analyticsMeta != null) {
-                    Object reqHeadersObj = analyticsMeta.get(REQUEST_HEADERS);
-                    if (reqHeadersObj instanceof Map) {
-                        Map<String, Object> reqHeaders = (Map<String, Object>) reqHeadersObj;
-                        Map<String, Object> maskedReq =
-                                applyMask(reqHeaders, parseMaskSet(getMaskProperties().get(REQUEST_HEADER_MASK)));
-                        if (!maskedReq.isEmpty()) {
-                            custom.put(REQUEST_HEADERS, maskedReq);
-                        }
-                    }
-                }
-
-                // Response headers via Axis2 transport property
-                Object respHeadersObj = axis2.getAxis2MessageContext().getProperty(TRANSPORT_HEADERS);
-                if (respHeadersObj instanceof Map) {
-                    Map<String, Object> respHeaders = (Map<String, Object>) respHeadersObj;
-                    Map<String, Object> maskedResp =
-                            applyMask(respHeaders, parseMaskSet(getMaskProperties().get(RESPONSE_HEADER_MASK)));
-                    if (!maskedResp.isEmpty()) {
-                        custom.put(RESPONSE_HEADERS, maskedResp);
-                        if (log.isDebugEnabled()) {
-                            log.debug("Added " + maskedResp.size() + " response headers to analytics event");
-                        }
-                    }
-                }
-            }
+        if (analyticsCustomDataProvider != null) {
+            customProperties = analyticsCustomDataProvider.getCustomProperties(messageContext);
+        } else {
+            customProperties = new HashMap<>();
         }
 
-        // API attributes (egress/subtype)
-        Object apiObj = messageContext.getProperty(API_OBJECT);
-        if (apiObj instanceof org.wso2.carbon.apimgt.keymgt.model.entity.API) {
-            org.wso2.carbon.apimgt.keymgt.model.entity.API api =
-                    (org.wso2.carbon.apimgt.keymgt.model.entity.API) apiObj;
-            custom.put(Constants.IS_EGRESS, api.getEgress());
-            custom.put(Constants.SUBTYPE, api.getSubtype());
+
+        if (messageContext.getPropertyKeySet().contains("URL_POSTFIX")) {
+            customProperties.put("urlPostfix", (String) messageContext.getProperty("URL_POSTFIX"));
         }
+        customProperties.put(Constants.API_USER_NAME_KEY, getUserName());
+        customProperties.put(Constants.API_CONTEXT_KEY, getApiContext());
+        customProperties.put(Constants.RESPONSE_SIZE, getResponseSize());
+        customProperties.put(Constants.RESPONSE_CONTENT_TYPE, getResponseContentType());
+        customProperties.put(Constants.CERTIFICATE_COMMON_NAME, getCommonName());
 
-        // AI analytics enrichment (optional)
-        Object aiMeta = messageContext.getProperty(AIAPIConstants.AI_API_RESPONSE_METADATA);
-        if (aiMeta instanceof Map) {
-            Object startTimeObj = messageContext.getProperty(Constants.REQUEST_START_TIME_PROPERTY);
-            long startTime = (startTimeObj instanceof Long) ? (Long) startTimeObj : 0L;
-            int startHourUtc = getHourByUTC(startTime);
-            getAiAnalyticsData((Map) aiMeta, startHourUtc, custom);
+        org.wso2.carbon.apimgt.keymgt.model.entity.API api =
+                (org.wso2.carbon.apimgt.keymgt.model.entity.API) messageContext.getProperty(API_OBJECT);
+        if (api != null) {
+            customProperties.put(Constants.IS_EGRESS, api.getEgress());
+            customProperties.put(Constants.SUBTYPE, api.getSubtype());
         }
-
-        return custom;
-    }
-
-    public static int getHourByUTC(long timestampMillis) {
-        OffsetDateTime offsetDateTime = OffsetDateTime
-                .ofInstant(Instant.ofEpochMilli(timestampMillis), ZoneOffset.UTC);
-
-        return offsetDateTime.getHour();
+        // MCP工具调用检测 - 检查请求体中是否包含 "method": "tools/call"
+        if (messageContext.getPropertyKeySet().contains(MCP_METHOD)) {
+            customProperties.put("mcpMethod", messageContext.getProperty(MCP_METHOD));
+        }
+        if (messageContext.getPropertyKeySet().contains("MCP_HTTP_METHOD")) {
+            customProperties.put("mcpHttpMethod", messageContext.getProperty("MCP_HTTP_METHOD"));
+        }
+        if (messageContext.getPropertyKeySet().contains("MCP_API_ELECTED_RESOURCE")) {
+            customProperties.put("mcpApiElectedResource",
+                    messageContext.getProperty("MCP_API_ELECTED_RESOURCE"));
+        }
+        if (messageContext.getPropertyKeySet().contains(MCP_NO_AUTH_REQUEST)) {
+            customProperties.put("mcpNoAuthRequest",
+                    messageContext.getProperty(MCP_NO_AUTH_REQUEST));
+        }
+        if (messageContext.getPropertyKeySet().contains(MCP_REQUEST_BODY)) {
+            // es中这个字段是text类型，这块需要转换成string，否则会导致数据无法写入es
+            customProperties.put("mcpRequestBody", gson.toJson(
+                    messageContext.getProperty(MCP_REQUEST_BODY)));
+        }
+        if (messageContext.getPropertyKeySet().contains("isMcp")) {
+            customProperties.put("isMcp",
+                    messageContext.getProperty("isMcp"));
+        }
+        if (messageContext.getPropertyKeySet().contains(MCP_RESULT_IS_ERROR)) {
+            customProperties.put("mcpResultIsError",
+                    messageContext.getProperty(MCP_RESULT_IS_ERROR));
+        }
+        if (messageContext.getPropertyKeySet().contains("Authorization")) {
+            customProperties.put("Authorization",
+                    messageContext.getProperty("Authorization"));
+        }
+        if (messageContext.getPropertyKeySet().contains("headers")) {
+            customProperties.put("headers",
+                    messageContext.getProperty("headers"));
+        }
+        if (messageContext.getProperty(AIAPIConstants.AI_API_RESPONSE_METADATA) != null) {
+            Object requestStartTimeObj = messageContext.getProperty(Constants.REQUEST_START_TIME_PROPERTY);
+            long requestStartTime = requestStartTimeObj == null ? 0L : (long) requestStartTimeObj;
+            int requestStartHour = getHourByUTC(requestStartTime);
+            getAiAnalyticsData(
+                    (Map) messageContext.getProperty(AIAPIConstants.AI_API_RESPONSE_METADATA),
+                    requestStartHour,
+                    customProperties
+            );
+        }
+        return customProperties;
     }
 
     private void getAiAnalyticsData(Map aiApiResponseMetadata, int requestStartHour,
-                                    Map<String, Object> customProperties) {
+                                    Map<String, Object> customProperties
+    ) {
         Map<String, String> aiMetadata = new HashMap<>();
         Map<String, Integer> aiTokenUsage = new HashMap<>();
         aiMetadata.put(
@@ -514,7 +521,7 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         aiMetadata.put(
                 Constants.AI_MODEL,
                 Optional.ofNullable(aiApiResponseMetadata.get(
-                            AIAPIConstants.LLM_PROVIDER_SERVICE_METADATA_RESPONSE_MODEL)
+                                AIAPIConstants.LLM_PROVIDER_SERVICE_METADATA_RESPONSE_MODEL)
                         )
                         .map(Object::toString)
                         .orElse(null)
@@ -523,7 +530,7 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         aiTokenUsage.put(
                 Constants.AI_PROMPT_TOKEN_USAGE,
                 Optional.ofNullable(aiApiResponseMetadata.get(
-                            AIAPIConstants.LLM_PROVIDER_SERVICE_METADATA_PROMPT_TOKEN_COUNT)
+                                AIAPIConstants.LLM_PROVIDER_SERVICE_METADATA_PROMPT_TOKEN_COUNT)
                         )
                         .map(tokenCount -> Integer.parseInt(tokenCount.toString()))
                         .orElse(0)
@@ -531,7 +538,7 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         aiTokenUsage.put(
                 Constants.AI_COMPLETION_TOKEN_USAGE,
                 Optional.ofNullable(aiApiResponseMetadata.get(
-                            AIAPIConstants.LLM_PROVIDER_SERVICE_METADATA_COMPLETION_TOKEN_COUNT)
+                                AIAPIConstants.LLM_PROVIDER_SERVICE_METADATA_COMPLETION_TOKEN_COUNT)
                         )
                         .map(tokenCount -> Integer.parseInt(tokenCount.toString()))
                         .orElse(0)
@@ -540,7 +547,7 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         aiTokenUsage.put(
                 Constants.AI_TOTAL_TOKEN_USAGE,
                 Optional.ofNullable(aiApiResponseMetadata.get(
-                            AIAPIConstants.LLM_PROVIDER_SERVICE_METADATA_TOTAL_TOKEN_COUNT)
+                                AIAPIConstants.LLM_PROVIDER_SERVICE_METADATA_TOTAL_TOKEN_COUNT)
                         )
                         .map(tokenCount -> Integer.parseInt(tokenCount.toString()))
                         .orElse(0)
@@ -559,8 +566,29 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
 
     private boolean isSuccessRequest() {
 
-        return !messageContext.getPropertyKeySet().contains(SynapseConstants.ERROR_CODE)
-                && APISecurityUtils.getAuthenticationContext(messageContext) != null;
+        // Check if there is an error code - if so, this is not a success request
+        if (messageContext.getPropertyKeySet().contains(SynapseConstants.ERROR_CODE)) {
+            return false;
+        }
+
+        // Check if this is an MCP request
+        boolean isMcpRequest = messageContext.getPropertyKeySet().contains("isMcp");
+
+        // For MCP requests that don't require authentication, we don't need AuthenticationContext
+        if (isMcpRequest) {
+            boolean isMcpNoAuthRequest = messageContext.getPropertyKeySet().contains(MCP_NO_AUTH_REQUEST)
+                    && Boolean.TRUE.equals(messageContext.getProperty(MCP_NO_AUTH_REQUEST));
+            if (isMcpNoAuthRequest) {
+                // MCP no-auth request (initialize, ping, etc.) - treat as success without auth context
+                return true;
+            }
+            // For MCP requests that require auth, check if authenticated
+            AuthenticationContext authContext = APISecurityUtils.getAuthenticationContext(messageContext);
+            return authContext != null;
+        }
+
+        // For non-MCP requests, require AuthenticationContext
+        return APISecurityUtils.getAuthenticationContext(messageContext) != null;
     }
 
     private boolean isFaultRequest() {
@@ -647,10 +675,10 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         }
     }
 
-    public long getResponseSize() {
-        long responseSize = 0L;
+    public int getResponseSize() {
+        int responseSize = 0;
         if (buildResponseMessage == null) {
-            Map<String,String> configs = APIManagerConfiguration.getAnalyticsProperties();
+            Map<String, String> configs = APIManagerConfiguration.getAnalyticsProperties();
             if (configs.containsKey(Constants.BUILD_RESPONSE_MESSAGE_CONFIG)) {
                 buildResponseMessage = Boolean.parseBoolean(configs.get(Constants.BUILD_RESPONSE_MESSAGE_CONFIG));
             } else {
@@ -659,7 +687,7 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         }
         Map headers = (Map) ((Axis2MessageContext) messageContext).getAxis2MessageContext()
                 .getProperty(TRANSPORT_HEADERS);
-        if (headers != null  && headers.get(HttpHeaders.CONTENT_LENGTH) != null) {
+        if (headers != null && headers.get(HttpHeaders.CONTENT_LENGTH) != null) {
             responseSize = Integer.parseInt(headers.get(HttpHeaders.CONTENT_LENGTH).toString());
         }
         if (responseSize == 0 && buildResponseMessage) {
@@ -679,7 +707,7 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
                 SOAPBody soapbody = env.getBody();
                 if (soapbody != null) {
                     byte[] size = soapbody.toString().getBytes(Charset.defaultCharset());
-                    responseSize =  size.length;
+                    responseSize = size.length;
                 }
             }
         }
@@ -687,7 +715,8 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
     }
 
     public String getResponseContentType() {
-        Map headers = (Map) ((Axis2MessageContext) messageContext).getAxis2MessageContext().getProperty(TRANSPORT_HEADERS);
+        Map headers =
+                (Map) ((Axis2MessageContext) messageContext).getAxis2MessageContext().getProperty(TRANSPORT_HEADERS);
         if (headers != null && headers.get(HttpHeaders.CONTENT_TYPE) != null) {
             return headers.get(HttpHeaders.CONTENT_TYPE).toString();
         }
@@ -701,65 +730,4 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         return Constants.NOT_APPLICABLE_VALUE;
     }
 
-    /**
-     * Check whether to send headers in the analytics event.
-     * Default: false
-     */
-    private boolean shouldSendHeaders() {
-        // reporterProperties.get(SEND_HEADER) might be null; treat as false.
-        if (reporterProperties == null) {
-            reporterProperties = ServiceReferenceHolder.getInstance().getApiManagerConfigurationService()
-                    .getAPIAnalyticsConfiguration().getReporterProperties();
-        }
-        String v = reporterProperties.get(SEND_HEADER);
-        return v != null && Boolean.parseBoolean(v);
-    }
-
-    /**
-     * Parse a JSON array of strings into a case-insensitive set.
-     * Accepts null/blank -> empty set.
-     * Example JSON: ["authorization","cookie"]
-     */
-    private Set<String> parseMaskSet(String json) {
-        if (json == null || json.trim().isEmpty()) {
-            return Collections.emptySet();
-        }
-        try {
-            List<String> list = gson.fromJson(json, new com.google.gson.reflect.TypeToken<List<String>>() {}.getType());
-            if (list == null || list.isEmpty()) {
-                return Collections.emptySet();
-            }
-            // Case-insensitive membership check: store lowercase
-            return list.stream().filter(Objects::nonNull).map(
-                    s -> s.toLowerCase(java.util.Locale.ROOT)).collect(Collectors.toSet());
-        } catch (Exception ignore) {
-            // On malformed JSON, fail safe: don't mask anything rather than blow up
-            log.warn("Failed to parse mask configuration JSON. No headers will be masked.");
-            return Collections.emptySet();
-        }
-    }
-
-    /**
-     * Applies a mask to the specified headers based on the provided mask set.
-     * If a header key is present in the mask set (case-insensitive), its value is replaced with a masked value.
-     * Otherwise, the header is retained as is.
-     *
-     * @param headers the map containing headers to be processed; can be null or empty
-     * @param maskSet the set of header keys (case-insensitive) to be masked; can be empty
-     * @return a new map containing the masked or unmasked headers
-     */
-    private Map<String, Object> applyMask(Map<String, Object> headers, Set<String> maskSet) {
-        if (headers == null || headers.isEmpty()) return Collections.emptyMap();
-        Map<String, Object> out = new LinkedHashMap<>(headers.size());
-        if (maskSet.isEmpty()) {
-            out.putAll(headers);
-            return out;
-        }
-        for (Map.Entry<String, Object> e : headers.entrySet()) {
-            String key = String.valueOf(e.getKey());
-            boolean masked =maskSet.contains(key.toLowerCase(java.util.Locale.ROOT));
-            out.put(key, masked ? MASK_VALUE : e.getValue());
-        }
-        return out;
-    }
 }

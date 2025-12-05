@@ -436,6 +436,27 @@ McpServersApiService delegate = new McpServersApiServiceImpl();
         return delegate.generateInternalAPIKeyMCPServer(mcpServerId, securityContext);
     }
 
+    @POST
+    @Path("/{mcpServerId}/refresh-tools")
+    
+    @Produces({ "application/json" })
+    @ApiOperation(value = "Refresh MCP tools from the backend", notes = "Re-synchronizes tool definitions from the upstream MCP (proxy subtype) or reapplies the latest OpenAPI-based tool mapping for other MCP subtypes.", response = MCPServerDTO.class, authorizations = {
+        @Authorization(value = "OAuth2Security", scopes = {
+            @AuthorizationScope(scope = "apim:mcp_server_create", description = "Create MCP Server"),
+            @AuthorizationScope(scope = "apim:mcp_server_manage", description = "Manage all MCP Server related operations"),
+            @AuthorizationScope(scope = "apim:mcp_server_publish", description = "Publish MCP Server")
+        })
+    }, tags={ "MCP Servers",  })
+    @ApiResponses(value = { 
+        @ApiResponse(code = 200, message = "OK. MCP Server tools refreshed. ", response = MCPServerDTO.class),
+        @ApiResponse(code = 400, message = "Bad Request. Invalid request or validation error.", response = ErrorDTO.class),
+        @ApiResponse(code = 403, message = "Forbidden. The operation is not permitted.", response = ErrorDTO.class),
+        @ApiResponse(code = 404, message = "Not Found. The specified resource does not exist.", response = ErrorDTO.class),
+        @ApiResponse(code = 500, message = "Internal Server Error.", response = ErrorDTO.class) })
+    public Response refreshMCPServerTools(@ApiParam(value = "**MCP Server ID** consisting of the **UUID** of the MCP Server. ",required=true) @PathParam("mcpServerId") String mcpServerId) throws APIManagementException{
+        return delegate.refreshMCPServerTools(mcpServerId, securityContext);
+    }
+
     @GET
     @Path("/{mcpServerId}/comments")
     

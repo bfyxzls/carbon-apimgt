@@ -4732,6 +4732,46 @@ paths:
           "https://127.0.0.1:9443/api/am/publisher/v4/mcp-servers/7a2298c4-c905-403f-8fac-38c73301631f/generate-key"'
       operationId: generateInternalAPIKeyMCPServer
 
+  /mcp-servers/{mcpServerId}/refresh-tools:
+    post:
+      tags:
+        - MCP Servers
+      summary: Refresh MCP tools from the backend
+      description: |
+        Re-synchronizes tool definitions from the upstream MCP endpoint for MCP servers of subtype **SERVER_PROXY**,
+        or reapplies MCP tool mappings from the current stored OpenAPI / backend definition for other MCP server subtypes.
+        The MCP server metadata is persisted the same way as a regular update, and matching per-tool policies and
+        scopes are preserved when tool names are unchanged (proxy subtype).
+      parameters:
+        - $ref: '#/components/parameters/mcpServerId'
+      responses:
+        200:
+          description: |
+            OK.
+            MCP server tools refreshed; response body is the updated MCP server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPServer'
+        400:
+          $ref: '#/components/responses/BadRequest'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+      security:
+        - OAuth2Security:
+            - apim:mcp_server_create
+            - apim:mcp_server_manage
+            - apim:mcp_server_publish
+      x-code-samples:
+        - lang: Curl
+          source: 'curl -k -X POST -H "Authorization: Bearer ae4eae22-3f65-387b-a171-d37eaa366fa8"
+          "https://127.0.0.1:9443/api/am/publisher/v4/mcp-servers/7a2298c4-c905-403f-8fac-38c73301631f/refresh-tools"'
+      operationId: refreshMCPServerTools
+
   /mcp-servers/{mcpServerId}/comments:
     get:
       tags:

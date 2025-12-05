@@ -18,6 +18,7 @@
 
 package org.wso2.carbon.apimgt.gateway.mcp.request;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonDeserializationContext;
 import com.google.gson.JsonDeserializer;
 import com.google.gson.JsonElement;
@@ -28,10 +29,12 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
-public class ParamsDeserializer implements JsonDeserializer<Params>  {
+public class ParamsDeserializer implements JsonDeserializer<Params> {
     private static final Log log = LogFactory.getLog(ParamsDeserializer.class);
 
     @Override
@@ -46,36 +49,13 @@ public class ParamsDeserializer implements JsonDeserializer<Params>  {
             JsonObject obj = json.getAsJsonObject();
             JsonElement argsElement = obj.get("arguments");
 
-            //iterate through the json object and print key value pairs
+            // Iterate through the json object and convert to native Java types
             if (argsElement == null || argsElement.isJsonNull()) {
                 params.setArguments(new HashMap<>());
             } else if (!argsElement.isJsonObject()) {
                 throw new JsonParseException("'arguments' must be a JSON object");
             } else {
-                Map<String, Object> arguments = new HashMap<>();
-                JsonObject args = argsElement.getAsJsonObject();
-                for (String key : args.keySet()) {
-                    JsonElement value = args.get(key);
-                    if (value != null && value.isJsonPrimitive()) {
-                        JsonPrimitive prim = value.getAsJsonPrimitive();
-                        if (prim.isString()) {
-                            arguments.put(key, prim.getAsString());
-                        } else if (prim.isNumber()) {
-                            // Distinguish between int and double
-                            Number num = prim.getAsNumber();
-                            if (num.doubleValue() == num.longValue()) {
-                                arguments.put(key, num.longValue());
-                            } else {
-                                arguments.put(key, num.doubleValue());
-                            }
-                        } else {
-                            arguments.put(key, prim);
-                        }
-                    } else if (value != null && (value.isJsonObject() || value.isJsonArray() || value.isJsonNull())) {
-                        // For complex types, store the JsonElement itself
-                        arguments.put(key, value);
-                    }
-                }
+                Map<String, Object> arguments = convertJsonObjectToMap(argsElement.getAsJsonObject());
                 params.setArguments(arguments);
             }
 
@@ -87,5 +67,68 @@ public class ParamsDeserializer implements JsonDeserializer<Params>  {
             params.setCursor(context.deserialize(obj.get("cursor"), String.class));
         }
         return params;
+    }
+
+    /**
+     * Recursively converts a JsonObject to a Map with native Java types.
+     *
+     * @param jsonObject the JsonObject to convert
+     * @return a Map containing native Java types
+     */
+    private Map<String, Object> convertJsonObjectToMap(JsonObject jsonObject) {
+        Map<String, Object> map = new HashMap<>();
+        for (String key : jsonObject.keySet()) {
+            JsonElement value = jsonObject.get(key);
+            map.put(key, convertJsonElementToObject(value));
+        }
+        return map;
+    }
+
+    /**
+     * Recursively converts a JsonArray to a List with native Java types.
+     *
+     * @param jsonArray the JsonArray to convert
+     * @return a List containing native Java types
+     */
+    private List<Object> convertJsonArrayToList(JsonArray jsonArray) {
+        List<Object> list = new ArrayList<>();
+        for (JsonElement element : jsonArray) {
+            list.add(convertJsonElementToObject(element));
+        }
+        return list;
+    }
+
+    /**
+     * Converts a JsonElement to a native Java object.
+     * Handles primitives, arrays, objects, and null values recursively.
+     *
+     * @param element the JsonElement to convert
+     * @return a native Java object (String, Number, Boolean, List, Map, or null)
+     */
+    private Object convertJsonElementToObject(JsonElement element) {
+        if (element == null || element.isJsonNull()) {
+            return null;
+        } else if (element.isJsonPrimitive()) {
+            JsonPrimitive prim = element.getAsJsonPrimitive();
+            if (prim.isString()) {
+                return prim.getAsString();
+            } else if (prim.isBoolean()) {
+                return prim.getAsBoolean();
+            } else if (prim.isNumber()) {
+                // Distinguish between int and double
+                Number num = prim.getAsNumber();
+                if (num.doubleValue() == num.longValue()) {
+                    return num.longValue();
+                } else {
+                    return num.doubleValue();
+                }
+            }
+            return prim.getAsString();
+        } else if (element.isJsonArray()) {
+            return convertJsonArrayToList(element.getAsJsonArray());
+        } else if (element.isJsonObject()) {
+            return convertJsonObjectToMap(element.getAsJsonObject());
+        }
+        return null;
     }
 }

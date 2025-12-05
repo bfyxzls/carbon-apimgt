@@ -532,11 +532,13 @@ public class OperationPolicyMappingUtil {
         specAttributeDTO.setName(specAttribute.getName());
         specAttributeDTO.setDisplayName(specAttribute.getDisplayName());
         specAttributeDTO.setDescription(specAttribute.getDescription());
-        specAttributeDTO.setType(specAttribute.getType().toString());
+        if(specAttribute.getType()!=null) {
+            specAttributeDTO.setType(specAttribute.getType().toString());
+        }
         specAttributeDTO.setValidationRegex(specAttribute.getValidationRegex());
         specAttributeDTO.setRequired(specAttribute.isRequired());
         specAttributeDTO.setDefaultValue(specAttribute.getDefaultValue());
-        if (specAttribute.getType().equals(OperationPolicySpecAttribute.AttributeType.Enum)) {
+        if (specAttribute.getType()!=null && specAttribute.getType().equals(OperationPolicySpecAttribute.AttributeType.Enum)) {
             specAttributeDTO.setAllowedValues(specAttribute.getAllowedValues());
         }
         return specAttributeDTO;

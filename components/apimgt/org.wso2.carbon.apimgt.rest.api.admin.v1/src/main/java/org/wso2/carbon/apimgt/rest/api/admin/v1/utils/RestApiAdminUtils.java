@@ -134,12 +134,12 @@ public class RestApiAdminUtils {
             throw new APIManagementException(propertyName + " property value of payload cannot be blank",
                     ExceptionCodes.from(ExceptionCodes.BLANK_PROPERTY_VALUE, propertyName));
         }
-
-        if (matcher.find()) {
-            throw new APIManagementException(propertyName +
-                    " property value of payload cannot contain invalid characters",
-                    ExceptionCodes.from(ExceptionCodes.CONTAIN_SPECIAL_CHARACTERS, propertyName));
-        }
+ // 不检查策略名称中的特殊字符了，之前的检查过于严格了，允许策略名称中包含特殊字符
+//        if (matcher.find()) {
+//            throw new APIManagementException(propertyName +
+//                    " property value of payload cannot contain invalid characters",
+//                    ExceptionCodes.from(ExceptionCodes.CONTAIN_SPECIAL_CHARACTERS, propertyName));
+//        }
     }
 
     public static void validateIPAddress(String ipAddress) throws APIManagementException {

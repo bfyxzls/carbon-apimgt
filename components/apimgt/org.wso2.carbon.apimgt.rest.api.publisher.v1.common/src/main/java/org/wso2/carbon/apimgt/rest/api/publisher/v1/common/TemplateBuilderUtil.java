@@ -118,6 +118,8 @@ public class TemplateBuilderUtil {
                 soapToRestMediationDtos);
         Map<String, String> latencyStatsProperties = new HashMap<String, String>();
         latencyStatsProperties.put(APIConstants.API_UUID, api.getUUID());
+        log.info("APITemplateBuilderImpl api type:"+api.getType());
+
         if (!APIUtil.isStreamingApi(api)) {
             vtb.addHandler(
                     "org.wso2.carbon.apimgt.gateway.handlers.common.APIMgtLatencyStatsHandler",
@@ -264,7 +266,13 @@ public class TemplateBuilderUtil {
             vtb.addHandler("org.wso2.carbon.apimgt.gateway.handlers.graphQL.GraphQLAPIHandler",
                     apiUUIDProperty);
         }
-
+        if (APIConstants.API_TYPE_MCP.equals(api.getType())  ||
+                (api.getApiCategories() != null
+                        && api.getApiCategories().stream()
+                        .anyMatch(o -> "MCP".equals(o.getName())))) {
+            vtb.addHandler("org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler",
+                    Collections.emptyMap());
+        }
         if (APIConstants.APITransportType.WEBSUB.toString().equals(api.getType())) {
             authProperties.put(APIConstants.WebHookProperties.EVENT_RECEIVING_RESOURCE_PATH,
                     APIConstants.WebHookProperties.DEFAULT_SUBSCRIPTION_RESOURCE_PATH);
@@ -278,10 +286,7 @@ public class TemplateBuilderUtil {
             vtb.addHandler("org.wso2.carbon.apimgt.gateway.handlers.streaming.sse.SseApiHandler",
                     authProperties);
         } else if (!(APIConstants.APITransportType.WS.toString().equals(api.getType()))) {
-            if (APIConstants.API_TYPE_MCP.equals(api.getType())) {
-                vtb.addHandler("org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler",
-                        Collections.emptyMap());
-            }
+
             vtb.addHandler("org.wso2.carbon.apimgt.gateway.handlers.security.APIAuthenticationHandler",
                     authProperties);
         }

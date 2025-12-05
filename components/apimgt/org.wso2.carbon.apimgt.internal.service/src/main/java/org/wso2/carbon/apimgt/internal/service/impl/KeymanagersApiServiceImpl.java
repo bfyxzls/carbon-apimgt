@@ -33,6 +33,7 @@ public class KeymanagersApiServiceImpl implements KeymanagersApiService {
         keyManagerDTO.setType(keyManagerConfigurationDTO.getType());
         keyManagerDTO.setTokenType(KeyManagerDTO.TokenTypeEnum.fromValue(keyManagerConfigurationDTO.getTokenType()));
         keyManagerDTO.setAdditionalProperties(keyManagerConfigurationDTO.getAdditionalProperties());
+        keyManagerDTO.setAllowedOrganizations(keyManagerConfigurationDTO.getAllowedOrganizations());
         return keyManagerDTO;
     }
 

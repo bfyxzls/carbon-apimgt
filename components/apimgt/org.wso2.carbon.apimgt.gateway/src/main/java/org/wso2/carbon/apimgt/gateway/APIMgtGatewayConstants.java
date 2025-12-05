@@ -221,6 +221,13 @@ public class APIMgtGatewayConstants {
     public static final String MCP_NO_AUTH_REQUEST = "MCP_NO_AUTH_REQUEST";
     public static final String MCP_RESOURCE= "/mcp";
     public static final String MCP_WELL_KNOWN_RESOURCE = "/.well-known/oauth-protected-resource";
+    public static final String MCP_GLOBAL_WELL_KNOWN_API_NAME = "_McpOAuthProtectedResource_";
+    /**
+     * Optional JVM/system property for MCP {@code /.well-known/oauth-protected-resource} only.
+     * When an MCP API binds multiple Key Managers, this selects which one appears in metadata.
+     * Does not affect gateway token validation or non-MCP APIs. Example: -Dapim.mcp.oauth.metadata.key_manager=kc
+     */
+    public static final String MCP_OAUTH_METADATA_KEY_MANAGER_PROPERTY = "apim.mcp.oauth.metadata.key_manager";
     public static final String MCP_AUTH_CLAIM = "MCP_AUTHENTICATED";
     public static final Long MCP_AUTH_TOKEN_EXPIRATION_TIME = 6000L;
     /**

@@ -129,6 +129,8 @@ import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.GraphQLValidationRespons
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.GraphQLValidationResponseGraphQLInfoDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.LifecycleHistoryDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.LifecycleStateDTO;
+import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.BackendOperationDTO;
+import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.BackendOperationMappingDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.MCPServerDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.MCPServerOperationDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.MCPServerValidationResponseDTO;
@@ -148,6 +150,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
 import java.lang.reflect.Type;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -5097,6 +5100,227 @@ public class PublisherCommonUtils {
             operationList.add(serverOperation);
         }
         return operationList;
+    }
+
+    /**
+     * For an MCP server proxy, fetches the latest tool list from the upstream MCP endpoint, updates the persisted
+     * backend definition, and replaces {@code mcpServerDTO} operations with merged tools (existing per-tool settings
+     * are preserved when the tool name matches).
+     *
+     * @param mcpServerApi API model of the MCP server (must not be null)
+     * @param mcpServerDTO MCP server DTO to mutate with refreshed operations (must not be null)
+     * @param apiProvider  API provider
+     * @param organization Organization / tenant domain
+     * @throws APIManagementException if backends are missing, the upstream call fails, or merge/update fails
+     */
+    public static void refreshThirdPartyProxyMCPServerOperations(API mcpServerApi, MCPServerDTO mcpServerDTO,
+                                                                 APIProvider apiProvider, String organization)
+            throws APIManagementException {
+
+        List<Backend> backends = apiProvider.getMCPServerBackends(mcpServerApi.getUuid(), organization);
+        if (backends == null || backends.isEmpty()) {
+            throw new APIManagementException("No backend found for MCP server " + mcpServerApi.getUuid(),
+                    ExceptionCodes.API_NOT_FOUND);
+        }
+        Backend backend = backends.get(0);
+        if (StringUtils.isBlank(backend.getEndpointConfig())) {
+            throw new APIManagementException("MCP backend endpoint configuration is missing for server "
+                    + mcpServerApi.getUuid(), ExceptionCodes.INVALID_ENDPOINT_URL);
+        }
+        try {
+            MCPInitializerAndToolFetcher fetcher = buildMcpInitializerForProxyBackend(backend.getEndpointConfig());
+            org.json.JSONObject toolsEnvelope = fetcher.initializeAndFetchTools();
+            org.json.JSONArray toolsArray = MCPInitializerAndToolFetcher.extractToolsArray(toolsEnvelope);
+
+            List<MCPServerOperationDTO> merged =
+                    mergeRefreshedThirdPartyToolsWithExisting(toolsArray,
+                            mcpServerDTO.getOperations(), organization);
+
+            Backend oldSnap = new Backend(backend);
+            backend.setDefinition(toolsEnvelope.toString());
+            updateMCPServerBackend(mcpServerApi.getUuid(), oldSnap, backend, organization, apiProvider);
+            mcpServerDTO.setOperations(merged);
+        } catch (ParseException e) {
+            throw new APIManagementException(
+                    "Invalid MCP backend endpoint configuration for server " + mcpServerApi.getUuid(), e);
+        } catch (CryptoException e) {
+            throw new APIManagementException(
+                    "Failed to decrypt MCP backend credentials for server " + mcpServerApi.getUuid(), e);
+        }
+    }
+
+    private static MCPInitializerAndToolFetcher buildMcpInitializerForProxyBackend(String endpointConfigJson)
+            throws APIManagementException, ParseException, CryptoException {
+
+        JSONObject root = (JSONObject) new JSONParser().parse(endpointConfigJson);
+        String url = resolveEndpointUrl(root);
+        if (StringUtils.isBlank(url)) {
+            throw new APIManagementException("MCP upstream URL could not be resolved from backend endpoint_config.");
+        }
+        EndpointAuthMaterial authMaterial = resolveProxyEndpointAuth(root);
+
+        boolean sendAuthHeaders = authMaterial.hasAuthHeaderCredentials();
+        return new MCPInitializerAndToolFetcher(url, authMaterial.headerName, authMaterial.headerValue,
+                sendAuthHeaders);
+    }
+
+    private static String resolveEndpointUrl(JSONObject endpointConfigRoot) {
+
+        JSONObject production = (JSONObject) endpointConfigRoot.get(APIConstants.ENDPOINT_PRODUCTION_ENDPOINTS);
+        if (production != null) {
+            String url = stringifyUrlValue(production.get(APIConstants.API_DATA_URL));
+            if (StringUtils.isNotBlank(url)) {
+                return url;
+            }
+        }
+        JSONObject sandbox = (JSONObject) endpointConfigRoot.get(APIConstants.ENDPOINT_SANDBOX_ENDPOINTS);
+        if (sandbox != null) {
+            return stringifyUrlValue(sandbox.get(APIConstants.API_DATA_URL));
+        }
+        return null;
+    }
+
+    private static String stringifyUrlValue(Object urlObj) {
+
+        return urlObj != null ? StringUtils.trimToNull(urlObj.toString()) : null;
+    }
+
+    private static EndpointAuthMaterial resolveProxyEndpointAuth(JSONObject endpointConfigRoot) throws CryptoException {
+
+        JSONObject endpointSecurity = (JSONObject) endpointConfigRoot.get(APIConstants.ENDPOINT_SECURITY);
+        EndpointAuthMaterial material = new EndpointAuthMaterial();
+
+        if (endpointSecurity == null) {
+            return material;
+        }
+        JSONObject productionSec =
+                (JSONObject) endpointSecurity.get(APIConstants.OAuthConstants.ENDPOINT_SECURITY_PRODUCTION);
+        if (productionSec != null &&
+                populateApiKeyAuthIfPresent(productionSec, material, EndpointRole.PRODUCTION)) {
+            return material;
+        }
+        JSONObject sandboxSec =
+                (JSONObject) endpointSecurity.get(APIConstants.OAuthConstants.ENDPOINT_SECURITY_SANDBOX);
+        if (sandboxSec != null) {
+            populateApiKeyAuthIfPresent(sandboxSec, material, EndpointRole.SANDBOX);
+        }
+        return material;
+    }
+
+    /**
+     * Resolves outbound API Key style authentication for MCP JSON-RPC calls when the MCP backend mirrors the proxy
+     * creation flow ({@code AUTH_HEADER} + encrypted value stored on the endpoint_security block).
+     */
+    private static boolean populateApiKeyAuthIfPresent(JSONObject securedBlock,
+                                                       EndpointAuthMaterial material, EndpointRole endpointRole)
+            throws CryptoException {
+
+        Object typeObj = securedBlock.get(APIConstants.ENDPOINT_SECURITY_TYPE);
+        String securityType = typeObj != null ? typeObj.toString() : null;
+        if (!APIConstants.ENDPOINT_SECURITY_TYPE_API_KEY.equalsIgnoreCase(
+                StringUtils.defaultString(securityType))) {
+            return false;
+        }
+        Object idTypeObj = securedBlock.get(APIConstants.ENDPOINT_SECURITY_API_KEY_IDENTIFIER_TYPE);
+        Object identifierObj = securedBlock.get(APIConstants.ENDPOINT_SECURITY_API_KEY_IDENTIFIER);
+        String idType = idTypeObj != null ? idTypeObj.toString() : null;
+        boolean isHeaderPlacement = idType == null
+                || org.wso2.carbon.apimgt.api.APIConstants.AIAPIConstants.API_KEY_IDENTIFIER_TYPE_HEADER
+                .equalsIgnoreCase(idType)
+                || APIConstants.API_KEY_HEADER.equalsIgnoreCase(idType)
+                || "AuthHeader".equalsIgnoreCase(idType);
+        boolean isQueryPlacement = idType != null && org.wso2.carbon.apimgt.api.APIConstants.AIAPIConstants
+                .API_KEY_IDENTIFIER_TYPE_QUERY_PARAMETER.equalsIgnoreCase(idType);
+
+        String headerName =
+                identifierObj != null ? StringUtils.trimToNull(identifierObj.toString()) : null;
+        if (!isHeaderPlacement || isQueryPlacement || headerName == null) {
+            log.warn("MCP tool refresh only supports API key credential placement as an HTTP header; "
+                    + "found identifier type '" + StringUtils.defaultString(idType)
+                    + "' for backend endpoint (" + endpointRole + "). Continuing without outbound auth.");
+            return false;
+        }
+        Object encryptedValObj = securedBlock.get(APIConstants.ENDPOINT_SECURITY_API_KEY_VALUE);
+        if (encryptedValObj == null) {
+            material.headerName = headerName;
+            material.headerValue = StringUtils.EMPTY;
+            return true;
+        }
+        String encrypted = encryptedValObj.toString();
+        String plain = StringUtils.isBlank(encrypted) ? StringUtils.EMPTY
+                : new String(CryptoUtil.getDefaultCryptoUtil().base64DecodeAndDecrypt(encrypted),
+                StandardCharsets.UTF_8);
+        material.headerName = headerName;
+        material.headerValue = plain;
+        return true;
+    }
+
+    private static List<MCPServerOperationDTO> mergeRefreshedThirdPartyToolsWithExisting(
+            org.json.JSONArray toolsFromUpstream,
+            List<MCPServerOperationDTO> previousOperations, String organization)
+            throws APIManagementException {
+
+        List<MCPServerOperationDTO> generatedOps = generateMCPToolOperationList(toolsFromUpstream);
+        if (generatedOps.isEmpty()) {
+            throw new APIManagementException(
+                    "MCP upstream returned no tool definitions after refresh.",
+                    ExceptionCodes.MCP_SERVER_TOOL_LIST_GENERATION_FAILED);
+        }
+        Map<String, MCPServerOperationDTO> previousByTarget = new LinkedHashMap<>();
+        if (previousOperations != null) {
+            for (MCPServerOperationDTO op : previousOperations) {
+                if (StringUtils.isNotBlank(op.getTarget())) {
+                    previousByTarget.put(op.getTarget(), op);
+                }
+            }
+        }
+        int tenantId = APIUtil.getTenantIdFromTenantDomain(organization);
+        String defaultThrottle = APIUtil.getDefaultAPILevelPolicy(tenantId);
+        MCPServerOperationDTO sampleExisting = previousByTarget.values().stream().findFirst().orElse(null);
+        String defaultAuthType =
+                sampleExisting != null ? sampleExisting.getAuthType()
+                        : APIConstants.OASResourceAuthTypes.APPLICATION_OR_APPLICATION_USER;
+        List<MCPServerOperationDTO> merged = new ArrayList<>();
+        for (MCPServerOperationDTO refreshed : generatedOps) {
+            BackendOperationMappingDTO backendMapping = new BackendOperationMappingDTO();
+            BackendOperationDTO backendOperation = new BackendOperationDTO();
+            backendOperation.setVerb(BackendOperationDTO.VerbEnum.TOOL);
+            backendOperation.setTarget(refreshed.getTarget());
+            backendMapping.setBackendOperation(backendOperation);
+            refreshed.setBackendOperationMapping(backendMapping);
+
+            MCPServerOperationDTO prior = previousByTarget.get(refreshed.getTarget());
+            if (prior != null) {
+                refreshed.setAuthType(prior.getAuthType());
+                refreshed.setThrottlingPolicy(prior.getThrottlingPolicy());
+                refreshed.setScopes(prior.getScopes() != null ? new ArrayList<>(prior.getScopes()) : null);
+                refreshed.setOperationPolicies(prior.getOperationPolicies());
+                if (prior.getBackendOperationMapping() != null
+                        && StringUtils.isNotBlank(prior.getBackendOperationMapping().getBackendId())) {
+                    refreshed.getBackendOperationMapping().setBackendId(
+                            prior.getBackendOperationMapping().getBackendId());
+                }
+            } else {
+                refreshed.setAuthType(defaultAuthType);
+                refreshed.setThrottlingPolicy(defaultThrottle);
+            }
+            merged.add(refreshed);
+        }
+        return merged;
+    }
+
+    private enum EndpointRole {
+        PRODUCTION,
+        SANDBOX
+    }
+
+    private static class EndpointAuthMaterial {
+        String headerName;
+        String headerValue;
+
+        boolean hasAuthHeaderCredentials() {
+            return StringUtils.isNotBlank(headerName);
+        }
     }
 
     /**

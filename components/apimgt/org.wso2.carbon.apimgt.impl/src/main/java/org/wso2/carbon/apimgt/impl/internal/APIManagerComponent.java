@@ -63,7 +63,6 @@ import org.wso2.carbon.apimgt.impl.config.APIMConfigService;
 import org.wso2.carbon.apimgt.impl.dao.ApiMgtDAO;
 import org.wso2.carbon.apimgt.impl.ExternalEnvironment;
 import org.wso2.carbon.apimgt.impl.dto.EventHubConfigurationDto;
-import org.wso2.carbon.apimgt.impl.dto.GatewayNotificationConfiguration;
 import org.wso2.carbon.apimgt.impl.dto.ThrottleProperties;
 import org.wso2.carbon.apimgt.impl.factory.SQLConstantManagerFactory;
 import org.wso2.carbon.apimgt.impl.gatewayartifactsynchronizer.ArtifactRetriever;
@@ -192,7 +191,8 @@ public class APIManagerComponent {
 
             //Registering Notifiers
             bundleContext.registerService(Notifier.class.getName(), new SubscriptionsNotifier(), null);
-            bundleContext.registerService(Notifier.class.getName(), new ApisNotifier(), null);
+            //bundleContext.registerService(Notifier.class.getName(), new ApisNotifier(), null);
+            bundleContext.registerService(Notifier.class.getName(), new CustomApisNotifier(), null);
             bundleContext.registerService(Notifier.class.getName(), new ApplicationNotifier(), null);
             bundleContext.registerService(Notifier.class.getName(), new ApplicationRegistrationNotifier(), null);
             bundleContext.registerService(Notifier.class.getName(), new PolicyNotifier(), null);
@@ -301,6 +301,24 @@ public class APIManagerComponent {
                 log.error("Error while activating UserPostSelfRegistration handler component.", e);
             }
 
+// Activating FederatedUserSyncHandler component，这块注释了，因为无法实现，因为jwt-bearer接口不发事件
+//            try {
+//                FederatedUserSyncHandler federatedUserSyncHandler = new FederatedUserSyncHandler();
+//
+//                // Create service properties to enable the handler
+//                // IdentityEventServiceComponent checks for these properties to activate the handler
+//                java.util.Dictionary<String, Object> props = new java.util.Hashtable<>();
+//                props.put("enable", "true");
+//                props.put("module.name", "federatedUserSyncHandler");
+//
+//                componentContext.getBundleContext()
+//                        .registerService(AbstractEventHandler.class.getName(), federatedUserSyncHandler,
+//                                props);
+//                log.info("FederatedUserSyncHandler successfully registered as Event Handler with properties");
+//            } catch (Exception e) {
+//                log.error("Error while activating FederatedUserSyncHandler component.", e);
+//            }
+
             // Read the trust store
             ServerConfiguration config = CarbonUtils.getServerConfiguration();
 
@@ -333,6 +351,7 @@ public class APIManagerComponent {
                 initializeAPIDiscoveryTasks();
             }
             bundleContext.registerService(ScopeValidator.class, new SystemScopesIssuer(), null);
+
             /* The service registration was moved to the end because the HTTP client configuration was not available
             with the previous placement, where the http client configuration was populated after registering the
             APIManagerConfigurationService

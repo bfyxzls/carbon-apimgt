@@ -70,8 +70,8 @@ public class APISecurityUtils {
      * this should only be used with newly validated requests. It shouldn't be used to modify
      * already validated requests.
      *
-     * @param synCtx        A newly authenticated request
-     * @param authContext   AuthenticationContext information to be added
+     * @param synCtx      A newly authenticated request
+     * @param authContext AuthenticationContext information to be added
      */
     public static void setAuthenticationContext(MessageContext synCtx,
                                                 AuthenticationContext authContext) {
@@ -88,6 +88,9 @@ public class APISecurityUtils {
      * @return An AuthenticationContext instance or null
      */
     public static AuthenticationContext getAuthenticationContext(MessageContext synCtx) {
+        if (synCtx.getProperty(API_AUTH_CONTEXT) == null) {
+            return null;
+        }
         return (AuthenticationContext) synCtx.getProperty(API_AUTH_CONTEXT);
     }
 

@@ -16,6 +16,7 @@
  *  under the License.
  *
  */
+
 package org.wso2.carbon.apimgt.impl.issuers;
 
 import com.nimbusds.jwt.JWTClaimsSet;
@@ -30,11 +31,16 @@ import org.opensaml.saml.saml2.core.Assertion;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder;
+import org.wso2.carbon.apimgt.impl.utils.FederatedUserSyncUtil;
 import org.wso2.carbon.apimgt.impl.utils.SystemScopeUtils;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatedUser;
 import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils;
-import org.wso2.carbon.identity.application.common.model.*;
+import org.wso2.carbon.identity.application.common.model.ClaimMapping;
+import org.wso2.carbon.identity.application.common.model.FederatedAuthenticatorConfig;
+import org.wso2.carbon.identity.application.common.model.IdentityProvider;
+import org.wso2.carbon.identity.application.common.model.PermissionsAndRoleConfig;
+import org.wso2.carbon.identity.application.common.model.RoleMapping;
 import org.wso2.carbon.identity.application.common.util.IdentityApplicationConstants;
 import org.wso2.carbon.identity.application.common.util.IdentityApplicationManagementUtil;
 import org.wso2.carbon.identity.base.IdentityConstants;
@@ -46,7 +52,6 @@ import org.wso2.carbon.identity.oauth.cache.OAuthCache;
 import org.wso2.carbon.identity.oauth.cache.OAuthCacheKey;
 import org.wso2.carbon.identity.oauth.callback.OAuthCallback;
 import org.wso2.carbon.identity.oauth.common.GrantType;
-import org.wso2.carbon.identity.oauth.common.exception.InvalidOAuthClientException;
 import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
 import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
 import org.wso2.carbon.identity.oauth2.authz.OAuthAuthzReqMessageContext;
@@ -68,9 +73,14 @@ import org.wso2.carbon.user.core.util.UserCoreUtil;
 import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 
 import java.text.ParseException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
-import static org.wso2.carbon.identity.oauth2.util.OAuth2Util.getAppInformationByClientId;
 import static org.wso2.carbon.registry.core.jdbc.DumpConstants.RESOURCE;
 
 /**
@@ -79,23 +89,32 @@ import static org.wso2.carbon.registry.core.jdbc.DumpConstants.RESOURCE;
  */
 public class SystemScopesIssuer implements ScopeValidator {
 
-    private static Log log = LogFactory.getLog(SystemScopesIssuer.class);
-    private static final String DEFAULT_SCOPE_NAME = "default";
-    private static final String PRESERVED_CASE_SENSITIVE_VARIABLE = "preservedCaseSensitive";
-    private static final String ACCESS_TOKEN_DO = "AccessTokenDO";
     // The following constants are as same as the constants defined in
     // org.wso2.carbon.apimgt.keymgt.handlers.ResourceConstants.
     // If any changes are taking place in that these should also be updated accordingly.
     // Setting the "retrieveRolesFromUserStoreForScopeValidation" as a System property which is used when
     // skipping the scope role validation during token issuing using JWT bearer grant.
     public static final String CHECK_ROLES_FROM_SAML_ASSERTION = "checkRolesFromSamlAssertion";
+
     public static final String RETRIEVE_ROLES_FROM_USERSTORE_FOR_SCOPE_VALIDATION =
             "retrieveRolesFromUserStoreForScopeValidation";
+
+    private static final String DEFAULT_SCOPE_NAME = "default";
+
+    private static final String PRESERVED_CASE_SENSITIVE_VARIABLE = "preservedCaseSensitive";
+
+    private static final String ACCESS_TOKEN_DO = "AccessTokenDO";
+
     private static final String SCOPE_VALIDATOR_NAME = "System scope validator";
-    private IdentityProvider identityProvider = null;
+
     // set role based scopes issuer as the default
     private static final String ISSUER_PREFIX = "default";
+
     private static final String DEFAULT_ADMIN_ROLE = "admin";
+
+    private static Log log = LogFactory.getLog(SystemScopesIssuer.class);
+
+    private IdentityProvider identityProvider = null;
 
     @Override
     public boolean validateScope(OAuthAuthzReqMessageContext oAuthAuthzReqMessageContext) throws
@@ -215,7 +234,9 @@ public class SystemScopesIssuer implements ScopeValidator {
                 return true;
             }
             userRoles = getUserRoles(authenticatedUser);
-            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser);
+
+            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser,
+                    accessTokenDO.getGrantType());
             oAuth2TokenValidationMessageContext.getResponseDTO().setScope(authorizedScopes.toArray(
                     new String[authorizedScopes.size()]));
         }
@@ -279,7 +300,12 @@ public class SystemScopesIssuer implements ScopeValidator {
                 return getAllowedScopes(requestedScopes);
             }
             String[] userRoles = getUserRoles(authenticatedUser);
-            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser);
+            AccessTokenDO accessTokenDO = (AccessTokenDO) oAuthAuthzReqMessageContext.getProperty(ACCESS_TOKEN_DO);
+            String grantType = null;
+            if (accessTokenDO != null) {
+                grantType = accessTokenDO.getGrantType();
+            }
+            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser, grantType);
         }
         return authorizedScopes;
     }
@@ -304,7 +330,8 @@ public class SystemScopesIssuer implements ScopeValidator {
                 return getAllowedScopes(requestedScopes);
             }
             String[] userRoles = getUserRoles(authenticatedUser);
-            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser);
+            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser,
+                    scopeValidationCallback.getGrantType());
         }
         return authorizedScopes;
     }
@@ -316,12 +343,13 @@ public class SystemScopesIssuer implements ScopeValidator {
      * @return authorized scopes list
      */
     public List<String> getScopes(OAuthTokenReqMessageContext tokReqMsgCtx) {
-
         List<String> authorizedScopes = null;
         List<String> requestedScopes = new ArrayList<>(Arrays.asList(tokReqMsgCtx.getScope()));
         String clientId = tokReqMsgCtx.getOauth2AccessTokenReqDTO().getClientId();
         AuthenticatedUser authenticatedUser = tokReqMsgCtx.getAuthorizedUser();
+
         Map<String, String> appScopes = getAppScopes(clientId, authenticatedUser, requestedScopes);
+
         if (appScopes != null) {
             //If no scopes can be found in the context of the application
             if (isAppScopesEmpty(appScopes, clientId)) {
@@ -334,7 +362,8 @@ public class SystemScopesIssuer implements ScopeValidator {
             // If GrantType is SAML20_BEARER and CHECK_ROLES_FROM_SAML_ASSERTION is true, or if GrantType is
             // JWT_BEARER and retrieveRolesFromUserStoreForScopeValidation system property is true,
             // use user roles from assertion or jwt otherwise use roles from userstore.
-            String isSAML2Enabled = System.getProperty(APIConstants.SystemScopeConstants.CHECK_ROLES_FROM_SAML_ASSERTION);
+            String isSAML2Enabled =
+                    System.getProperty(APIConstants.SystemScopeConstants.CHECK_ROLES_FROM_SAML_ASSERTION);
             String isRetrieveRolesFromUserStoreForScopeValidation = System
                     .getProperty(APIConstants.SystemScopeConstants.RETRIEVE_ROLES_FROM_USERSTORE_FOR_SCOPE_VALIDATION);
             if (APIConstants.OAuthConstants.TOKEN_EXCHANGE.equals(grantType)) {
@@ -347,7 +376,8 @@ public class SystemScopesIssuer implements ScopeValidator {
             } else if (GrantType.SAML20_BEARER.toString().equals(grantType) && Boolean.parseBoolean(isSAML2Enabled)) {
                 authenticatedUser.setUserStoreDomain("FEDERATED");
                 tokReqMsgCtx.setAuthorizedUser(authenticatedUser);
-                Assertion assertion = (Assertion) tokReqMsgCtx.getProperty(APIConstants.SystemScopeConstants.SAML2_ASSERTION);
+                Assertion assertion =
+                        (Assertion) tokReqMsgCtx.getProperty(APIConstants.SystemScopeConstants.SAML2_ASSERTION);
                 userRoles = getRolesFromAssertion(assertion);
             } else if (APIConstants.SystemScopeConstants.OAUTH_JWT_BEARER_GRANT_TYPE.equals(grantType) && !(Boolean
                     .parseBoolean(isRetrieveRolesFromUserStoreForScopeValidation))) {
@@ -360,7 +390,7 @@ public class SystemScopesIssuer implements ScopeValidator {
             } else {
                 userRoles = getUserRoles(authenticatedUser);
             }
-            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser);
+            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser, grantType);
         }
         return authorizedScopes;
     }
@@ -412,7 +442,8 @@ public class SystemScopesIssuer implements ScopeValidator {
      * @return authorized scopes list
      */
     private List<String> getAuthorizedScopes(String[] userRoles, List<String> requestedScopes,
-                                             Map<String, String> appScopes, AuthenticatedUser authenticatedUser) {
+                                             Map<String, String> appScopes, AuthenticatedUser authenticatedUser,
+                                             String grantType) {
 
         List<String> defaultScope = new ArrayList<>();
         defaultScope.add(DEFAULT_SCOPE_NAME);
@@ -433,7 +464,6 @@ public class SystemScopesIssuer implements ScopeValidator {
                 userRoleList.add(aRole.toLowerCase(Locale.ENGLISH));
             }
         }
-
         // Check whether the admin role has been changed
         boolean isAdminRoleChanged = false;
         String adminRole = getAdminRole(authenticatedUser);
@@ -465,7 +495,18 @@ public class SystemScopesIssuer implements ScopeValidator {
                 authorizedScopes.add(scope);
             }
         }
-        return (!authorizedScopes.isEmpty()) ? authorizedScopes : defaultScope;
+
+        // return (!authorizedScopes.isEmpty()) ? authorizedScopes : defaultScope;
+        // 下面代码在客户端认证时，如果包含用户信息（即这个是用户建立的应用，通过应用的client credential授权），则默认添加openid scope，其他情况默认添加default scope
+        if (!authorizedScopes.isEmpty()) {
+            return authorizedScopes;
+        } else {
+            authorizedScopes.add(DEFAULT_SCOPE_NAME);
+            if (authenticatedUser != null && grantType != null && grantType.equalsIgnoreCase("client_credentials")) {
+                authorizedScopes.add("openid");
+            }
+            return authorizedScopes;
+        }
     }
 
     /**
@@ -633,6 +674,24 @@ public class SystemScopesIssuer implements ScopeValidator {
         }
         user.setUserAttributes(userAttributes);
         tokReqMsgCtx.setAuthorizedUser(user);
+
+        // Sync federated user to um_user table after JWT bearer grant type token request
+        // This handles the case where user is persisted to idn_auth_user but no event is published
+        if (!isExchangeGrant && claimsSet != null && tenantDomain != null) {
+            try {
+                // Get username from JWT sub claim (federated user ID)
+                String userName = claimsSet.getSubject();
+                if (StringUtils.isNotEmpty(userName) && tokReqMsgCtx.getOauth2AccessTokenReqDTO() != null &&
+                        tokReqMsgCtx.getOauth2AccessTokenReqDTO().getGrantType()
+                                .equalsIgnoreCase("urn:ietf:params:oauth:grant-type:jwt-bearer")) {
+                    // Sync user to um_user table if it exists in idn_auth_user but not in um_user
+                    FederatedUserSyncUtil.syncFederatedUserToUMUser(tenantDomain, userName);
+                }
+            } catch (Exception e) {
+                // Log error but don't throw to avoid breaking token generation flow
+                log.error("Error while synchronizing federated user to UM_USER table after JWT bearer grant", e);
+            }
+        }
     }
 
     /**
@@ -677,7 +736,8 @@ public class SystemScopesIssuer implements ScopeValidator {
      * @return SignedJWT object
      * @throws IdentityOAuth2Exception exception thrown due to a parsing error
      */
-    private SignedJWT getSignedJWTFromSubjectToken(OAuthTokenReqMessageContext tokReqMsgCtx) throws IdentityOAuth2Exception {
+    private SignedJWT getSignedJWTFromSubjectToken(OAuthTokenReqMessageContext tokReqMsgCtx)
+            throws IdentityOAuth2Exception {
 
         RequestParameter[] params = tokReqMsgCtx.getOauth2AccessTokenReqDTO().getRequestParameters();
         String subjectToken = null;
