@@ -1546,6 +1546,9 @@ public class ApiMgtDAO {
         subscribedAPI.setSubCreatedStatus(resultSet.getString("SUBS_CREATE_STATE"));
         subscribedAPI.setTier(new Tier(resultSet.getString(APIConstants.SUBSCRIPTION_FIELD_TIER_ID)));
         subscribedAPI.setRequestedTier(new Tier(resultSet.getString("TIER_ID_PENDING")));
+        subscribedAPI.setCreatedTime(resultSet.getString("SUB_CREATED_TIME"));
+        subscribedAPI.setUpdatedTime(resultSet.getString("SUB_UPDATED_TIME"));
+
     }
 
     /**

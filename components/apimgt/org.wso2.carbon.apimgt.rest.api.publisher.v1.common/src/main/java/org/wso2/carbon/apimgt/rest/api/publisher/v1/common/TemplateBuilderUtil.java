@@ -118,6 +118,11 @@ public class TemplateBuilderUtil {
                 soapToRestMediationDtos);
         Map<String, String> latencyStatsProperties = new HashMap<String, String>();
         latencyStatsProperties.put(APIConstants.API_UUID, api.getUUID());
+        log.info("APITemplateBuilderImpl api type:"+api.getType());
+        if (api.getType().equalsIgnoreCase("MCP")) {
+            log.info("register mcp api " + api.getId().getApiName());
+            vtb.addHandler("org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler", Collections.emptyMap());
+        }
         if (!APIUtil.isStreamingApi(api)) {
             vtb.addHandler(
                     "org.wso2.carbon.apimgt.gateway.handlers.common.APIMgtLatencyStatsHandler",

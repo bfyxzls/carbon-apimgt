@@ -4653,7 +4653,7 @@ paths:
         - lang: Curl
           source: 'curl -k -H "Authorization: Bearer ae4eae22-3f65-387b-a171-d37eaa366fa8"
           -H "Content-Type: application/json" -X POST -d @data.json "https://localhost:9443/api/am/devportal/v3/me/organization"'
-          
+
   ######################################################
   # The "Marketplace Assistant Feature" resource APIs
   ######################################################
@@ -5649,6 +5649,14 @@ components:
         requestedThrottlingPolicy:
           type: string
           example: Unlimited
+        createdTime:
+          type: string
+          readOnly: true
+          example: 2021-02-11-09:57:25
+        updatedTime:
+          type: string
+          readOnly: true
+          example: 2021-02-12-19:57:25
         status:
           type: string
           example: UNBLOCKED
@@ -6526,7 +6534,7 @@ components:
         IsPasswordChangeEnabled:
           type: boolean
           default: true
-        IsJWTEnabledForLoginTokens: 
+        IsJWTEnabledForLoginTokens:
           type: boolean
           default: false
         orgAccessControlEnabled:

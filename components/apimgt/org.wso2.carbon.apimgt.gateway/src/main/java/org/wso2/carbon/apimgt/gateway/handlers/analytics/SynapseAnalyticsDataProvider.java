@@ -81,6 +81,7 @@ import java.util.stream.Collectors;
 
 import static org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS;
 import static org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants.API_OBJECT;
+import static org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants.MCP_METHOD;
 import static org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.MASK_VALUE;
 import static org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.REQUEST_HEADERS;
 import static org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.REQUEST_HEADER_MASK;
@@ -478,7 +479,30 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
                     (org.wso2.carbon.apimgt.keymgt.model.entity.API) apiObj;
             custom.put(Constants.IS_EGRESS, api.getEgress());
             custom.put(Constants.SUBTYPE, api.getSubtype());
+            custom.put("isMcp",
+                    api.getApiType().equalsIgnoreCase("mcp"));
         }
+
+        // MCP工具调用检测 - 检查请求体中是否包含 "method": "tools/call"
+        if (messageContext.getPropertyKeySet().contains(APIMgtGatewayConstants.MCP_METHOD)) {
+            custom.put("mcpMethod", messageContext.getProperty(APIMgtGatewayConstants.MCP_METHOD));
+        }
+        if (messageContext.getPropertyKeySet().contains("MCP_HTTP_METHOD")) {
+            custom.put("mcpHttpMethod", messageContext.getProperty("MCP_HTTP_METHOD"));
+        }
+        if (messageContext.getPropertyKeySet().contains("MCP_API_ELECTED_RESOURCE")) {
+            custom.put("mcpApiElectedResource",
+                    messageContext.getProperty("MCP_API_ELECTED_RESOURCE"));
+        }
+        if(messageContext.getPropertyKeySet().contains( APIMgtGatewayConstants.MCP_NO_AUTH_REQUEST)){
+            custom.put("mcpNoAuthRequest",
+                    messageContext.getProperty(APIMgtGatewayConstants.MCP_NO_AUTH_REQUEST));
+        }
+        if(messageContext.getPropertyKeySet().contains( APIMgtGatewayConstants.MCP_REQUEST_BODY)){
+            custom.put("mcpRequestBody",
+                    messageContext.getProperty(APIMgtGatewayConstants.MCP_REQUEST_BODY));
+        }
+
 
         // AI analytics enrichment (optional)
         Object aiMeta = messageContext.getProperty(AIAPIConstants.AI_API_RESPONSE_METADATA);

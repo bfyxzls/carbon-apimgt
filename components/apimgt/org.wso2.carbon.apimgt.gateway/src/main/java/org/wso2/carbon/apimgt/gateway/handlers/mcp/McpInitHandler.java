@@ -72,7 +72,7 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
         try {
             String path = (String) messageContext.getProperty(APIMgtGatewayConstants.API_ELECTED_RESOURCE);
             String httpMethod = (String) messageContext.getProperty(APIMgtGatewayConstants.HTTP_METHOD);
-
+            messageContext.setProperty("isMcp", 1);
             String httpsPort = System.getProperty(APIMgtGatewayConstants.HTTPS_NIO_PORT);
             if (!StringUtils.isEmpty(httpsPort)) {
                 messageContext.setProperty("uri.var.httpsPort", httpsPort);

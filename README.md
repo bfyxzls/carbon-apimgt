@@ -17,3 +17,4 @@ If you want to build carbon-apimgt from the source code:
 ``git checkout master``
 1. Navigate to the ``carbon-apimgt`` directory and run the following Maven command.\
  ``mvn clean install``
+1. 在插件的maven项目中先进行构建mvn package -D enforcer.skip=true -D maven.test.skip=true -D checkstyle.skip=true -D spotbugs.skip=true -T 1C
