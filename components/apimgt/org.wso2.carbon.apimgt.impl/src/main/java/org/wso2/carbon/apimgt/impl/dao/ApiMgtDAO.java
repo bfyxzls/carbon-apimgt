@@ -656,7 +656,8 @@ public class ApiMgtDAO {
                 subscriber.setId(subscriberId);
                 subscriber.setTenantId(rs.getInt("TENANT_ID"));
                 subscriber.setEmail(rs.getString("EMAIL_ADDRESS"));
-                subscriber.setSubscribedDate(new Date(rs.getTimestamp("DATE_SUBSCRIBED").getTime()));
+                Timestamp dateSubscribed = rs.getTimestamp("DATE_SUBSCRIBED");
+                subscriber.setSubscribedDate(dateSubscribed == null ? null : new Date(dateSubscribed.getTime()));
                 return subscriber;
             }
         } catch (SQLException e) {
@@ -4295,8 +4296,10 @@ public class ApiMgtDAO {
                 application.setIsBlackListed(rs.getBoolean("ENABLED"));
                 application.setOwner(rs.getString("CREATED_BY"));
                 application.setTokenType(rs.getString("TOKEN_TYPE"));
-                application.setLastUpdatedTime(String.valueOf(rs.getTimestamp("APP_UPDATED_TIME").getTime()));
-                application.setCreatedTime(String.valueOf(rs.getTimestamp("APP_CREATED_TIME").getTime()));
+                Timestamp updated_time = rs.getTimestamp("APP_UPDATED_TIME");
+                application.setLastUpdatedTime(updated_time == null ? null : String.valueOf(updated_time.getTime()));
+                Timestamp createdTime = rs.getTimestamp("APP_CREATED_TIME");
+                application.setCreatedTime(createdTime == null ? null : String.valueOf(createdTime.getTime()));
 
                 if (multiGroupAppSharingEnabled) {
                     setGroupIdInApplication(connection, application);
@@ -5953,7 +5956,8 @@ public class ApiMgtDAO {
                 workflowDTO = WorkflowExecutorFactory.getInstance().createWorkflowDTO(rs.getString("WF_TYPE"));
                 workflowDTO.setStatus(WorkflowStatus.valueOf(rs.getString("WF_STATUS")));
                 workflowDTO.setExternalWorkflowReference(rs.getString("WF_EXTERNAL_REFERENCE"));
-                workflowDTO.setCreatedTime(rs.getTimestamp("WF_CREATED_TIME").getTime());
+                Timestamp createdTime = rs.getTimestamp("WF_CREATED_TIME");
+                workflowDTO.setCreatedTime(createdTime == null ? 0L : createdTime.getTime());
                 workflowDTO.setWorkflowReference(rs.getString("WF_REFERENCE"));
                 workflowDTO.setTenantDomain(rs.getString("TENANT_DOMAIN"));
                 workflowDTO.setTenantId(rs.getInt("TENANT_ID"));
@@ -6018,7 +6022,8 @@ public class ApiMgtDAO {
                 workflowDTO = WorkflowExecutorFactory.getInstance().createWorkflowDTO(rs.getString("WF_TYPE"));
                 workflowDTO.setStatus(WorkflowStatus.valueOf(rs.getString("WF_STATUS")));
                 workflowDTO.setExternalWorkflowReference(rs.getString("WF_EXTERNAL_REFERENCE"));
-                workflowDTO.setCreatedTime(rs.getTimestamp("WF_CREATED_TIME").getTime());
+                Timestamp createdTime = rs.getTimestamp("WF_CREATED_TIME");
+                workflowDTO.setCreatedTime(createdTime == null ? 0L : createdTime.getTime());
                 workflowDTO.setWorkflowReference(rs.getString("WF_REFERENCE"));
                 workflowDTO.setTenantDomain(rs.getString("TENANT_DOMAIN"));
                 workflowDTO.setTenantId(rs.getInt("TENANT_ID"));
@@ -6056,7 +6061,8 @@ public class ApiMgtDAO {
                             .createWorkflowDTO(rs.getString("WF_TYPE"));
                     workflowDTO.setStatus(WorkflowStatus.valueOf(rs.getString("WF_STATUS")));
                     workflowDTO.setExternalWorkflowReference(rs.getString("WF_EXTERNAL_REFERENCE"));
-                    workflowDTO.setCreatedTime(rs.getTimestamp("WF_CREATED_TIME").getTime());
+                    Timestamp createdTime = rs.getTimestamp("WF_CREATED_TIME");
+                    workflowDTO.setCreatedTime(createdTime == null ? 0L : createdTime.getTime());
                     workflowDTO.setWorkflowReference(rs.getString("WF_REFERENCE"));
                     workflowDTO.setTenantDomain(rs.getString("TENANT_DOMAIN"));
                     workflowDTO.setTenantId(rs.getInt("TENANT_ID"));
@@ -6592,8 +6598,10 @@ public class ApiMgtDAO {
                 application.setGroupId(rs.getString("GROUP_ID"));
                 application.setOwner(rs.getString("CREATED_BY"));
                 application.setTokenType(rs.getString("TOKEN_TYPE"));
-                application.setLastUpdatedTime(String.valueOf(rs.getTimestamp("UPDATED_TIME").getTime()));
-                application.setCreatedTime(String.valueOf(rs.getTimestamp("CREATED_TIME").getTime()));
+                Timestamp updated_time = rs.getTimestamp("UPDATED_TIME");
+                application.setLastUpdatedTime(updated_time == null ? null : String.valueOf(updated_time.getTime()));
+                Timestamp createdTime = rs.getTimestamp("CREATED_TIME");
+                application.setCreatedTime(createdTime == null ? null : String.valueOf(createdTime.getTime()));
 
                 if (multiGroupAppSharingEnabled) {
                     setGroupIdInApplication(connection, application);
@@ -6666,8 +6674,10 @@ public class ApiMgtDAO {
                 application.setTokenType(rs.getString("TOKEN_TYPE"));
                 application.setOrganization(rs.getString("ORGANIZATION"));
                 subscriber.setId(rs.getInt("SUBSCRIBER_ID"));
-                application.setLastUpdatedTime(String.valueOf(rs.getTimestamp("UPDATED_TIME").getTime()));
-                application.setCreatedTime(String.valueOf(rs.getTimestamp("CREATED_TIME").getTime()));
+                Timestamp updated_time = rs.getTimestamp("UPDATED_TIME");
+                application.setLastUpdatedTime(updated_time == null ? null : String.valueOf(updated_time.getTime()));
+                Timestamp createdTime = rs.getTimestamp("CREATED_TIME");
+                application.setCreatedTime(createdTime == null ? null : String.valueOf(createdTime.getTime()));
 
                 String tenantDomain = MultitenantUtils.getTenantDomain(subscriberName);
                 Map<String, Map<String, OAuthApplicationInfo>>
@@ -6823,8 +6833,10 @@ public class ApiMgtDAO {
                 application.setUUID(rs.getString("UUID"));
                 application.setTier(rs.getString("APPLICATION_TIER"));
                 subscriber.setId(rs.getInt("SUBSCRIBER_ID"));
-                application.setLastUpdatedTime(String.valueOf(rs.getTimestamp("UPDATED_TIME").getTime()));
-                application.setCreatedTime(String.valueOf(rs.getTimestamp("CREATED_TIME").getTime()));
+                Timestamp updated_time = rs.getTimestamp("UPDATED_TIME");
+                application.setLastUpdatedTime(updated_time == null ? null : String.valueOf(updated_time.getTime()));
+                Timestamp createdTime = rs.getTimestamp("CREATED_TIME");
+                application.setCreatedTime(createdTime == null ? null : String.valueOf(createdTime.getTime()));
 
                 String tenantDomain = MultitenantUtils.getTenantDomain(subscriberName);
                 Map<String, Map<String, OAuthApplicationInfo>>
@@ -6898,8 +6910,6 @@ public class ApiMgtDAO {
                 application.setOrganization(rs.getString("ORGANIZATION"));
                 application.setSharedOrganization(rs.getString("SHARED_ORGANIZATION"));
                 subscriber.setId(rs.getInt("SUBSCRIBER_ID"));
-                application.setLastUpdatedTime(String.valueOf(rs.getTimestamp("UPDATED_TIME").getTime()));
-                application.setCreatedTime(String.valueOf(rs.getTimestamp("CREATED_TIME").getTime()));
                 if (multiGroupAppSharingEnabled) {
                     if (application.getGroupId() == null || application.getGroupId().isEmpty()) {
                         application.setGroupId(getGroupId(connection, application.getId()));
@@ -11371,6 +11381,39 @@ public class ApiMgtDAO {
     }
 
     /**
+     * Gets local scope keys from versioned APIs which are not yet attached to the given API.
+     *
+     * @param uuid API uuid
+     * @param tenantId      Tenant Id
+     * @return Local Scope keys set
+     * @throws APIManagementException if fails to get local scope keys for API
+     */
+    public Set<String> getAllUnattachedLocalScopeKeysFromVersionedAPIs(String uuid, int tenantId)
+            throws APIManagementException {
+        Set<String> localScopes = new HashSet<>();
+        String getAllLocalScopesStmt = SQLConstants.GET_ALL_UNATTACHED_VERSIONED_LOCAL_SCOPES_FOR_API_SQL;
+        try (Connection connection = APIMgtDBUtil.getConnection();
+             PreparedStatement preparedStatement = connection.prepareStatement(getAllLocalScopesStmt)) {
+            APIIdentifier apiIdentifier = getAPIIdentifierFromUUID(uuid);
+            preparedStatement.setString(1, apiIdentifier.getApiName());
+            preparedStatement.setInt(2, tenantId);
+            preparedStatement.setInt(3, tenantId);
+            preparedStatement.setString(4, apiIdentifier.getApiName());
+            preparedStatement.setString(5, apiIdentifier.getVersion());
+            preparedStatement.setInt(6, tenantId);
+            try (ResultSet rs = preparedStatement.executeQuery()) {
+                while (rs.next()) {
+                    localScopes.add(rs.getString("SCOPE_NAME"));
+                }
+            }
+        } catch (SQLException e) {
+            handleException("Failed while getting unattached and versioned local scopes for API:" + uuid + " tenant: "
+                    + tenantId, e);
+        }
+        return localScopes;
+    }
+
+    /**
      * Delete a user subscription based on API_ID, APP_ID, TIER_ID
      *
      * @param apiId - subscriber API ID
@@ -15237,8 +15280,10 @@ public class ApiMgtDAO {
                 application.setTokenType(rs.getString("TOKEN_TYPE"));
                 application.setKeyType(rs.getString("KEY_TYPE"));
                 application.setOrganization(rs.getString("ORGANIZATION"));
-                application.setLastUpdatedTime(String.valueOf(rs.getTimestamp("UPDATED_TIME").getTime()));
-                application.setCreatedTime(String.valueOf(rs.getTimestamp("CREATED_TIME").getTime()));
+                Timestamp updated_time = rs.getTimestamp("UPDATED_TIME");
+                application.setLastUpdatedTime(updated_time == null ? null : String.valueOf(updated_time.getTime()));
+                Timestamp createdTime = rs.getTimestamp("CREATED_TIME");
+                application.setCreatedTime(createdTime == null ? null : String.valueOf(createdTime.getTime()));
 
                 if (multiGroupAppSharingEnabled) {
                     if (application.getGroupId() == null || application.getGroupId().isEmpty()) {
@@ -18073,8 +18118,10 @@ public class ApiMgtDAO {
                     workflow.setWorkflowType(rs.getString("WF_TYPE"));
                     String workflowstatus = rs.getString("WF_STATUS");
                     workflow.setStatus(org.wso2.carbon.apimgt.api.WorkflowStatus.valueOf(workflowstatus));
-                    workflow.setCreatedTime(rs.getTimestamp("WF_CREATED_TIME").toString());
-                    workflow.setUpdatedTime(rs.getTimestamp("WF_UPDATED_TIME").toString());
+                    Timestamp createdTime = rs.getTimestamp("WF_CREATED_TIME");
+                    workflow.setCreatedTime(createdTime == null ? null : String.valueOf(createdTime));
+                    Timestamp updatedTime = rs.getTimestamp("WF_UPDATED_TIME");
+                    workflow.setUpdatedTime(updatedTime == null ? null : String.valueOf(updatedTime));
                     workflow.setWorkflowStatusDesc(rs.getString("WF_STATUS_DESC"));
                     workflow.setTenantId(rs.getInt("TENANT_ID"));
                     workflow.setTenantDomain(rs.getString("TENANT_DOMAIN"));
@@ -18144,8 +18191,10 @@ public class ApiMgtDAO {
                     workflow.setWorkflowType(rs.getString("WF_TYPE"));
                     String workflowstatus = rs.getString("WF_STATUS");
                     workflow.setStatus(org.wso2.carbon.apimgt.api.WorkflowStatus.valueOf(workflowstatus));
-                    workflow.setCreatedTime(rs.getTimestamp("WF_CREATED_TIME").toString());
-                    workflow.setUpdatedTime(rs.getTimestamp("WF_UPDATED_TIME").toString());
+                    Timestamp createdTime = rs.getTimestamp("WF_CREATED_TIME");
+                    workflow.setCreatedTime(createdTime == null ? null : String.valueOf(createdTime));
+                    Timestamp updatedTime = rs.getTimestamp("WF_UPDATED_TIME");
+                    workflow.setUpdatedTime(updatedTime == null ? null : String.valueOf(updatedTime));
                     workflow.setWorkflowStatusDesc(rs.getString("WF_STATUS_DESC"));
                     workflow.setTenantId(rs.getInt("TENANT_ID"));
                     workflow.setTenantDomain(rs.getString("TENANT_DOMAIN"));
@@ -18216,8 +18265,10 @@ public class ApiMgtDAO {
                     workflow.setWorkflowType(rs.getString("WF_TYPE"));
                     String workflowstatus = rs.getString("WF_STATUS");
                     workflow.setStatus(org.wso2.carbon.apimgt.api.WorkflowStatus.valueOf(workflowstatus));
-                    workflow.setCreatedTime(rs.getTimestamp("WF_CREATED_TIME").toString());
-                    workflow.setUpdatedTime(rs.getTimestamp("WF_UPDATED_TIME").toString());
+                    Timestamp createdTime = rs.getTimestamp("WF_CREATED_TIME");
+                    workflow.setCreatedTime(createdTime == null ? null : String.valueOf(createdTime));
+                    Timestamp updatedTime = rs.getTimestamp("WF_UPDATED_TIME");
+                    workflow.setUpdatedTime(updatedTime == null ? null : String.valueOf(updatedTime));
                     workflow.setWorkflowDescription(rs.getString("WF_STATUS_DESC"));
                     workflow.setTenantId(rs.getInt("TENANT_ID"));
                     workflow.setTenantDomain(rs.getString("TENANT_DOMAIN"));
@@ -20580,6 +20631,42 @@ public class ApiMgtDAO {
         } catch (SQLException e) {
             handleException("Failed to remove API Revision Deployment Mapping entry for API UUID "
                     + apiUUID, e);
+        }
+    }
+
+    /**
+     * Remove an API revision Deployment mapping record to the database
+     *
+     * @param apiUUID     uuid of the api.
+     * @param revisionUUID uuid of the revision.
+     * @param deployments content of the revision deployment mapping objects
+     * @throws APIManagementException if an error occurs when adding a new API revision
+     */
+    public void removeAPIRevisionDeployment(String apiUUID, String revisionUUID, Set<String> deployments)
+            throws APIManagementException {
+        if (deployments == null || deployments.isEmpty()) {
+            return;
+        }
+        try (Connection connection = APIMgtDBUtil.getConnection()) {
+            try {
+                connection.setAutoCommit(false);
+                // Remove an entry from AM_DEPLOYMENT_REVISION_MAPPING table
+                try (PreparedStatement statement = connection.prepareStatement(
+                        REMOVE_API_REVISION_DEPLOYMENT_MAPPING)) {
+                    for (String deployment : deployments) {
+                        statement.setString(1, deployment);
+                        statement.setString(2, revisionUUID);
+                        statement.addBatch();
+                    }
+                    statement.executeBatch();
+                }
+                connection.commit();
+            } catch (SQLException e) {
+                connection.rollback();
+                throw e;
+            }
+        } catch (SQLException e) {
+            handleException("Failed to remove API Revision Deployment Mapping entry for API UUID " + apiUUID, e);
         }
     }
 
