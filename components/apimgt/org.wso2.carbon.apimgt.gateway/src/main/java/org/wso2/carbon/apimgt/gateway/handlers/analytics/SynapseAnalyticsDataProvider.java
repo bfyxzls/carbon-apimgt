@@ -79,6 +79,7 @@ import static org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.UNKNOW
 import static org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler.MCP_METHOD;
 import static org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler.MCP_NO_AUTH_REQUEST;
 import static org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler.MCP_REQUEST_BODY;
+import static org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler.MCP_RESULT_IS_ERROR;
 import static org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler.MCP_TOOL_PARAMS;
 
 public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
@@ -467,6 +468,10 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         if(messageContext.getPropertyKeySet().contains("isMcp")){
             customProperties.put("isMcp",
                     messageContext.getProperty("isMcp"));
+        }
+        if(messageContext.getPropertyKeySet().contains(MCP_RESULT_IS_ERROR)){
+            customProperties.put("mcpResultIsError",
+                    messageContext.getProperty(MCP_RESULT_IS_ERROR));
         }
 
         if (messageContext.getProperty(AIAPIConstants.AI_API_RESPONSE_METADATA) != null) {

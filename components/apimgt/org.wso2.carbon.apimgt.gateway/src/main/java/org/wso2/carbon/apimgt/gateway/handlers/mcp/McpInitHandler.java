@@ -22,6 +22,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
+import org.apache.axiom.om.OMElement;
+import org.apache.axiom.soap.SOAPEnvelope;
+import org.apache.axis2.AxisFault;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -88,6 +91,8 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
     public static final Long MCP_AUTH_TOKEN_EXPIRATION_TIME = 6000L;
 
     public static final String MCP_TOOL_PARAMS = "MCP_TOOL_PARAMS";
+
+    public static final String MCP_RESULT_IS_ERROR = "MCP_RESULT_IS_ERROR";
 
     private static final Log log = LogFactory.getLog(McpInitHandler.class);
 
@@ -159,6 +164,10 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
             }
         }
         headers.put(APIConstants.CORSHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, exposeHeaders);
+
+        // Parse MCP response and extract isError from result
+        parseMcpResponseAndExtractIsError(messageContext, axis2MessageContext);
+
         return true;
     }
 
@@ -191,7 +200,6 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
                         .create();
 
                 McpRequest request = gson.fromJson(messageBody, McpRequest.class);
-                log.info("Deserialized MCP request: " + messageBody);
 
                 if (!MCPUtils.validateRequest(request)) {
                     throw new McpException(INVALID_REQUEST_CODE,
@@ -252,7 +260,6 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
     }
 
     private boolean isNoAuthMCPRequest(String method) throws McpException {
-        log.info("isNoAuthMCPRequest method=" + method);
         switch (method) {
             case METHOD_INITIALIZE:
             case METHOD_PING:
@@ -276,6 +283,227 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
                         METHOD_NOT_FOUND_MESSAGE,
                         "Method not found"
                 );
+        }
+    }
+
+    /**
+     * Parse MCP response and extract isError from result for audit logging.
+     *
+     * @param messageContext      The Synapse message context
+     * @param axis2MessageContext The Axis2 message context
+     */
+    private void parseMcpResponseAndExtractIsError(MessageContext messageContext,
+                                                   org.apache.axis2.context.MessageContext axis2MessageContext) {
+        try {
+            // Check if this is an MCP request
+            if (messageContext.getProperty("isMcp") == null) {
+                return;
+            }
+
+            // Build message if not already built
+            RelayUtils.buildMessage(axis2MessageContext);
+
+            String responseBody = null;
+
+            // First, try to get response body from JSON payload
+            if (JsonUtil.hasAJsonPayload(axis2MessageContext)) {
+                responseBody = JsonUtil.jsonPayloadToString(axis2MessageContext);
+                if (log.isDebugEnabled()) {
+                    log.debug("MCP response body retrieved from JSON payload");
+                }
+            } else {
+                // Fallback: try to get response body from SOAPEnvelope
+                SOAPEnvelope envelope = messageContext.getEnvelope();
+                if (envelope != null && envelope.getBody() != null) {
+                    OMElement firstElement = envelope.getBody().getFirstElement();
+                    if (firstElement != null) {
+                        try {
+                            // Try to convert XML/OMElement to JSON string
+                            responseBody = JsonUtil.toJsonString(firstElement).toString();
+                            if (log.isDebugEnabled()) {
+                                log.debug("MCP response body retrieved from SOAPEnvelope and converted to JSON");
+                            }
+                        } catch (AxisFault e) {
+                            // If conversion fails, try to get text content directly
+                            String textContent = firstElement.getText();
+                            if (!StringUtils.isEmpty(textContent)) {
+                                responseBody = textContent;
+                                if (log.isDebugEnabled()) {
+                                    log.debug("MCP response body retrieved from SOAPEnvelope as text content");
+                                }
+                            } else {
+                                // Last resort: get the entire body as string
+                                responseBody = firstElement.toString();
+                                if (log.isDebugEnabled()) {
+                                    log.debug("MCP response body retrieved from SOAPEnvelope as string");
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (responseBody == null) {
+                    if (log.isDebugEnabled()) {
+                        log.debug(
+                                "MCP response body could not be retrieved from JSON payload or SOAPEnvelope, skipping isError extraction");
+                    }
+                    return;
+                }
+            }
+
+            if (StringUtils.isEmpty(responseBody)) {
+                if (log.isDebugEnabled()) {
+                    log.debug("MCP response body is empty, skipping isError extraction");
+                }
+                return;
+            }
+
+            if (log.isDebugEnabled()) {
+                log.debug("MCP response body: " + responseBody);
+            }
+
+            // Parse JSON response using Gson
+            Gson gson = new GsonBuilder().create();
+            com.google.gson.JsonObject jsonObject = null;
+
+            // Try to parse as JSON object first
+            try {
+                jsonObject = gson.fromJson(responseBody, com.google.gson.JsonObject.class);
+            } catch (JsonSyntaxException e) {
+                // If parsing fails, it might be a streamable HTTP format (multiple JSON lines)
+                if (log.isDebugEnabled()) {
+                    log.debug("Failed to parse as single JSON object, trying streamableHttp format");
+                }
+            }
+
+            // Extract isError from result
+            com.google.gson.JsonObject resultObject = null;
+
+            // Handle SSE (Server-Sent Events) format response
+            // Response format: {"text": "event: message\r\ndata: {...}\r\n\r\n"}
+            if (jsonObject != null && jsonObject.has("text")) {
+                String textContent = jsonObject.get("text").getAsString();
+                if (log.isDebugEnabled()) {
+                    log.debug("MCP response contains text field (SSE format), extracting data");
+                }
+
+                // Extract JSON from "data: {...}" line in SSE format
+                String[] lines = textContent.split("\r\n");
+                for (String line : lines) {
+                    if (line.startsWith("data: ")) {
+                        String dataJson = line.substring(6); // Remove "data: " prefix
+                        try {
+                            com.google.gson.JsonObject dataObject =
+                                    gson.fromJson(dataJson, com.google.gson.JsonObject.class);
+                            if (dataObject != null && dataObject.has("result")) {
+                                resultObject = dataObject.getAsJsonObject("result");
+                                if (log.isDebugEnabled()) {
+                                    log.debug("Extracted result object from SSE data field");
+                                }
+                                break;
+                            }
+                        } catch (JsonSyntaxException e) {
+                            log.warn("Failed to parse data field from SSE format: " + e.getMessage());
+                        }
+                    }
+                }
+            }
+            // Handle streamableHttp format response
+            // Response format: {"streamableHttp": {...}} or multiple JSON lines
+            else if (jsonObject != null && jsonObject.has("streamableHttp")) {
+                com.google.gson.JsonObject streamableHttpObject = jsonObject.getAsJsonObject("streamableHttp");
+                if (log.isDebugEnabled()) {
+                    log.debug("MCP response contains streamableHttp field, extracting result");
+                }
+
+                // Try to extract result from streamableHttp object
+                if (streamableHttpObject != null && streamableHttpObject.has("result")) {
+                    resultObject = streamableHttpObject.getAsJsonObject("result");
+                } else if (streamableHttpObject != null && streamableHttpObject.has("data")) {
+                    // Handle nested structure: streamableHttp.data.result
+                    com.google.gson.JsonObject dataObject = streamableHttpObject.getAsJsonObject("data");
+                    if (dataObject != null && dataObject.has("result")) {
+                        resultObject = dataObject.getAsJsonObject("result");
+                    }
+                }
+            }
+            // Handle streamable HTTP format (multiple JSON lines - NDJSON format)
+            // Each line is a separate JSON object
+            else if (responseBody != null && responseBody.contains("\n")) {
+                if (log.isDebugEnabled()) {
+                    log.debug(
+                            "MCP response appears to be in streamableHttp format (multiple lines), parsing each line");
+                }
+
+                // Split by newlines and try to parse each line as JSON
+                String[] jsonLines = responseBody.split("\n");
+                for (String jsonLine : jsonLines) {
+                    if (StringUtils.isEmpty(jsonLine.trim())) {
+                        continue;
+                    }
+                    try {
+                        com.google.gson.JsonObject lineObject =
+                                gson.fromJson(jsonLine.trim(), com.google.gson.JsonObject.class);
+                        if (lineObject != null) {
+                            // Check if this line contains result
+                            if (lineObject.has("result")) {
+                                resultObject = lineObject.getAsJsonObject("result");
+                                if (log.isDebugEnabled()) {
+                                    log.debug("Extracted result object from streamableHttp line");
+                                }
+                                break;
+                            } else if (lineObject.has("data") && lineObject.getAsJsonObject("data").has("result")) {
+                                resultObject = lineObject.getAsJsonObject("data").getAsJsonObject("result");
+                                if (log.isDebugEnabled()) {
+                                    log.debug("Extracted result object from streamableHttp data.result");
+                                }
+                                break;
+                            }
+                        }
+                    } catch (JsonSyntaxException e) {
+                        // Skip invalid JSON lines
+                        if (log.isDebugEnabled()) {
+                            log.debug("Skipping invalid JSON line in streamableHttp format: " + jsonLine);
+                        }
+                    }
+                }
+            }
+            // Handle standard JSON-RPC format: {"jsonrpc": "2.0", "id": 2, "result": {...}}
+            else if (jsonObject != null && jsonObject.has("result")) {
+                resultObject = jsonObject.getAsJsonObject("result");
+                if (log.isDebugEnabled()) {
+                    log.debug("MCP response contains result field (standard JSON-RPC format)");
+                }
+            }
+            // Handle nested data.result format: {"data": {"result": {...}}}
+            else if (jsonObject != null && jsonObject.has("data")) {
+                com.google.gson.JsonObject dataObject = jsonObject.getAsJsonObject("data");
+                if (dataObject != null && dataObject.has("result")) {
+                    resultObject = dataObject.getAsJsonObject("result");
+                    if (log.isDebugEnabled()) {
+                        log.debug("MCP response contains data.result field");
+                    }
+                }
+            }
+
+            // Extract isError from result object
+            if (resultObject != null && resultObject.has("isError")) {
+                boolean isError = resultObject.get("isError").getAsBoolean();
+                messageContext.setProperty(MCP_RESULT_IS_ERROR, isError);
+                if (log.isDebugEnabled()) {
+                    log.debug("Extracted MCP result isError: " + isError);
+                }
+            } else {
+                if (log.isDebugEnabled()) {
+                    log.debug("MCP response does not contain isError field in result, skipping isError extraction");
+                }
+            }
+        } catch (JsonSyntaxException e) {
+            log.warn("Failed to parse MCP response JSON: " + e.getMessage(), e);
+        } catch (IOException | XMLStreamException e) {
+            log.warn("Failed to read MCP response body: " + e.getMessage(), e);
+        } catch (Exception e) {
+            log.warn("Unexpected error while parsing MCP response: " + e.getMessage(), e);
         }
     }
 }
