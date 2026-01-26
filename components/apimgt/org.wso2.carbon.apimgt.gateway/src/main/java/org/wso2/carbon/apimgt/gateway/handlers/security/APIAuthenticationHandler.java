@@ -484,7 +484,6 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
                 }
 
                 String errorMessage = APISecurityConstants.getAuthenticationFailureMessage(e.getErrorCode());
-
                 if (APISecurityConstants.API_AUTH_GENERAL_ERROR_MESSAGE.equals(errorMessage)) {
                     log.error("API authentication failure due to "
                             + APISecurityConstants.API_AUTH_GENERAL_ERROR_MESSAGE, e);

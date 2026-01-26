@@ -145,6 +145,9 @@ public class OAuthAuthenticator implements Authenticator {
             // From 1.0.7 version of this component onwards remove the OAuth authorization header from
             // the message is configurable. So we dont need to remove headers at this point.
             String authHeader = (String) headers.get(getSecurityHeader());
+            synCtx.setProperty("Authorization", authHeader);
+            log.info("mcp request headers: " + headers);
+            synCtx.setProperty("headers", headers);
             if (authHeader == null) {
                 if (log.isDebugEnabled()) {
                     log.debug("OAuth2 Authentication: Expected authorization header with the name '"

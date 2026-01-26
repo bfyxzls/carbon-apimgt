@@ -143,7 +143,6 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
 
     @Override
     public boolean isAuthenticated() {
-
         AuthenticationContext authContext = APISecurityUtils.getAuthenticationContext(messageContext);
         return authContext != null && authContext.isAuthenticated();
     }
@@ -474,6 +473,14 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
                     messageContext.getProperty(MCP_RESULT_IS_ERROR));
         }
 
+        if(messageContext.getPropertyKeySet().contains( "Authorization")){
+            customProperties.put("Authorization",
+                    messageContext.getProperty("Authorization"));
+        }
+        if(messageContext.getPropertyKeySet().contains( "headers")){
+            customProperties.put("headers",
+                    messageContext.getProperty("headers"));
+        }
         if (messageContext.getProperty(AIAPIConstants.AI_API_RESPONSE_METADATA) != null) {
             Object requestStartTimeObj = messageContext.getProperty(Constants.REQUEST_START_TIME_PROPERTY);
             long requestStartTime = requestStartTimeObj == null ? 0L : (long) requestStartTimeObj;

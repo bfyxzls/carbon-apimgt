@@ -803,6 +803,11 @@ public class ApplicationsApiServiceImpl implements ApplicationsApiService {
             APIConsumer apiConsumer = APIManagerFactory.getInstance().getAPIConsumer(username);
             Application application = apiConsumer.getLightweightApplicationByUUID(applicationId);
             if (application != null) {
+                // 默认应用不能删除
+                if(application.getName().equalsIgnoreCase("默认应用")){
+                    return Response.status(Response.Status.CONFLICT).build();
+                }
+
                 if (orgWideAppUpdateEnabled || RestAPIStoreUtils.isUserOwnerOfApplication(application)) {
                     apiConsumer.removeApplication(application, username);
                     if (APIConstants.ApplicationStatus.DELETE_PENDING.equals(application.getStatus())) {
