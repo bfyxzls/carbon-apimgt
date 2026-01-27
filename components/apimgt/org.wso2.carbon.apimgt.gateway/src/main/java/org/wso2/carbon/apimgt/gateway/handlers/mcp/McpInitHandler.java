@@ -55,6 +55,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.wso2.carbon.apimgt.gateway.handlers.streaming.sse.SseApiConstants.SSE_CONTENT_TYPE;
 import static org.wso2.carbon.apimgt.gateway.utils.MCPUtils.HEADER_MCP_SESSION_ID;
 import static org.wso2.carbon.apimgt.gateway.utils.MCPUtils.INVALID_REQUEST_CODE;
 import static org.wso2.carbon.apimgt.gateway.utils.MCPUtils.INVALID_REQUEST_MESSAGE;
@@ -147,6 +148,7 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
 
     @Override
     public boolean handleResponse(MessageContext messageContext) {
+        log.info("McpInitHandler handleResponse called");
         org.apache.axis2.context.MessageContext axis2MessageContext =
                 ((Axis2MessageContext) messageContext).getAxis2MessageContext();
         Map headers = (Map) axis2MessageContext.getProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS);
@@ -165,10 +167,56 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
         }
         headers.put(APIConstants.CORSHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, exposeHeaders);
 
+        // Fix duplicate Content-Type issue: PassThrough Transport combines TRANSPORT_HEADERS Content-Type 
+        // with Axis2 Configuration.CONTENT_TYPE property, causing duplicates like 
+        // "text/event-stream,text/event-stream; charset=UTF-8"
+        // Solution: Remove the Axis2 CONTENT_TYPE property so only TRANSPORT_HEADERS Content-Type is used
+        synchronizeContentTypeHeaders(axis2MessageContext, headers);
+
         // Parse MCP response and extract isError from result
         parseMcpResponseAndExtractIsError(messageContext, axis2MessageContext);
 
         return true;
+    }
+
+    /**
+     * Fixes Content-Type header for MCP responses.
+     * <p>
+     * PassThrough Transport combines TRANSPORT_HEADERS Content-Type with Axis2 Configuration.CONTENT_TYPE,
+     * causing issues like: "text/event-stream,text/event-stream; charset=UTF-8"
+     * <p>
+     * This method ensures the Content-Type is set to only "text/event-stream" for MCP SSE responses
+     * by removing it from transport headers completely - PassThrough will use only Axis2 properties.
+     *
+     * @param axis2MessageContext The Axis2 message context
+     * @param headers             The transport headers map
+     */
+    private void synchronizeContentTypeHeaders(org.apache.axis2.context.MessageContext axis2MessageContext,
+                                               Map headers) {
+        Object transportContentType = headers.get(APIConstants.HEADER_CONTENT_TYPE);
+        // Check if this is a SSE response
+        boolean isSseResponse = transportContentType != null &&
+                transportContentType.toString().contains("text/event-stream");
+
+        if (isSseResponse) {
+            // Remove Content-Type from transport headers completely to prevent duplication
+            // PassThrough Transport will use only Axis2 properties
+            headers.remove(APIConstants.HEADER_CONTENT_TYPE);
+            headers.remove("content-type");  // Also try lowercase variant
+            headers.remove("Content-type");  // Mixed case
+
+            // Set Axis2 properties to exactly "text/event-stream" without any charset
+            axis2MessageContext.setProperty(org.apache.axis2.Constants.Configuration.CONTENT_TYPE,
+                    SSE_CONTENT_TYPE);
+            axis2MessageContext.setProperty(org.apache.axis2.Constants.Configuration.MESSAGE_TYPE,
+                    SSE_CONTENT_TYPE);
+
+            // Remove CHARACTER_SET_ENCODING to prevent charset=UTF-8 from being appended
+            axis2MessageContext.removeProperty(org.apache.axis2.Constants.Configuration.CHARACTER_SET_ENCODING);
+
+            // Set this flag to tell PassThrough Transport not to determine content type automatically
+            axis2MessageContext.setProperty("TRANSPORT_IN_CONTENT_TYPE", SSE_CONTENT_TYPE);
+        }
     }
 
     /**
