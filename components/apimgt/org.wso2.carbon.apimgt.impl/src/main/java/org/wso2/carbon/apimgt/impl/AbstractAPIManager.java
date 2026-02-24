@@ -30,10 +30,12 @@ import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 import org.wso2.carbon.CarbonConstants;
+import org.wso2.carbon.apimgt.api.APIConsumer;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.APIManager;
 import org.wso2.carbon.apimgt.api.APIMgtResourceAlreadyExistsException;
 import org.wso2.carbon.apimgt.api.APIMgtResourceNotFoundException;
+import org.wso2.carbon.apimgt.api.APIProvider;
 import org.wso2.carbon.apimgt.api.ApplicationNameWhiteSpaceValidationException;
 import org.wso2.carbon.apimgt.api.ApplicationNameWithInvalidCharactersException;
 import org.wso2.carbon.apimgt.api.BlockConditionNotFoundException;
@@ -49,6 +51,7 @@ import org.wso2.carbon.apimgt.impl.dao.ApiMgtDAO;
 import org.wso2.carbon.apimgt.impl.dao.EnvironmentSpecificAPIPropertyDAO;
 import org.wso2.carbon.apimgt.impl.dao.LabelsDAO;
 import org.wso2.carbon.apimgt.impl.dao.ScopesDAO;
+import org.wso2.carbon.apimgt.impl.dto.ApplicationRegistrationWorkflowDTO;
 import org.wso2.carbon.apimgt.impl.dto.ThrottleProperties;
 import org.wso2.carbon.apimgt.impl.dto.WorkflowDTO;
 import org.wso2.carbon.apimgt.impl.factory.KeyManagerHolder;
@@ -643,20 +646,24 @@ public abstract class AbstractAPIManager implements APIManager {
      */
     private void addDefaultApplicationForSubscriber(Subscriber subscriber) throws APIManagementException {
 
-        Application defaultApp = new Application(APIConstants.DEFAULT_APPLICATION_NAME, subscriber);
-        defaultApp.setTier(APIUtil.getDefaultApplicationLevelPolicy(subscriber.getTenantId()));
+        Application application = new Application(APIConstants.DEFAULT_APPLICATION_NAME, subscriber);
+        application.setTier(APIUtil.getDefaultApplicationLevelPolicy(subscriber.getTenantId()));
         //application will not be shared within the group
-        defaultApp.setGroupId("");
-        defaultApp.setTokenType(APIConstants.TOKEN_TYPE_JWT);
-        defaultApp.setUUID(UUID.randomUUID().toString());
-        defaultApp.setDescription(APIConstants.DEFAULT_APPLICATION_DESCRIPTION);
-        int applicationId = apiMgtDAO.addApplication(defaultApp, subscriber.getName(), tenantDomain);
+        application.setGroupId("");
+        application.setTokenType(APIConstants.DEFAULT);
+        application.setUUID(UUID.randomUUID().toString());
+        application.setDescription(APIConstants.DEFAULT_APPLICATION_DESCRIPTION);
+        //int applicationId = apiMgtDAO.addApplication(application, subscriber.getName(), tenantDomain);
+
+        APIConsumer apiConsumer = APIManagerFactory.getInstance().getAPIConsumer(subscriber.getName());
+
+        int applicationId = apiConsumer.addApplication(application, subscriber.getName(), tenantDomain);
 
         ApplicationEvent applicationEvent = new ApplicationEvent(UUID.randomUUID().toString(),
                 System.currentTimeMillis(), APIConstants.EventType.APPLICATION_CREATE.name(), tenantId,
-                tenantDomain, applicationId, defaultApp.getUUID(), defaultApp.getName(),
-                defaultApp.getTokenType(),
-                defaultApp.getTier(), defaultApp.getGroupId(), defaultApp.getApplicationAttributes(),
+                tenantDomain, applicationId, application.getUUID(), application.getName(),
+                application.getTokenType(),
+                application.getTier(), application.getGroupId(), application.getApplicationAttributes(),
                 subscriber.getName());
         APIUtil.sendNotification(applicationEvent, APIConstants.NotifierType.APPLICATION.name());
     }

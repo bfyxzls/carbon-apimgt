@@ -98,6 +98,7 @@ public class SubscriberRegistrationInterceptor extends AbstractPhaseInterceptor 
                         if (!APIConstants.SUPER_TENANT_DOMAIN.equalsIgnoreCase(tenantDomain)) {
                             loadTenantRegistry();
                         }
+                        logger.error("SubscriberRegistrationInterceptor addSubscriber");
                         apiConsumer.addSubscriber(username, groupId);
 
                         // The subscriber object added here is not a complete subscriber object. It will only contain
