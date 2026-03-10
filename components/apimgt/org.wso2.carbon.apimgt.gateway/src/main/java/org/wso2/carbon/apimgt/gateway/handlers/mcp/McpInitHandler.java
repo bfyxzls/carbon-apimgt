@@ -197,13 +197,11 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
         // Check if this is a SSE response
         boolean isSseResponse = transportContentType != null &&
                 transportContentType.toString().contains("text/event-stream");
-
+        // Remove Content-Type from transport headers completely to prevent duplication
+        // PassThrough Transport will use only Axis2 properties
+        headers.remove(APIConstants.HEADER_CONTENT_TYPE);
+        headers.remove("content-type");  // Also try lowercase variant
         if (isSseResponse) {
-            // Remove Content-Type from transport headers completely to prevent duplication
-            // PassThrough Transport will use only Axis2 properties
-            headers.remove(APIConstants.HEADER_CONTENT_TYPE);
-            headers.remove("content-type");  // Also try lowercase variant
-            headers.remove("Content-type");  // Mixed case
 
             // Set Axis2 properties to exactly "text/event-stream" without any charset
             axis2MessageContext.setProperty(org.apache.axis2.Constants.Configuration.CONTENT_TYPE,
