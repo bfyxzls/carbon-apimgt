@@ -60,6 +60,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -210,7 +211,24 @@ public class SubscriptionsApiServiceImpl implements SubscriptionsApiService {
                 RestApiUtil.handleResourceNotFoundError(RestApiConstants.RESOURCE_APPLICATION, applicationId, log);
                 return null;
             }
+            if (body.getApplicationInfo() != null) {
 
+                Map<String, String> map = application.getApplicationAttributes();
+                if (map == null) {
+                    map = new HashMap<>();
+                }
+                if (body.getApplicationInfo().getAttributes() != null) {
+                    Map<String, String> attributes =
+                            (Map<String, String>) body.getApplicationInfo().getAttributes();
+                    if (MapUtils.isNotEmpty(attributes)) {
+                        for (String key : attributes.keySet()) {
+                            map.put(key, attributes.get(key));
+                        }
+                    }
+                    application.setApplicationAttributes(map);
+                }
+
+            }
             // If application creation workflow status is pending or rejected, throw a Bad request exception
             if (application.getStatus().equals(WorkflowStatus.REJECTED.toString())
                     || application.getStatus().equals(WorkflowStatus.CREATED.toString())) {
@@ -338,6 +356,25 @@ public class SubscriptionsApiServiceImpl implements SubscriptionsApiService {
                 //required application not found
                 RestApiUtil.handleResourceNotFoundError(RestApiConstants.RESOURCE_APPLICATION, applicationId, log);
                 return null;
+            }
+
+            if (body.getApplicationInfo() != null) {
+
+                Map<String, String> map = application.getApplicationAttributes();
+                if (map == null) {
+                    map = new HashMap<>();
+                }
+                if (body.getApplicationInfo().getAttributes() != null) {
+                    Map<String, String> attributes =
+                            (Map<String, String>) body.getApplicationInfo().getAttributes();
+                    if (MapUtils.isNotEmpty(attributes)) {
+                        for (String key : attributes.keySet()) {
+                            map.put(key, attributes.get(key));
+                        }
+                    }
+                    application.setApplicationAttributes(map);
+                }
+
             }
 
             if (!RestAPIStoreUtils.isUserAccessAllowedForApplication(application)) {

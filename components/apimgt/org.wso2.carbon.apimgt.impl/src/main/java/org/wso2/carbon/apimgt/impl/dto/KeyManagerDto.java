@@ -9,6 +9,15 @@ public class KeyManagerDto {
     private String issuer;
     private KeyManager keyManager;
     private JWTValidator jwtValidator;
+    @Override
+    public String toString() {
+        return "KeyManagerDto{" +
+                "name='" + name + '\'' +
+                ", issuer='" + issuer + '\'' +
+                ", keyManager=" + keyManager +
+                ", jwtValidator=" + jwtValidator +
+                '}';
+    }
 
     public String getName() {
 

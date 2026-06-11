@@ -93,6 +93,7 @@ import org.wso2.carbon.governance.api.util.GovernanceUtils;
 import org.wso2.carbon.registry.common.ResourceData;
 import org.wso2.carbon.registry.common.TermData;
 import org.wso2.carbon.registry.core.ActionConstants;
+import org.wso2.carbon.registry.core.Association;
 import org.wso2.carbon.registry.core.Collection;
 import org.wso2.carbon.registry.core.CollectionImpl;
 import org.wso2.carbon.registry.core.Registry;
@@ -117,6 +118,7 @@ import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 
 import javax.xml.namespace.QName;
 import javax.xml.stream.XMLStreamException;
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -2985,13 +2987,47 @@ public class RegistryPersistenceImpl implements APIPersistence {
                 throw new DocumentationPersistenceException(errorMessage);
             }
             GenericArtifact artifact = artifactManager.getGenericArtifact(docId);
+            if (artifact == null) {
+                throw new DocumentationPersistenceException("Document not found", ExceptionCodes.DOCUMENT_NOT_FOUND);
+            }
             String docPath = artifact.getPath();
-            if (docPath != null) {
-                if (registry.resourceExists(docPath)) {
-                    registry.delete(docPath);
+            String docFilePathAttr = artifact.getAttribute(APIConstants.DOC_FILE_PATH);
+            if (StringUtils.isNotEmpty(docFilePathAttr)) {
+                String fileName = new File(docFilePathAttr).getName();
+                GenericArtifactManager apiArtifactManager = RegistryPersistenceUtil.getArtifactManager(registry,
+                        APIConstants.API_KEY);
+                GenericArtifact apiArtifact = apiArtifactManager.getGenericArtifact(apiId);
+                String apiProviderName = RegistryPersistenceUtil.extractProvider(apiArtifact.getPath(),
+                        apiArtifact.getQName().getLocalPart());
+                String apiName = apiArtifact.getAttribute(APIConstants.API_OVERVIEW_NAME);
+                String apiVersion = apiArtifact.getAttribute(APIConstants.API_OVERVIEW_VERSION);
+                String docFilePath = RegistryPersistenceDocUtil.getDocumentFilePath(apiProviderName, apiName, apiVersion,
+                        fileName);
+                if (registry.resourceExists(docFilePath)) {
+                    registry.delete(docFilePath);
                 }
             }
 
+            Documentation documentation = RegistryPersistenceDocUtil.getDocumentation(artifact);
+            if (Documentation.DocumentSourceType.INLINE.equals(documentation.getSourceType())
+                    || Documentation.DocumentSourceType.MARKDOWN.equals(documentation.getSourceType())) {
+                String contentPath = docPath.replace(RegistryConstants.PATH_SEPARATOR + documentation.getName(), "")
+                        + RegistryConstants.PATH_SEPARATOR + APIConstants.INLINE_DOCUMENT_CONTENT_DIR
+                        + RegistryConstants.PATH_SEPARATOR + documentation.getName();
+                if (registry.resourceExists(contentPath)) {
+                    registry.delete(contentPath);
+                }
+            }
+
+            Association[] associations = registry.getAssociations(docPath, APIConstants.DOCUMENTATION_ASSOCIATION);
+            for (Association association : associations) {
+                String destinationPath = association.getDestinationPath();
+                if (registry.resourceExists(destinationPath)) {
+                    registry.delete(destinationPath);
+                }
+            }
+
+            artifactManager.removeGenericArtifact(docId);
         } catch (RegistryException | APIPersistenceException e) {
             throw new DocumentationPersistenceException("Failed to delete documentation", e);
         } finally {

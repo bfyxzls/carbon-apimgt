@@ -6770,8 +6770,8 @@ class APIProviderImpl extends AbstractAPIManager implements APIProvider {
         if (apiInfo != null) {
             apiProduct.setEgress(apiInfo.isEgress());
             apiProduct.setState(apiInfo.getStatus());
+            apiProduct.setDisplayName(apiInfo.getDisplayName());
         }
-        apiProduct.setDisplayName(apiInfo.getDisplayName());
     }
 
     public APIProduct getAPIProductbyUUID(String uuid, String organization) throws APIManagementException {

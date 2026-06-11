@@ -800,10 +800,129 @@ public class Utils {
      * @return true if MCP request execution path
      */
     public static boolean isMCPRequest(MessageContext messageContext) {
-        org.apache.axis2.context.MessageContext axis2MC = ((Axis2MessageContext) messageContext).
-                getAxis2MessageContext();
         String apiType = (String) messageContext.getProperty(APIMgtGatewayConstants.API_TYPE);
-        return APIConstants.API_TYPE_MCP.equals(apiType);
+        if (APIConstants.API_TYPE_MCP.equals(apiType)) {
+            return true;
+        }
+        org.wso2.carbon.apimgt.keymgt.model.entity.API api = GatewayUtils.getAPI(messageContext);
+        return api != null && APIConstants.API_TYPE_MCP.equals(api.getApiType());
+    }
+    /**
+     * Returns true for MCP JSON-RPC {@code tools/list} (scope check is skipped; token + subscription only).
+     */
+    public static boolean isMcpToolsListRequest(MessageContext messageContext) {
+        if (messageContext == null
+                || !APIConstants.MCP.METHOD_TOOL_LIST.equals(
+                messageContext.getProperty(APIMgtGatewayConstants.MCP_METHOD))) {
+            return false;
+        }
+        return isMCPRequest(messageContext);
+    }
+
+    /**
+     * Returns true for Streamable HTTP {@code GET .../mcp} (e.g. WorkBuddy SSE channel setup).
+     */
+    public static boolean isMcpStreamableHttpGetRequest(String path, String httpMethod) {
+        return APIConstants.HTTP_GET.equalsIgnoreCase(httpMethod) && isMcpEndpointPath(path);
+    }
+
+    /**
+     * Returns true when the current MCP API request is Streamable HTTP {@code GET /mcp}.
+     */
+    public static boolean isMcpStreamableHttpGetRequest(MessageContext messageContext) {
+        if (!isMCPRequest(messageContext)) {
+            return false;
+        }
+        org.apache.axis2.context.MessageContext axis2MC =
+                ((Axis2MessageContext) messageContext).getAxis2MessageContext();
+        String httpMethod = (String) axis2MC.getProperty(Constants.Configuration.HTTP_METHOD);
+        return isMcpStreamableHttpGetRequest(getMcpRequestPath(messageContext), httpMethod);
+    }
+
+    /**
+     * Returns true when the resolved path targets the MCP JSON-RPC/SSE endpoint ({@code /mcp}).
+     */
+    public static boolean isMcpEndpointPath(String path) {
+        return path != null && (APIMgtGatewayConstants.MCP_RESOURCE.equals(path)
+                || path.endsWith(APIMgtGatewayConstants.MCP_RESOURCE));
+    }
+
+    /**
+     * Resolves the MCP request path from message context properties.
+     * API_ELECTED_RESOURCE may be unset or a wildcard at early handler stages.
+     */
+    public static String getMcpRequestPath(MessageContext messageContext) {
+        String path = (String) messageContext.getProperty(APIConstants.API_ELECTED_RESOURCE);
+        if (StringUtils.isEmpty(path) || "/*".equals(path)) {
+            org.apache.axis2.context.MessageContext axis2MC =
+                    ((Axis2MessageContext) messageContext).getAxis2MessageContext();
+            path = (String) axis2MC.getProperty("REST_URL_POSTFIX");
+            if (StringUtils.isEmpty(path) && messageContext.getTo() != null) {
+                path = messageContext.getTo().getAddress();
+            }
+        }
+        return path;
+    }
+
+    /**
+     * Returns true when the request targets the MCP OAuth protected resource metadata endpoint.
+     */
+    public static boolean isMcpWellKnownMetadataRequest(MessageContext messageContext) {
+        org.wso2.carbon.apimgt.keymgt.model.entity.API api = GatewayUtils.getAPI(messageContext);
+        if (api == null || !APIConstants.API_TYPE_MCP.equals(api.getApiType())) {
+            return false;
+        }
+        org.apache.axis2.context.MessageContext axis2MC =
+                ((Axis2MessageContext) messageContext).getAxis2MessageContext();
+        String httpMethod = (String) axis2MC.getProperty(Constants.Configuration.HTTP_METHOD);
+        if (!APIConstants.HTTP_GET.equalsIgnoreCase(httpMethod)) {
+            return false;
+        }
+        String path = getMcpRequestPath(messageContext);
+        return path != null && path.startsWith(APIMgtGatewayConstants.MCP_WELL_KNOWN_RESOURCE);
+    }
+
+    /**
+     * Base context for the gateway-level MCP oauth-protected-resource metadata endpoint.
+     * Example: {@code /.well-known/oauth-protected-resource} or
+     * {@code /t/{tenant}/.well-known/oauth-protected-resource}.
+     */
+    public static String getMcpGlobalWellKnownBaseContext(String tenantDomain) {
+        if (APIConstants.SUPER_TENANT_DOMAIN.equalsIgnoreCase(tenantDomain)) {
+            return APIMgtGatewayConstants.MCP_WELL_KNOWN_RESOURCE;
+        }
+        return APIConstants.TENANT_PREFIX + tenantDomain + APIMgtGatewayConstants.MCP_WELL_KNOWN_RESOURCE;
+    }
+
+    /**
+     * Returns true when the request targets the gateway-level MCP metadata endpoint, e.g.
+     * {@code /.well-known/oauth-protected-resource/mcp-law-agg/1.0.0} or
+     * {@code /.well-known/oauth-protected-resource/mcp-law-agg/1.0.0/mcp}.
+     */
+    public static boolean isMcpGlobalWellKnownMetadataRequest(String path, String tenantDomain) {
+        if (StringUtils.isEmpty(path)) {
+            return false;
+        }
+        String baseContext = getMcpGlobalWellKnownBaseContext(tenantDomain);
+        return path.startsWith(baseContext + "/") && path.length() > baseContext.length() + 1;
+    }
+
+    /**
+     * Extracts the MCP API context from a gateway-level well-known request path.
+     *
+     * @return path suffix after the well-known base (e.g. {@code /mcp-law-agg/1.0.0} or
+     *         {@code /mcp-law-agg/1.0.0/mcp}), or null if it cannot be resolved
+     */
+    public static String extractMcpApiContextFromGlobalWellKnownPath(String path, String tenantDomain) {
+        if (!isMcpGlobalWellKnownMetadataRequest(path, tenantDomain)) {
+            return null;
+        }
+        String baseContext = getMcpGlobalWellKnownBaseContext(tenantDomain);
+        String apiContextSuffix = path.substring(baseContext.length());
+        if (StringUtils.isEmpty(apiContextSuffix)) {
+            return null;
+        }
+        return apiContextSuffix.startsWith("/") ? apiContextSuffix : "/" + apiContextSuffix;
     }
 
     /**

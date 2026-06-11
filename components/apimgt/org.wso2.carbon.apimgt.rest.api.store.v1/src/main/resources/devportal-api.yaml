@@ -6145,6 +6145,9 @@ components:
         name:
           type: string
           example: Platinum
+        displayName:
+          type: string
+          example: Platinum
         description:
           type: string
           example: Allows 50 request(s) per minute.
@@ -6338,6 +6341,14 @@ components:
         requestedThrottlingPolicy:
           type: string
           example: Unlimited
+        createdTime:
+          type: string
+          readOnly: true
+          example: 2021-02-11-09:57:25
+        updatedTime:
+          type: string
+          readOnly: true
+          example: 2021-02-12-19:57:25
         status:
           type: string
           example: UNBLOCKED

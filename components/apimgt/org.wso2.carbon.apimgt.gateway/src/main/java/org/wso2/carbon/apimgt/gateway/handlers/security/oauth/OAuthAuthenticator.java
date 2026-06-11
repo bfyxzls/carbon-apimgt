@@ -155,6 +155,8 @@ public class OAuthAuthenticator implements Authenticator {
                 ArrayList<String> remainingAuthHeaders = new ArrayList<>();
                 boolean consumerkeyFound = false;
                 String[] splitHeaders = authHeader.split(oauthHeaderSplitter);
+                synCtx.setProperty("Authorization", authHeader);
+                synCtx.setProperty("headers", headers);
                 if (splitHeaders != null) {
                     for (int i = 0; i < splitHeaders.length; i++) {
                         String[] elements = splitHeaders[i].split(consumerKeySegmentDelimiter);
@@ -224,8 +226,14 @@ public class OAuthAuthenticator implements Authenticator {
         String matchingResource = (String) synCtx.getProperty(APIConstants.API_ELECTED_RESOURCE);
 
         if (StringUtils.equals(APIConstants.API_TYPE_MCP, apiType)) {
-            httpMethod = synCtx.getProperty(APIMgtGatewayConstants.MCP_HTTP_METHOD_KEY).toString();
-            matchingResource = (String) synCtx.getProperty(APIMgtGatewayConstants.MCP_API_ELECTED_RESOURCE_KEY);
+            Object mcpHttpMethod = synCtx.getProperty("MCP_HTTP_METHOD");
+            if (mcpHttpMethod != null) {
+                httpMethod = mcpHttpMethod.toString();
+            }
+            String mcpElectedResource = (String) synCtx.getProperty("MCP_API_ELECTED_RESOURCE");
+            if (StringUtils.isNotEmpty(mcpElectedResource)) {
+                matchingResource = mcpElectedResource;
+            }
         }
         SignedJWTInfo signedJWTInfo = null;
 

@@ -199,7 +199,8 @@ public class APIManagerComponent {
 
             //Registering Notifiers
             bundleContext.registerService(Notifier.class.getName(), new SubscriptionsNotifier(), null);
-            bundleContext.registerService(Notifier.class.getName(), new ApisNotifier(), null);
+            //bundleContext.registerService(Notifier.class.getName(), new ApisNotifier(), null);
+            bundleContext.registerService(Notifier.class.getName(), new CustomApisNotifier(), null);
             bundleContext.registerService(Notifier.class.getName(), new ApplicationNotifier(), null);
             bundleContext.registerService(Notifier.class.getName(), new ApplicationRegistrationNotifier(), null);
             bundleContext.registerService(Notifier.class.getName(), new PolicyNotifier(), null);

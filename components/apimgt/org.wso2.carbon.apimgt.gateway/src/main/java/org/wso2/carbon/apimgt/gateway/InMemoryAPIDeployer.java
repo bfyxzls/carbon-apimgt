@@ -124,6 +124,8 @@ public class InMemoryAPIDeployer {
                 DataHolder.getInstance().updateLastUpdatedEventId(gatewayAPIDTO, gatewayEvent.getEventId());
                 DataHolder.getInstance().populateVhosts(gatewayAPIDTO);
                 syncAPIPropertiesAcrossComponents(gatewayAPIDTO);
+                deployMcpGlobalWellKnownIfRequired(gatewayEvent.getApiType(), gatewayEvent.getTenantDomain());
+
                 if (log.isDebugEnabled()) {
                     log.debug("API with " + apiId + " is deployed in gateway with the labels " + String.join(",",
                             gatewayLabels));
@@ -237,6 +239,8 @@ public class InMemoryAPIDeployer {
                 if (APIConstants.SUPER_TENANT_DOMAIN.equalsIgnoreCase(tenantDomain)) {
                     deployHealthCheckSynapseAPI(tenantDomain); // Deploy HealthCheck API for the super tenant
                 }
+                deployMcpGlobalWellKnownSynapseAPI(tenantDomain);
+
             } catch (APIManagementException e) {
                 log.error("Error while deploying in-memory APIs for tenant domain :" + tenantDomain, e);
             }
@@ -646,6 +650,58 @@ public class InMemoryAPIDeployer {
             }
         }
     }
+    /**
+     * Deploy Synapse API for the gateway-level MCP oauth-protected-resource metadata endpoint.
+     *
+     * @param tenantDomain tenant domain
+     */
+    public static void deployMcpGlobalWellKnownSynapseAPI(String tenantDomain) throws APIManagementException {
+        String api = org.wso2.carbon.apimgt.gateway.utils.GatewayUtils.retrieveDeployedAPI(
+                APIMgtGatewayConstants.MCP_GLOBAL_WELL_KNOWN_API_NAME, null, tenantDomain);
+        if (api != null) {
+            return;
+        }
+        try {
+            MessageContext.setCurrentMessageContext(
+                    org.wso2.carbon.apimgt.gateway.utils.GatewayUtils.createAxis2MessageContext());
+            PrivilegedCarbonContext.startTenantFlow();
+            PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(tenantDomain, true);
+            GatewayAPIDTO gatewayAPIDTO = new GatewayAPIDTO();
+            String apiContext;
+            if (tenantDomain != null && !APIConstants.SUPER_TENANT_DOMAIN.equals(tenantDomain)) {
+                apiContext = APIConstants.TENANT_PREFIX + tenantDomain + APIMgtGatewayConstants.MCP_WELL_KNOWN_RESOURCE;
+            } else {
+                apiContext = APIMgtGatewayConstants.MCP_WELL_KNOWN_RESOURCE;
+            }
+            String synapseAPI = "<api xmlns=\"http://ws.apache.org/ns/synapse\" name=\""
+                    + APIMgtGatewayConstants.MCP_GLOBAL_WELL_KNOWN_API_NAME + "\" context=\"" + apiContext + "\">\n"
+                    + "    <resource methods=\"GET\" url-mapping=\"/*\" faultSequence=\"fault\">\n"
+                    + "        <inSequence>\n"
+                    + "            <respond/>\n"
+                    + "        </inSequence>\n"
+                    + "    </resource>\n"
+                    + "    <handlers>\n"
+                    + "        <handler class=\"org.wso2.carbon.apimgt.gateway.handlers.mcp."
+                    + "McpGlobalWellKnownHandler\"/>\n"
+                    + "    </handlers>\n"
+                    + "</api>\n";
+
+            gatewayAPIDTO.setName(APIMgtGatewayConstants.MCP_GLOBAL_WELL_KNOWN_API_NAME);
+            gatewayAPIDTO.setTenantDomain(tenantDomain);
+            gatewayAPIDTO.setApiDefinition(synapseAPI);
+
+            log.info("Deploying synapse artifacts of " + gatewayAPIDTO.getName());
+            APIGatewayAdmin apiGatewayAdmin = new APIGatewayAdmin();
+            apiGatewayAdmin.deployAPI(gatewayAPIDTO);
+            DataHolder.getInstance().markAPIAsDeployed(gatewayAPIDTO);
+        } catch (AxisFault axisFault) {
+            throw new APIManagementException("Error while deploying MCP global well-known API artifact", axisFault,
+                    ExceptionCodes.INTERNAL_ERROR);
+        } finally {
+            MessageContext.destroyCurrentMessageContext();
+            PrivilegedCarbonContext.endTenantFlow();
+        }
+    }
 
     /**
      * Deploy Synapse API for the Health Check endpoint
@@ -703,6 +759,16 @@ public class InMemoryAPIDeployer {
         }
     }
 
+    private void deployMcpGlobalWellKnownIfRequired(String apiType, String tenantDomain) {
+        if (!APIConstants.API_TYPE_MCP.equals(apiType)) {
+            return;
+        }
+        try {
+            deployMcpGlobalWellKnownSynapseAPI(tenantDomain);
+        } catch (APIManagementException e) {
+            log.error("Error while deploying MCP global well-known API for tenant domain: " + tenantDomain, e);
+        }
+    }
     /**
      * Generates an API key for endpoints by combining the provider, name, and version from the GatewayAPIDTO.
      *

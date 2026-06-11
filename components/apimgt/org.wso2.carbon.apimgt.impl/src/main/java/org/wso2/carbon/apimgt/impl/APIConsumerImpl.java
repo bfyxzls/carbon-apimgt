@@ -1440,7 +1440,7 @@ public class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
                                     APIConstants.EventType.SUBSCRIPTIONS_CREATE.name(), tenantId, apiOrgId,
                                     subscriptionId, addedSubscription.getUUID(), apiId, apiUUID, application.getId(),
                                     application.getUUID(), identifier.getTier(), subscriptionStatus,
-                                    identifier.getName(), identifier.getVersion());
+                                    identifier.getName(), identifier.getVersion(),application.getApplicationAttributes());
                     APIUtil.sendNotification(subscriptionEvent, APIConstants.NotifierType.SUBSCRIPTIONS.name());
                 }
             } else {
@@ -1449,7 +1449,7 @@ public class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
                                 APIConstants.EventType.SUBSCRIPTIONS_CREATE.name(), tenantId, apiOrgId, subscriptionId,
                                 addedSubscription.getUUID(), apiId, apiUUID, application.getId(), application.getUUID(),
                                 identifier.getTier(), subscriptionStatus, identifier.getName(),
-                                identifier.getVersion());
+                                identifier.getVersion(),application.getApplicationAttributes());
                 APIUtil.sendNotification(subscriptionEvent, APIConstants.NotifierType.SUBSCRIPTIONS.name());
             }
 
@@ -1638,7 +1638,7 @@ public class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
                                     APIConstants.EventType.SUBSCRIPTIONS_UPDATE.name(), tenantId, apiOrgId,
                                     subscriptionId, updatedSubscription.getUUID(), apiId, apiUUId, application.getId(),
                                     application.getUUID(), requestedThrottlingPolicy, subscriptionStatus,
-                                    identifier.getName(), identifier.getVersion());
+                                    identifier.getName(), identifier.getVersion(),application.getApplicationAttributes());
                     APIUtil.sendNotification(subscriptionEvent, APIConstants.NotifierType.SUBSCRIPTIONS.name());
                 }
             } else {
@@ -1647,7 +1647,7 @@ public class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
                                 APIConstants.EventType.SUBSCRIPTIONS_UPDATE.name(), tenantId, apiOrgId, subscriptionId,
                                 updatedSubscription.getUUID(), apiId, apiUUId, application.getId(),
                                 application.getUUID(), requestedThrottlingPolicy, subscriptionStatus,
-                                identifier.getName(), identifier.getVersion());
+                                identifier.getName(), identifier.getVersion(),application.getApplicationAttributes());
                 APIUtil.sendNotification(subscriptionEvent, APIConstants.NotifierType.SUBSCRIPTIONS.name());
             }
 

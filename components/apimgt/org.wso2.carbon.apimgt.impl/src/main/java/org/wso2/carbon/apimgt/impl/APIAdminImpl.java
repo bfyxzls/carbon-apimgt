@@ -84,6 +84,7 @@ import org.wso2.carbon.apimgt.impl.notifier.events.LabelEvent;
 import org.wso2.carbon.apimgt.impl.service.KeyMgtRegistrationService;
 import org.wso2.carbon.apimgt.impl.utils.APINameComparator;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
+import org.wso2.carbon.apimgt.impl.utils.ConfigurationCryptoUtil;
 import org.wso2.carbon.apimgt.impl.utils.ContentSearchResultNameComparator;
 import org.wso2.carbon.apimgt.persistence.APIPersistence;
 import org.wso2.carbon.apimgt.persistence.dto.AdminApiSearchContent;
@@ -1042,6 +1043,14 @@ public class APIAdminImpl implements APIAdmin {
             KeyManagerConfigurationDTO keyManagerConfigurationDTO)
             throws APIManagementException {
 
+        if (!keyManagerConfigurationDTO.isEnabled()) {
+            if (log.isDebugEnabled()) {
+                log.debug("Skipping decryption for disabled key manager: "
+                        + keyManagerConfigurationDTO.getName());
+            }
+            return keyManagerConfigurationDTO;
+        }
+
         Map<String, Object> additionalProperties = keyManagerConfigurationDTO.getAdditionalProperties();
         for (Map.Entry<String, Object> entry : additionalProperties.entrySet()) {
             String key = entry.getKey();
@@ -1109,14 +1118,17 @@ public class APIAdminImpl implements APIAdmin {
                     if (valueElement != null && valueElement.isJsonPrimitive()) {
                         JsonPrimitive valuePrimitive = valueElement.getAsJsonPrimitive();
                         if (valuePrimitive.isString()) {
-                            CryptoUtil cryptoUtil = CryptoUtil.getDefaultCryptoUtil();
-                            return new String(cryptoUtil.decrypt(valuePrimitive.getAsString().getBytes()));
+                            try {
+                                return ConfigurationCryptoUtil.decryptWithLegacyFallback(
+                                        valuePrimitive.getAsString());
+                            } catch (CryptoException e) {
+                                log.warn("Failed to decrypt configuration value. Using an empty placeholder.", e);
+                                return StringUtils.EMPTY;
+                            }
                         }
                     }
                 }
             }
-        } catch (CryptoException e) {
-            throw new APIManagementException("Error while Decrypting value", e);
         } catch (JsonParseException e) {
             // check Element is a json element
             if (log.isDebugEnabled()) {

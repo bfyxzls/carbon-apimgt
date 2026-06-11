@@ -4640,6 +4640,9 @@ definitions:
       name:
         type: string
         example: Platinum
+      displayName:
+        type: string
+        example: Platinum
       description:
         type: string
         example: "Allows 50 request(s) per minute."

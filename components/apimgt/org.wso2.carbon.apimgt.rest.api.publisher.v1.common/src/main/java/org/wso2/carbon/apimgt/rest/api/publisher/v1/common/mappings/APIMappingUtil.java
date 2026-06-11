@@ -1989,7 +1989,9 @@ public class APIMappingUtil {
         if (model.getVisibleOrganizations() != null && !model.getVisibleOrganizations().isEmpty()) {
             dto.setVisibleOrganizations(Arrays.asList(model.getVisibleOrganizations().split(",")));
         } else {
-            dto.setVisibleOrganizations(new ArrayList<>(List.of(APIConstants.VISIBLE_ORG_NONE)));
+            List<String> param=new ArrayList<>();
+            param.add(APIConstants.VISIBLE_ORG_NONE);
+            dto.setVisibleOrganizations(param);
         }
 
         if (model.getAdditionalProperties() != null) {
@@ -2348,9 +2350,9 @@ public class APIMappingUtil {
         List<String> tagsToReturn = new ArrayList<>();
         tagsToReturn.addAll(apiTags);
         dto.setTags(tagsToReturn);
-        Set<org.wso2.carbon.apimgt.api.model.Tier> apiTiers = model.getAvailableTiers();
+        Set<Tier> apiTiers = model.getAvailableTiers();
         List<String> tiersToReturn = new ArrayList<>();
-        for (org.wso2.carbon.apimgt.api.model.Tier tier : apiTiers) {
+        for (Tier tier : apiTiers) {
             tiersToReturn.add(tier.getName());
         }
         dto.setPolicies(tiersToReturn);
@@ -2389,7 +2391,9 @@ public class APIMappingUtil {
         if (model.getVisibleOrganizations() != null && !model.getVisibleOrganizations().isEmpty()) {
             dto.setVisibleOrganizations(Arrays.asList(model.getVisibleOrganizations().split(",")));
         } else {
-            dto.setVisibleOrganizations(new ArrayList<>(List.of(APIConstants.VISIBLE_ORG_NONE)));
+            List<String> param=new ArrayList<>();
+            param.add(APIConstants.VISIBLE_ORG_NONE);
+            dto.setVisibleOrganizations(param);
         }
 
         if (model.getAdditionalProperties() != null) {

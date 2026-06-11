@@ -170,6 +170,14 @@ public class CORSRequestHandler extends AbstractHandler implements ManagedLifecy
             Resource selectedResource = null;
             Utils.setSubRequestPath(selectedApi, messageContext);
 
+            if (Utils.isMcpWellKnownMetadataRequest(messageContext)) {
+                String requestPath = Utils.getMcpRequestPath(messageContext);
+                messageContext.setProperty(APIConstants.API_ELECTED_RESOURCE, requestPath);
+                messageContext.setProperty(APIConstants.API_RESOURCE_CACHE_KEY,
+                        APIUtil.getResourceInfoDTOCacheKey(apiContext, apiVersion, requestPath, httpMethod));
+                messageContext.setProperty(APIConstants.REST_METHOD, httpMethod);
+                return true;
+            }
             if (selectedApi != null) {
                 if ((messageContext.getProperty(RESTConstants.SELECTED_RESOURCE) != null)) {
                     selectedResource = Utils.getSelectedResource(messageContext, httpMethod, corsRequestMethod);

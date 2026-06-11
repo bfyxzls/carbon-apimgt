@@ -75,7 +75,14 @@ public class DefaultAPIHandler extends AbstractSynapseHandler {
             }
             return true;
         }
-
+        if (Utils.isMcpGlobalWellKnownMetadataRequest(path, tenantDomain)) {
+            try {
+                InMemoryAPIDeployer.deployMcpGlobalWellKnownSynapseAPI(tenantDomain);
+            } catch (APIManagementException e) {
+                log.error("Error while deploying MCP global well-known API for tenant domain: " + tenantDomain, e);
+            }
+            return true;
+        }
         if (GatewayUtils.checkForFileBasedApiContexts(path, tenantDomain)) {
             return true;
         }

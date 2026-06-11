@@ -347,6 +347,22 @@ public class APIKeyValidator {
         org.wso2.carbon.apimgt.keymgt.model.entity.API api = GatewayUtils.getAPI(synCtx);
         if (api != null && api.getApiType() != null && StringUtils.equals(api.getApiType(),
                 APIConstants.API_TYPE_MCP)) {
+            Object mcpHttpMethodProp = synCtx.getProperty("MCP_HTTP_METHOD");
+            if (mcpHttpMethodProp != null) {
+                httpMethod = mcpHttpMethodProp.toString();
+            }
+            String mcpElectedResource = (String) synCtx.getProperty("MCP_API_ELECTED_RESOURCE");
+            if (StringUtils.isNotEmpty(mcpElectedResource)) {
+                electedResource = mcpElectedResource;
+            }
+            String mcpMethod = (String) synCtx.getProperty(APIMgtGatewayConstants.MCP_METHOD);
+            if (APIConstants.MCP.METHOD_TOOL_LIST.equals(mcpMethod)
+                    || APIConstants.MCP.METHOD_INITIALIZE.equals(mcpMethod)) {
+                electedResource = APIConstants.MCP.MCP_RESOURCES_MCP;
+                httpMethod = APIConstants.HTTP_POST;
+                synCtx.setProperty("MCP_API_ELECTED_RESOURCE", electedResource);
+                synCtx.setProperty("MCP_HTTP_METHOD", httpMethod);
+            }
             McpRequest requestBody = (McpRequest) synCtx.getProperty(APIMgtGatewayConstants.MCP_REQUEST_BODY);
             if (requestBody != null) {
                 Params params = requestBody.getParams();
@@ -444,33 +460,19 @@ public class APIKeyValidator {
                 Resource[] selectedAPIResources = selectedApi.getResources();
 
                 List<Resource> acceptableResourcesList = new LinkedList<>();
-                List<Resource> optionsResourcesList = new LinkedList<>();
-                boolean isOptionsRequest = RESTConstants.METHOD_OPTIONS.equals(httpMethod);
 
                 for (Resource resource : selectedAPIResources) {
-                    log.debug("Evaluating resource for acceptable methods");
-                    String[] methods = resource.getMethods();
-                    if (methods == null) {
-                        continue;
-                    }
-
-                    List<String> methodList = Arrays.asList(methods);
-
-                    // Handle OPTIONS request with single OPTIONS method defined
-                    if (isOptionsRequest && methods.length == 1 && methodList.contains(httpMethod)) {
-                        optionsResourcesList.add(resource);
-                    } else if (isOptionsRequest || methodList.contains(httpMethod)) {
+                    //If the requesting method is OPTIONS or if the Resource contains the requesting method
+                    if (RESTConstants.METHOD_OPTIONS.equals(httpMethod) &&
+                            (resource.getMethods() != null && Arrays.asList(resource.getMethods()).contains(httpMethod))) {
+                        acceptableResourcesList.add(0, resource);
+                    } else if (RESTConstants.METHOD_OPTIONS.equals(httpMethod) ||
+                            (resource.getMethods() != null && Arrays.asList(resource.getMethods()).contains(httpMethod))) {
                         acceptableResourcesList.add(resource);
                     }
                 }
 
-                Set<Resource> acceptableResources = new LinkedHashSet<>();
-                acceptableResources.addAll(optionsResourcesList);
-                acceptableResources.addAll(acceptableResourcesList);
-                if (log.isDebugEnabled()) {
-                    log.debug("Found " + acceptableResources.size() +
-                            " acceptable resources for method: " + httpMethod);
-                }
+                Set<Resource> acceptableResources = new LinkedHashSet<>(acceptableResourcesList);
 
                 if (acceptableResources.size() > 0) {
                     for (RESTDispatcher dispatcher : RESTUtils.getDispatchers()) {
@@ -583,6 +585,33 @@ public class APIKeyValidator {
         }
         if (verbInfoList.size() == 0) {
             verbInfoList = null;
+        }
+        if ((verbInfoList == null || verbInfoList.isEmpty()) && api != null
+                && APIConstants.API_TYPE_MCP.equals(api.getApiType())) {
+            String mcpMethod = (String) synCtx.getProperty(APIMgtGatewayConstants.MCP_METHOD);
+            boolean isMcpCoreMethod = APIConstants.MCP.METHOD_TOOL_LIST.equals(mcpMethod)
+                    || APIConstants.MCP.METHOD_INITIALIZE.equals(mcpMethod);
+            if (!isMcpCoreMethod) {
+                return verbInfoList;
+            }
+            VerbInfoDTO verbInfo = getVerbInfoDTOFromAPIData(synCtx, apiContext, apiVersion,
+                    APIConstants.MCP.MCP_RESOURCES_MCP, APIConstants.HTTP_POST);
+            if (verbInfo != null) {
+                verbInfoList = new ArrayList<>();
+                verbInfoList.add(verbInfo);
+                synCtx.setProperty(APIConstants.API_ELECTED_RESOURCE, APIConstants.MCP.MCP_RESOURCES_MCP);
+                return verbInfoList;
+            }
+            if (log.isDebugEnabled()) {
+                log.debug("Using default auth scheme for MCP " + mcpMethod + " on resource "
+                        + APIConstants.MCP.MCP_RESOURCES_MCP);
+            }
+            VerbInfoDTO defaultVerb = new VerbInfoDTO();
+            defaultVerb.setHttpVerb(APIConstants.HTTP_POST);
+            defaultVerb.setAuthType(APIConstants.AUTH_APPLICATION_OR_USER_LEVEL_TOKEN);
+            verbInfoList = new ArrayList<>();
+            verbInfoList.add(defaultVerb);
+            synCtx.setProperty(APIConstants.API_ELECTED_RESOURCE, APIConstants.MCP.MCP_RESOURCES_MCP);
         }
         return verbInfoList;
     }

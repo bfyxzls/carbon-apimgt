@@ -20,6 +20,7 @@ package org.wso2.carbon.apimgt.impl.notifier.events;
 
 import org.wso2.carbon.apimgt.impl.APIConstants;
 
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -44,7 +45,16 @@ public class APIEvent extends Event {
     private String apiVisibility;
     private String apiVisibleRoles;
     private String lifecycleEvent;
+    // 分类
+    private List<String> categories;
 
+    public List<String> getCategories() {
+        return categories;
+    }
+
+    public void setCategories(List<String> categories) {
+        this.categories = categories;
+    }
     public APIEvent(String uuid, String logLevel, String type, String apiContext, String resourceMethod,
                     String resourcePath) {
         this.uuid = uuid;

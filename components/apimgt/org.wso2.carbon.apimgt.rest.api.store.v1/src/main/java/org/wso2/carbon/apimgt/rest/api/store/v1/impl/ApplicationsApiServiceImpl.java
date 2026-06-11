@@ -1154,7 +1154,33 @@ public class ApplicationsApiServiceImpl implements ApplicationsApiService {
         try {
             APIConsumer apiConsumer = APIManagerFactory.getInstance().getAPIConsumer(username);
             Application application = apiConsumer.getLightweightApplicationByUUID(applicationId);
+            String groupId = RestApiUtil.getLoggedInUserGroupId();
+            Subscriber subscriber = new Subscriber(username);
+            Application[] apps =
+                    apiConsumer.getApplicationsWithPagination(subscriber, groupId, 0, 10, "", "APPLICATION_ID", "ASC",
+                            "carbon.super",
+                            "private");
+            if (apps != null && apps.length == 1) {
+                // 用户只有一个应用了，不能删除了
+                log.info("用户只有一个应用不能删除," + username);
+                return Response.status(Response.Status.LENGTH_REQUIRED).build();
+            }
             if (application != null) {
+                // 默认应用不能删除
+                if (application.getName().equalsIgnoreCase("默认应用")) {
+                    log.info("默认应用不能删除," + username);
+                    return Response.status(Response.Status.CONFLICT).build();
+                }
+
+                int total = apiConsumer.getSubscriptionCount(subscriber, application.getName(), groupId);
+
+                if (total > 0) {
+                    log.info("应用有订阅关系，它不能被删除,username:" + username + ",total:" + total + ",sub_count:" +
+                            application.getSubscriptionCount());
+                    return Response.status(Response.Status.GONE).build();
+                }
+
+
                 if (orgWideAppUpdateEnabled || RestAPIStoreUtils.isUserOwnerOfApplication(application)) {
                     apiConsumer.removeApplication(application, username);
                     if (APIConstants.ApplicationStatus.DELETE_PENDING.equals(application.getStatus())) {

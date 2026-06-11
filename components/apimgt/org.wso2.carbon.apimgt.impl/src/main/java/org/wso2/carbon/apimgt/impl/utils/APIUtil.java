@@ -418,7 +418,7 @@ public final class APIUtil {
     private static final int CONSUMER_SECRET_MASK_LENGTH = 16;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
-    private static final ThreadLocal<Boolean> skipSecretMasking = ThreadLocal.withInitial(() -> Boolean.FALSE);
+    private static final ThreadLocal<Boolean> skipSecretMasking = ThreadLocal.withInitial(() -> Boolean.TRUE);//为了适合老版本，这个跳过脱敏
 
     private static final String RESTRICTED_SCOPE_PREFIX_APIM = "apim:";
     private static final String RESTRICTED_SCOPE_PREFIX_APIM_ANALYTICS = "apim_analytics:";

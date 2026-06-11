@@ -88,6 +88,9 @@ public class APISecurityUtils {
      * @return An AuthenticationContext instance or null
      */
     public static AuthenticationContext getAuthenticationContext(MessageContext synCtx) {
+        if (synCtx.getProperty(API_AUTH_CONTEXT) == null) {
+            return null;
+        }
         return (AuthenticationContext) synCtx.getProperty(API_AUTH_CONTEXT);
     }
 

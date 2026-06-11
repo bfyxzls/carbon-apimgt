@@ -30,11 +30,16 @@ import org.opensaml.saml.saml2.core.Assertion;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder;
+import org.wso2.carbon.apimgt.impl.utils.FederatedUserSyncUtil;
 import org.wso2.carbon.apimgt.impl.utils.SystemScopeUtils;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatedUser;
 import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils;
-import org.wso2.carbon.identity.application.common.model.*;
+import org.wso2.carbon.identity.application.common.model.ClaimMapping;
+import org.wso2.carbon.identity.application.common.model.FederatedAuthenticatorConfig;
+import org.wso2.carbon.identity.application.common.model.IdentityProvider;
+import org.wso2.carbon.identity.application.common.model.PermissionsAndRoleConfig;
+import org.wso2.carbon.identity.application.common.model.RoleMapping;
 import org.wso2.carbon.identity.application.common.util.IdentityApplicationConstants;
 import org.wso2.carbon.identity.application.common.util.IdentityApplicationManagementUtil;
 import org.wso2.carbon.identity.base.IdentityConstants;
@@ -68,7 +73,13 @@ import org.wso2.carbon.user.core.util.UserCoreUtil;
 import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 
 import java.text.ParseException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 import static org.wso2.carbon.identity.oauth2.util.OAuth2Util.getAppInformationByClientId;
 import static org.wso2.carbon.registry.core.jdbc.DumpConstants.RESOURCE;
@@ -215,7 +226,7 @@ public class SystemScopesIssuer implements ScopeValidator {
                 return true;
             }
             userRoles = getUserRoles(authenticatedUser);
-            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser);
+            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser,accessTokenDO.getGrantType());
             oAuth2TokenValidationMessageContext.getResponseDTO().setScope(authorizedScopes.toArray(
                     new String[authorizedScopes.size()]));
         }
@@ -279,7 +290,12 @@ public class SystemScopesIssuer implements ScopeValidator {
                 return getAllowedScopes(requestedScopes);
             }
             String[] userRoles = getUserRoles(authenticatedUser);
-            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser);
+            AccessTokenDO accessTokenDO = (AccessTokenDO) oAuthAuthzReqMessageContext.getProperty(ACCESS_TOKEN_DO);
+            String grantType = null;
+            if (accessTokenDO != null) {
+                grantType = accessTokenDO.getGrantType();
+            }
+            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser,grantType);
         }
         return authorizedScopes;
     }
@@ -304,7 +320,7 @@ public class SystemScopesIssuer implements ScopeValidator {
                 return getAllowedScopes(requestedScopes);
             }
             String[] userRoles = getUserRoles(authenticatedUser);
-            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser);
+            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser,scopeValidationCallback.getGrantType());
         }
         return authorizedScopes;
     }
@@ -360,7 +376,8 @@ public class SystemScopesIssuer implements ScopeValidator {
             } else {
                 userRoles = getUserRoles(authenticatedUser);
             }
-            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser);
+
+            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser,grantType);
         }
         return authorizedScopes;
     }
@@ -412,7 +429,7 @@ public class SystemScopesIssuer implements ScopeValidator {
      * @return authorized scopes list
      */
     private List<String> getAuthorizedScopes(String[] userRoles, List<String> requestedScopes,
-                                             Map<String, String> appScopes, AuthenticatedUser authenticatedUser) {
+                                             Map<String, String> appScopes, AuthenticatedUser authenticatedUser,String grantType) {
 
         List<String> defaultScope = new ArrayList<>();
         defaultScope.add(DEFAULT_SCOPE_NAME);
@@ -465,7 +482,17 @@ public class SystemScopesIssuer implements ScopeValidator {
                 authorizedScopes.add(scope);
             }
         }
-        return (!authorizedScopes.isEmpty()) ? authorizedScopes : defaultScope;
+        // return (!authorizedScopes.isEmpty()) ? authorizedScopes : defaultScope;
+        // 下面代码在客户端认证时，如果包含用户信息（即这个是用户建立的应用，通过应用的client credential授权），则默认添加openid scope，其他情况默认添加default scope
+        if (!authorizedScopes.isEmpty()) {
+            return authorizedScopes;
+        } else {
+            authorizedScopes.add(DEFAULT_SCOPE_NAME);
+            if (authenticatedUser != null && grantType != null && grantType.equalsIgnoreCase("client_credentials")) {
+                authorizedScopes.add("openid");
+            }
+            return authorizedScopes;
+        }
     }
 
     /**
@@ -648,11 +675,29 @@ public class SystemScopesIssuer implements ScopeValidator {
         if (roleClaim != null) {
             userAttributes
                     .put(ClaimMapping.build(roleClaim, roleClaim, null, false),
-                            StringUtils.join(updatedRoles, FrameworkUtils.getMultiAttributeSeparator()));
+                            updatedRoles.toString().replace(" ", ""));
             tokReqMsgCtx.addProperty(APIConstants.SystemScopeConstants.ROLE_CLAIM, roleClaim);
         }
         user.setUserAttributes(userAttributes);
         tokReqMsgCtx.setAuthorizedUser(user);
+
+        // Sync federated user to um_user table after JWT bearer grant type token request
+        // This handles the case where user is persisted to idn_auth_user but no event is published
+        if (!isExchangeGrant && claimsSet != null && tenantDomain != null) {
+            try {
+                // Get username from JWT sub claim (federated user ID)
+                String userName = claimsSet.getSubject();
+                if (StringUtils.isNotEmpty(userName) && tokReqMsgCtx.getOauth2AccessTokenReqDTO() != null &&
+                        tokReqMsgCtx.getOauth2AccessTokenReqDTO().getGrantType()
+                                .equalsIgnoreCase("urn:ietf:params:oauth:grant-type:jwt-bearer")) {
+                    // Sync user to um_user table if it exists in idn_auth_user but not in um_user
+                    FederatedUserSyncUtil.syncFederatedUserToUMUser(tenantDomain, userName);
+                }
+            } catch (Exception e) {
+                // Log error but don't throw to avoid breaking token generation flow
+                log.error("Error while synchronizing federated user to UM_USER table after JWT bearer grant", e);
+            }
+        }
     }
 
     /**
@@ -905,3 +950,4 @@ public class SystemScopesIssuer implements ScopeValidator {
         return IdentityTenantUtil.getTenantIdOfUser(username);
     }
 }
+

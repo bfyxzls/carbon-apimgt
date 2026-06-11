@@ -600,13 +600,15 @@ public class AMDefaultKeyManagerImpl extends AbstractKeyManager {
             log.debug("Trying to retrieve OAuth application for consumer key :" + consumerKey);
         }
 
+        String encodedClientId = Base64.getUrlEncoder()
+                .encodeToString(consumerKey.getBytes(StandardCharsets.UTF_8));
+
         try {
-            ClientInfo clientInfo = dcrClient.getApplication(Base64.getUrlEncoder().encodeToString(
-                    consumerKey.getBytes(StandardCharsets.UTF_8)));
+            ClientInfo clientInfo = dcrClient.getApplication(encodedClientId);
             OAuthApplicationInfo applicationInfo = buildDTOFromClientInfo(clientInfo,
                     new OAuthApplicationInfo());
             if (multipleClientSecretsAllowed) {
-                applicationInfo.setClientSecret(APIUtil.maskSecret(applicationInfo.getClientSecret()));
+                resolveDefaultConsumerSecret(applicationInfo, encodedClientId);
             }
             return applicationInfo;
         } catch (KeyManagerClientException e) {
@@ -616,6 +618,47 @@ public class AMDefaultKeyManagerImpl extends AbstractKeyManager {
             handleException("Cannot retrieve service provider for the given consumer key : " + consumerKey, e);
             return null;
         }
+    }
+
+    /**
+     * Resolves the default consumer secret for applications with multiple client secrets enabled.
+     * The DCR get application endpoint returns the latest consumer secret. For backward compatibility
+     * with applications created before multiple client secrets support, the earliest consumer secret
+     * should be returned as the default consumer secret.
+     */
+    private void resolveDefaultConsumerSecret(OAuthApplicationInfo applicationInfo, String encodedClientId) {
+
+        try {
+            ClientSecretList clientSecretList = dcrClient.getApplicationSecrets(encodedClientId);
+            if (clientSecretList == null || clientSecretList.getList() == null
+                    || clientSecretList.getList().isEmpty()) {
+                applicationInfo.setClientSecret(APIUtil.maskSecret(applicationInfo.getClientSecret()));
+                return;
+            }
+            ClientSecret earliestConsumerSecret = clientSecretList.getList().get(0);
+            applicationInfo.setClientSecret(APIUtil.maskSecret(earliestConsumerSecret.getClientSecret()));
+            updateClientSecretAdditionalProperties(applicationInfo, earliestConsumerSecret);
+        } catch (KeyManagerClientException e) {
+            if (log.isDebugEnabled()) {
+                log.debug("Failed to retrieve consumer secrets. Falling back to application secret.", e);
+            }
+            applicationInfo.setClientSecret(APIUtil.maskSecret(applicationInfo.getClientSecret()));
+        }
+    }
+
+    private void updateClientSecretAdditionalProperties(OAuthApplicationInfo applicationInfo,
+                                                        ClientSecret consumerSecret) {
+
+        Object additionalPropsObj = applicationInfo.getParameter(APIConstants.JSON_ADDITIONAL_PROPERTIES);
+        if (!(additionalPropsObj instanceof Map)) {
+            return;
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> additionalProperties = (Map<String, Object>) additionalPropsObj;
+        additionalProperties.put(APIConstants.KeyManager.CLIENT_SECRET_DESCRIPTION,
+                consumerSecret.getDescription());
+        additionalProperties.put(APIConstants.KeyManager.CLIENT_SECRET_EXPIRES_AT,
+                consumerSecret.getClientSecretExpiresAt());
     }
 
     @Override
