@@ -97,6 +97,13 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
 
     private static final Log log = LogFactory.getLog(McpInitHandler.class);
 
+    private static final Gson MCP_REQUEST_GSON = new GsonBuilder()
+            .registerTypeAdapter(McpRequest.class, new MCPRequestDeserializer())
+            .registerTypeAdapter(Params.class, new ParamsDeserializer())
+            .create();
+
+    private static final Gson MCP_RESPONSE_GSON = new Gson();
+
     static ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
@@ -296,12 +303,7 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
                 if (log.isDebugEnabled()) {
                     log.debug("MCP request body: " + messageBody);
                 }
-                Gson gson = new GsonBuilder()
-                        .registerTypeAdapter(McpRequest.class, new MCPRequestDeserializer())
-                        .registerTypeAdapter(Params.class, new ParamsDeserializer())
-                        .create();
-
-                McpRequest request = gson.fromJson(messageBody, McpRequest.class);
+                McpRequest request = MCP_REQUEST_GSON.fromJson(messageBody, McpRequest.class);
                 if (!MCPUtils.validateRequest(request)) {
                     throw new McpException(INVALID_REQUEST_CODE,
                             INVALID_REQUEST_MESSAGE, "Invalid Request");
@@ -506,8 +508,6 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
                 log.debug("MCP response body: " + responseBody);
             }
 
-            // Parse JSON response using Gson
-            Gson gson = new GsonBuilder().create();
             com.google.gson.JsonObject jsonObject = null;
 
             // Extract isError from result
@@ -533,7 +533,7 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
                         log.debug("MCP SSE data line: " + dataJson);
                         try {
                             com.google.gson.JsonObject dataObject =
-                                    gson.fromJson(dataJson, com.google.gson.JsonObject.class);
+                                    MCP_RESPONSE_GSON.fromJson(dataJson, com.google.gson.JsonObject.class);
                             if (dataObject != null) {
                                 if (dataObject.has("result")) {
                                     resultObject = dataObject.getAsJsonObject("result");
@@ -554,7 +554,7 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
             } else {
                 // Try to parse as JSON object
                 try {
-                    jsonObject = gson.fromJson(responseBody, com.google.gson.JsonObject.class);
+                    jsonObject = MCP_RESPONSE_GSON.fromJson(responseBody, com.google.gson.JsonObject.class);
                 } catch (JsonSyntaxException e) {
                     // If parsing fails, it might be a streamable HTTP format (multiple JSON lines)
                     log.debug("Failed to parse as single JSON object: " + e.getMessage());
@@ -577,7 +577,7 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
                         }
                         try {
                             com.google.gson.JsonObject dataObject =
-                                    gson.fromJson(dataJson, com.google.gson.JsonObject.class);
+                                    MCP_RESPONSE_GSON.fromJson(dataJson, com.google.gson.JsonObject.class);
                             if (dataObject != null && dataObject.has("result")) {
                                 resultObject = dataObject.getAsJsonObject("result");
                                 log.debug("Extracted result object from wrapped SSE data field");
@@ -635,7 +635,7 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
                     }
                     try {
                         com.google.gson.JsonObject lineObject =
-                                gson.fromJson(jsonLine.trim(), com.google.gson.JsonObject.class);
+                                MCP_RESPONSE_GSON.fromJson(jsonLine.trim(), com.google.gson.JsonObject.class);
                         if (lineObject != null) {
                             if (lineObject.has("result")) {
                                 resultObject = lineObject.getAsJsonObject("result");

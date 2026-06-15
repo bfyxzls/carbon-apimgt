@@ -77,6 +77,7 @@ import org.wso2.carbon.mcp.transformer.impl.RequestResolver;
 import org.wso2.carbon.mcp.transformer.model.ResolvedRequest;
 import org.wso2.carbon.mcp.transformer.model.SchemaMapping;
 
+import java.io.IOException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -107,11 +108,37 @@ public class MCPUtils {
             new ConcurrentHashMap<>();
 
     /**
+     * Tenant-level cache of Key Manager lists fetched from Event Hub for MCP well-known metadata.
+     */
+    private static final Map<String, EventHubKeyManagerTenantCacheEntry> EVENT_HUB_KM_TENANT_CACHE =
+            new ConcurrentHashMap<>();
+
+    private static final long EVENT_HUB_KM_TENANT_CACHE_TTL_MS = 15 * 60 * 1000L;
+
+    /**
      * Cache for MCP API context lookups (well-known metadata). Avoids scanning all APIs per request.
      */
     private static final Map<String, API> MCP_API_CONTEXT_LOOKUP_CACHE = new ConcurrentHashMap<>();
 
     private static final int MCP_API_CONTEXT_LOOKUP_CACHE_MAX = 512;
+
+    private static final Gson MCP_METADATA_GSON = new Gson();
+
+    private static final class EventHubKeyManagerTenantCacheEntry {
+
+        private final List<KeyManagerConfigurationDTO> configurations;
+        private final long loadedAtMs;
+
+        private EventHubKeyManagerTenantCacheEntry(List<KeyManagerConfigurationDTO> configurations,
+                                                   long loadedAtMs) {
+            this.configurations = configurations;
+            this.loadedAtMs = loadedAtMs;
+        }
+
+        private boolean isExpired() {
+            return System.currentTimeMillis() - loadedAtMs > EVENT_HUB_KM_TENANT_CACHE_TTL_MS;
+        }
+    }
 
     /**
      * Validates the MCP request.
@@ -877,15 +904,17 @@ public class MCPUtils {
      * Collects scopes defined on the MCP API URL mappings.
      */
     public static List<String> getAllScopesFromApi(API api) {
-        List<String> allScopes = new ArrayList<>();
-        if (api != null && api.getResources() != null) {
-            for (URLMapping urlMapping : api.getResources()) {
-                if (urlMapping.getScopes() != null) {
-                    allScopes.addAll(urlMapping.getScopes());
-                }
-            }
-        }
-        return allScopes;
+        // 这块resolveScopesSupported之前已经写死了，所以不需要再查询了
+        //        List<String> allScopes = new ArrayList<>();
+        //        if (api != null && api.getResources() != null) {
+        //            for (URLMapping urlMapping : api.getResources()) {
+        //                if (urlMapping.getScopes() != null) {
+        //                    allScopes.addAll(urlMapping.getScopes());
+        //                }
+        //            }
+        //        }
+        //        return allScopes;
+        return Collections.emptyList();
     }
 
     /**
@@ -1008,7 +1037,7 @@ public class MCPUtils {
         return null;
     }
 
-    private static boolean isMcpApi(API api) {
+    public static boolean isMcpApi(API api) {
         if (api == null) {
             return false;
         }
@@ -1655,14 +1684,47 @@ public class MCPUtils {
     }
 
     private static List<KeyManagerConfigurationDTO> fetchKeyManagerConfigurationsFromEventHub(String tenantDomain) {
+        if (StringUtils.isBlank(tenantDomain)) {
+            return Collections.emptyList();
+        }
+
+        EventHubKeyManagerTenantCacheEntry cachedEntry = EVENT_HUB_KM_TENANT_CACHE.get(tenantDomain);
+        if (cachedEntry != null && !cachedEntry.isExpired()) {
+            if (log.isDebugEnabled()) {
+                log.debug("Using cached Event Hub Key Manager configurations for tenant: " + tenantDomain);
+            }
+            return cachedEntry.configurations;
+        }
+        if (cachedEntry != null) {
+            EVENT_HUB_KM_TENANT_CACHE.remove(tenantDomain, cachedEntry);
+        }
+
+        List<KeyManagerConfigurationDTO> loadedConfigurations =
+                loadKeyManagerConfigurationsFromEventHub(tenantDomain);
+        if (loadedConfigurations == null) {
+            return Collections.emptyList();
+        }
+        EVENT_HUB_KM_TENANT_CACHE.put(tenantDomain, new EventHubKeyManagerTenantCacheEntry(
+                Collections.unmodifiableList(new ArrayList<>(loadedConfigurations)), System.currentTimeMillis()));
+        populateMetadataKeyManagerCacheFromTenantLoad(loadedConfigurations);
+        return loadedConfigurations;
+    }
+
+    /**
+     * Loads Key Manager configurations from Event Hub for the given tenant.
+     *
+     * @return configuration list on HTTP 200 (may be empty), or {@code null} when Event Hub is unavailable
+     */
+    private static List<KeyManagerConfigurationDTO> loadKeyManagerConfigurationsFromEventHub(String tenantDomain) {
         EventHubConfigurationDto eventHubConfiguration =
                 ServiceReferenceHolder.getInstance().getAPIManagerConfiguration().getEventHubConfigurationDto();
         if (eventHubConfiguration == null || !eventHubConfiguration.isEnabled()) {
             if (log.isDebugEnabled()) {
                 log.debug("Event Hub is not enabled; cannot load disabled Key Manager configurations for MCP metadata");
             }
-            return Collections.emptyList();
+            return null;
         }
+        HttpResponse httpResponse = null;
         try {
             String url = eventHubConfiguration.getServiceUrl().concat(APIConstants.INTERNAL_WEB_APP_EP)
                     .concat("/keymanagers");
@@ -1673,23 +1735,72 @@ public class MCPUtils {
             method.setHeader(APIConstants.HEADER_TENANT, tenantDomain);
             URL configUrl = new URL(url);
             HttpClient httpClient = APIUtil.getHttpClient(configUrl.getPort(), configUrl.getProtocol());
-            HttpResponse httpResponse = httpClient.execute(method);
-            if (httpResponse.getStatusLine().getStatusCode() == HttpStatus.SC_OK) {
+            httpResponse = httpClient.execute(method);
+            int statusCode = httpResponse.getStatusLine().getStatusCode();
+            if (statusCode == HttpStatus.SC_OK) {
                 String responseString = EntityUtils.toString(httpResponse.getEntity(), StandardCharsets.UTF_8);
                 KeyManagerConfigurationDTO[] keyManagerConfigurations =
-                        new Gson().fromJson(responseString, KeyManagerConfigurationDTO[].class);
+                        MCP_METADATA_GSON.fromJson(responseString, KeyManagerConfigurationDTO[].class);
                 if (keyManagerConfigurations == null) {
                     return Collections.emptyList();
                 }
                 return Arrays.asList(keyManagerConfigurations);
             }
-            log.warn("Failed to retrieve Key Manager configurations from Event Hub for tenant " + tenantDomain
-                    + ", status=" + httpResponse.getStatusLine().getStatusCode());
+            if (log.isDebugEnabled()) {
+                log.debug("Failed to retrieve Key Manager configurations from Event Hub for tenant " + tenantDomain
+                        + ", status=" + statusCode);
+            }
         } catch (Exception e) {
-            log.warn("Error retrieving Key Manager configurations from Event Hub for MCP metadata, tenant="
-                    + tenantDomain, e);
+            if (log.isDebugEnabled()) {
+                log.debug("Error retrieving Key Manager configurations from Event Hub for MCP metadata, tenant="
+                        + tenantDomain, e);
+            }
+        } finally {
+            consumeHttpResponseEntity(httpResponse);
         }
-        return Collections.emptyList();
+        return null;
+    }
+
+    /**
+     * Seeds per-Key-Manager metadata cache entries after a tenant-level Event Hub load.
+     */
+    private static void populateMetadataKeyManagerCacheFromTenantLoad(
+            List<KeyManagerConfigurationDTO> configurations) {
+        if (configurations == null || configurations.isEmpty()) {
+            return;
+        }
+        for (KeyManagerConfigurationDTO configuration : configurations) {
+            if (configuration == null) {
+                continue;
+            }
+            if (StringUtils.isNotBlank(configuration.getName())) {
+                MCP_METADATA_KEY_MANAGER_CACHE.putIfAbsent(
+                        buildMetadataKeyManagerCacheKey(APIConstants.SUPER_TENANT_DOMAIN, configuration.getName()),
+                        configuration);
+            }
+            if (StringUtils.isNotBlank(configuration.getUuid())) {
+                MCP_METADATA_KEY_MANAGER_CACHE.putIfAbsent(
+                        buildMetadataKeyManagerCacheKey(APIConstants.SUPER_TENANT_DOMAIN, configuration.getUuid()),
+                        configuration);
+            }
+        }
+    }
+
+    /**
+     * Ensures the HTTP response entity is consumed so connections are returned to the pool.
+     * No-op when the entity was already read (e.g. by {@link EntityUtils#toString}).
+     */
+    private static void consumeHttpResponseEntity(HttpResponse httpResponse) {
+        if (httpResponse == null || httpResponse.getEntity() == null) {
+            return;
+        }
+        try {
+            EntityUtils.consume(httpResponse.getEntity());
+        } catch (IOException e) {
+            if (log.isDebugEnabled()) {
+                log.debug("Failed to consume Event Hub HTTP response entity", e);
+            }
+        }
     }
 
     private static void addAuthorizationServer(Set<String> authorizationServers, KeyManagerDto keyManagerDto) {
@@ -1710,7 +1821,6 @@ public class MCPUtils {
                                                                                 List<String> fallbackScopes) {
         OAuthProtectedResourceDTO metadata = new OAuthProtectedResourceDTO();
         List<String> keyManagers = DataHolder.getInstance().getKeyManagersFromUUID(matchedAPI.getUuid());
-        log.info("buildOAuthProtectedResourceMetadata keyManagers:" + keyManagers);
         org.apache.axis2.context.MessageContext axis2MC =
                 ((Axis2MessageContext) messageContext).getAxis2MessageContext();
         Map headers = (Map) axis2MC.getProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS);

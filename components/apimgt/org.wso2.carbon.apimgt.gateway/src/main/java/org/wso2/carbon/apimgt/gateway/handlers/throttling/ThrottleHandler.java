@@ -235,9 +235,9 @@ public class ThrottleHandler extends AbstractHandler implements ManagedLifecycle
         String subscriberTenantDomain = "";
         String apiTenantDomain = getTenantDomain();
         ConditionGroupDTO[] conditionGroupDTOs;
-        String applicationId = authContext.getApplicationId();
         //If Authz context is not null only we can proceed with throttling
         if (authContext != null) {
+            String applicationId = authContext.getApplicationId();
             authorizedUser = authContext.getUsername();
 
             //Check if the tenant domain is appended with authorizedUser and append if it is not there
@@ -670,8 +670,17 @@ public class ThrottleHandler extends AbstractHandler implements ManagedLifecycle
             return true;
         }
 
-        // Skip throttling for MCP handshake methods on both native MCP APIs and REST APIs categorized as MCP.
-        // McpInitHandler sets MCP_METHOD for JSON-RPC requests and isMcp for other MCP paths (e.g. GET /mcp).
+        // Skip throttling for MCP requests that skip authentication (well-known, GET /mcp, handshake notifications).
+        if (messageContext.getPropertyKeySet().contains(APIMgtGatewayConstants.MCP_NO_AUTH_REQUEST)
+                && Boolean.TRUE.equals(messageContext.getProperty(APIMgtGatewayConstants.MCP_NO_AUTH_REQUEST))) {
+            if (log.isDebugEnabled()) {
+                log.debug("Skipping MCP no-auth request throttling.");
+            }
+            return true;
+        }
+
+        // Skip throttling for MCP JSON-RPC handshake methods (initialize, tools/list, ping, etc.).
+        // McpInitHandler sets MCP_METHOD for JSON-RPC requests.
         if (messageContext.getPropertyKeySet().contains(MCP_METHOD)) {
             String mcpMethod = (String) messageContext.getProperty(MCP_METHOD);
             if (!APIConstants.MCP.METHOD_TOOL_CALL.equalsIgnoreCase(mcpMethod)) {
@@ -680,11 +689,6 @@ public class ThrottleHandler extends AbstractHandler implements ManagedLifecycle
                 }
                 return true;
             }
-        } else if (messageContext.getProperty("isMcp") != null) {
-            if (log.isDebugEnabled()) {
-                log.debug("Skipping MCP handshake request throttling.");
-            }
-            return true;
         }
 
         if (ServiceReferenceHolder.getInstance().getThrottleDataPublisher() == null) {
