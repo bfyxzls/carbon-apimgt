@@ -1821,7 +1821,6 @@ public class MCPUtils {
                                                                                 List<String> fallbackScopes) {
         OAuthProtectedResourceDTO metadata = new OAuthProtectedResourceDTO();
         List<String> keyManagers = DataHolder.getInstance().getKeyManagersFromUUID(matchedAPI.getUuid());
-        log.info("buildOAuthProtectedResourceMetadata keyManagers:" + keyManagers);
         org.apache.axis2.context.MessageContext axis2MC =
                 ((Axis2MessageContext) messageContext).getAxis2MessageContext();
         Map headers = (Map) axis2MC.getProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS);
