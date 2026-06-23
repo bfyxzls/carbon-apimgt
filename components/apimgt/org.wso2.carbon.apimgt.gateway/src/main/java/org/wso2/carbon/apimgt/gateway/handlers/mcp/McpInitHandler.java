@@ -30,10 +30,12 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.synapse.ManagedLifecycle;
 import org.apache.synapse.MessageContext;
+import org.apache.synapse.SynapseConstants;
 import org.apache.synapse.commons.json.JsonUtil;
 import org.apache.synapse.core.SynapseEnvironment;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.rest.AbstractHandler;
+import org.apache.synapse.transport.passthru.PassThroughConstants;
 import org.apache.synapse.transport.passthru.util.RelayUtils;
 import org.wso2.carbon.apimgt.api.model.APIOperationMapping;
 import org.wso2.carbon.apimgt.api.model.BackendOperation;
@@ -151,6 +153,7 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
                 messageContext.setProperty(MCP_NO_AUTH_REQUEST, true);
                 messageContext.setProperty("MCP_HTTP_METHOD", APIConstants.HTTP_GET);
                 messageContext.setProperty("MCP_API_ELECTED_RESOURCE", MCP_RESOURCE);
+                MCPUtils.markMcpStreamableHttpAsAsync(messageContext);
             } else {
                 boolean isNoAuthMCPRequest = isNoAuthMCPRequest(buildMCPRequest(messageContext));
                 messageContext.setProperty(MCP_NO_AUTH_REQUEST, isNoAuthMCPRequest);
@@ -166,6 +169,12 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
 
     @Override
     public boolean handleResponse(MessageContext messageContext) {
+        if (messageContext.getProperty("isMcp") != null && isMcpFaultFlow(messageContext)) {
+            MCPUtils.discardPassthroughMessage(messageContext);
+            clearMcpMessageContextProperties(messageContext);
+            return true;
+        }
+
         org.apache.axis2.context.MessageContext axis2MessageContext =
                 ((Axis2MessageContext) messageContext).getAxis2MessageContext();
         Map headers = (Map) axis2MessageContext.getProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS);
@@ -671,5 +680,33 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
         } catch (Exception e) {
             log.warn("Unexpected error while parsing MCP response: " + e.getMessage(), e);
         }
+    }
+
+    private boolean isMcpFaultFlow(MessageContext messageContext) {
+        return messageContext.getProperty(SynapseConstants.ERROR_CODE) != null
+                || messageContext.getProperty(SynapseConstants.ERROR_MESSAGE) != null
+                || messageContext.getProperty("MCP_ERROR_CODE") != null;
+    }
+
+    private void clearMcpMessageContextProperties(MessageContext messageContext) {
+        messageContext.setProperty("isMcp", null);
+        messageContext.setProperty("MCP_ID", null);
+        messageContext.setProperty("MCP_HTTP_METHOD", null);
+        messageContext.setProperty("MCP_API_ELECTED_RESOURCE", null);
+        messageContext.setProperty("MCP_PROCESSED", null);
+        messageContext.setProperty("MCP_ERROR_CODE", null);
+        messageContext.setProperty(MCP_METHOD, null);
+        messageContext.setProperty(MCP_REQUEST_BODY, null);
+        messageContext.setProperty(MCP_NO_AUTH_REQUEST, null);
+        messageContext.setProperty(MCP_AUTH_CLAIM, null);
+        messageContext.setProperty(MCP_TOOL_PARAMS, null);
+        messageContext.setProperty(MCP_RESULT_IS_ERROR, null);
+        messageContext.setProperty(
+                org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.IS_ASYNC_API, null);
+        messageContext.setProperty(APIConstants.AsyncApi.ASYNC_MESSAGE_TYPE, null);
+
+        org.apache.axis2.context.MessageContext axis2MC =
+                ((Axis2MessageContext) messageContext).getAxis2MessageContext();
+        axis2MC.removeProperty(PassThroughConstants.SYNAPSE_ARTIFACT_TYPE);
     }
 }

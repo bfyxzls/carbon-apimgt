@@ -62,7 +62,7 @@ public class McpGlobalWellKnownHandler extends AbstractHandler {
         String requestPath = resolveRequestPath(messageContext);
         String apiContext = resolveTargetApiContext(messageContext, tenantDomain, requestPath);
         if (StringUtils.isEmpty(apiContext)) {
-            log.warn("Unable to resolve MCP API context for global oauth-protected-resource request. "
+            log.debug("Unable to resolve MCP API context for global oauth-protected-resource request. "
                     + "tenant=" + tenantDomain + ", path=" + requestPath);
             MCPUtils.setHttpResponseStatus(messageContext, HttpStatus.SC_NOT_FOUND, true);
             return true;
@@ -70,7 +70,7 @@ public class McpGlobalWellKnownHandler extends AbstractHandler {
 
         API matchedAPI = MCPUtils.findMcpApiByContext(tenantDomain, apiContext);
         if (matchedAPI == null) {
-            log.warn("No MCP API found for global oauth-protected-resource request. tenant=" + tenantDomain
+            log.debug("No MCP API found for global oauth-protected-resource request. tenant=" + tenantDomain
                     + ", resolvedContext=" + apiContext + ", path=" + requestPath);
             MCPUtils.setHttpResponseStatus(messageContext, HttpStatus.SC_NOT_FOUND, true);
             return true;

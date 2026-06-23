@@ -40,6 +40,8 @@ import org.apache.synapse.commons.json.JsonUtil;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.rest.RESTConstants;
 import org.apache.synapse.transport.nhttp.NhttpConstants;
+import org.apache.synapse.transport.passthru.PassThroughConstants;
+import org.apache.synapse.transport.passthru.util.RelayUtils;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.model.APIOperationMapping;
 import org.wso2.carbon.apimgt.api.model.BackendOperation;
@@ -587,6 +589,40 @@ public class MCPUtils {
     }
 
     /**
+     * Consumes and discards any buffered pass-through payload so fault responses do not retain Pipe data.
+     *
+     * @param messageContext Synapse message context
+     */
+    public static void discardPassthroughMessage(MessageContext messageContext) {
+        if (messageContext == null) {
+            return;
+        }
+        org.apache.axis2.context.MessageContext axis2MC =
+                ((Axis2MessageContext) messageContext).getAxis2MessageContext();
+        axis2MC.setProperty(PassThroughConstants.MESSAGE_BUILDER_INVOKED, Boolean.TRUE);
+        try {
+            RelayUtils.consumeAndDiscardMessage(axis2MC);
+        } catch (AxisFault axisFault) {
+            log.error("Error occurred while consuming and discarding the passthrough message", axisFault);
+        }
+    }
+
+    /**
+     * Marks an MCP Streamable HTTP GET channel as an async SSE stream for passthrough lifecycle hooks.
+     *
+     * @param messageContext Synapse message context
+     */
+    public static void markMcpStreamableHttpAsAsync(MessageContext messageContext) {
+        org.apache.axis2.context.MessageContext axis2MC =
+                ((Axis2MessageContext) messageContext).getAxis2MessageContext();
+        axis2MC.setProperty(PassThroughConstants.SYNAPSE_ARTIFACT_TYPE, APIConstants.API_TYPE_SSE);
+        messageContext.setProperty(
+                org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.IS_ASYNC_API, true);
+        messageContext.setProperty(APIConstants.AsyncApi.ASYNC_MESSAGE_TYPE,
+                APIConstants.AsyncApi.ASYNC_MESSAGE_TYPE_SUBSCRIBE);
+    }
+
+    /**
      * This method handles failures
      *
      * @param messageContext message context of the request
@@ -616,6 +652,7 @@ public class MCPUtils {
         if (responseDto.getStatusCode() == HttpStatus.SC_UNAUTHORIZED) {
             setMcpWwwAuthenticateHeader(messageContext, HttpStatus.SC_UNAUTHORIZED, null, null);
         }
+        discardPassthroughMessage(messageContext);
         Utils.sendFault(messageContext, responseDto.getStatusCode());
     }
 
@@ -1879,6 +1916,7 @@ public class MCPUtils {
             headers.put(HttpHeaders.CACHE_CONTROL, "no-cache");
             headers.put(HttpHeaders.CONNECTION, "keep-alive");
             headers.put(APIConstants.HEADER_CONTENT_TYPE, SseApiConstants.SSE_CONTENT_TYPE);
+            markMcpStreamableHttpAsAsync(messageContext);
             messageContext.setProperty("MCP_PROCESSED", "true");
             if (log.isDebugEnabled()) {
                 log.debug("Streamable HTTP GET /mcp answered with text/event-stream");
