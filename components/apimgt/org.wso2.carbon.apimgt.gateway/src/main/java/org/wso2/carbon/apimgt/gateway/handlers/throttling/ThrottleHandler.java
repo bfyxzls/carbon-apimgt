@@ -205,9 +205,9 @@ public class ThrottleHandler extends AbstractHandler implements ManagedLifecycle
         String subscriberTenantDomain = "";
         String apiTenantDomain = getTenantDomain();
         ConditionGroupDTO[] conditionGroupDTOs;
-        String applicationId = authContext.getApplicationId();
         //If Authz context is not null only we can proceed with throttling
         if (authContext != null) {
+            String applicationId = authContext.getApplicationId();
             authorizedUser = authContext.getUsername();
 
             //Check if the tenant domain is appended with authorizedUser and append if it is not there
@@ -619,6 +619,15 @@ public class ThrottleHandler extends AbstractHandler implements ManagedLifecycle
         if (Utils.isGraphQLSubscriptionRequest(messageContext)) {
             if (log.isDebugEnabled()) {
                 log.debug("Skipping GraphQL subscription handshake request.");
+            }
+            return true;
+        }
+
+        // Skip throttling for MCP requests that skip authentication (well-known, GET /mcp, handshake notifications).
+        if (messageContext.getPropertyKeySet().contains(APIMgtGatewayConstants.MCP_NO_AUTH_REQUEST)
+                && Boolean.TRUE.equals(messageContext.getProperty(APIMgtGatewayConstants.MCP_NO_AUTH_REQUEST))) {
+            if (log.isDebugEnabled()) {
+                log.debug("Skipping MCP no-auth request throttling.");
             }
             return true;
         }

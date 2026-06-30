@@ -110,6 +110,14 @@ public class MCPUtils {
             new ConcurrentHashMap<>();
 
     /**
+     * Tenant-level cache of Key Manager lists fetched from Event Hub for MCP well-known metadata.
+     */
+    private static final Map<String, EventHubKeyManagerTenantCacheEntry> EVENT_HUB_KM_TENANT_CACHE =
+            new ConcurrentHashMap<>();
+
+    private static final long EVENT_HUB_KM_TENANT_CACHE_TTL_MS = 15 * 60 * 1000L;
+
+    /**
      * Cache for MCP API context lookups (well-known metadata). Avoids scanning all APIs per request.
      */
     private static final Map<String, API> MCP_API_CONTEXT_LOOKUP_CACHE = new ConcurrentHashMap<>();
@@ -118,6 +126,21 @@ public class MCPUtils {
 
     private static final Gson MCP_METADATA_GSON = new Gson();
 
+    private static final class EventHubKeyManagerTenantCacheEntry {
+
+        private final List<KeyManagerConfigurationDTO> configurations;
+        private final long loadedAtMs;
+
+        private EventHubKeyManagerTenantCacheEntry(List<KeyManagerConfigurationDTO> configurations,
+                                                   long loadedAtMs) {
+            this.configurations = configurations;
+            this.loadedAtMs = loadedAtMs;
+        }
+
+        private boolean isExpired() {
+            return System.currentTimeMillis() - loadedAtMs > EVENT_HUB_KM_TENANT_CACHE_TTL_MS;
+        }
+    }
     /**
      * Validates the MCP request.
      *
@@ -917,15 +940,17 @@ public class MCPUtils {
      * Collects scopes defined on the MCP API URL mappings.
      */
     public static List<String> getAllScopesFromApi(API api) {
-        List<String> allScopes = new ArrayList<>();
-        if (api != null && api.getResources() != null) {
-            for (URLMapping urlMapping : api.getResources()) {
-                if (urlMapping.getScopes() != null) {
-                    allScopes.addAll(urlMapping.getScopes());
-                }
-            }
-        }
-        return allScopes;
+        // 这块resolveScopesSupported之前已经写死了，所以不需要再查询了
+        //        List<String> allScopes = new ArrayList<>();
+        //        if (api != null && api.getResources() != null) {
+        //            for (URLMapping urlMapping : api.getResources()) {
+        //                if (urlMapping.getScopes() != null) {
+        //                    allScopes.addAll(urlMapping.getScopes());
+        //                }
+        //            }
+        //        }
+        //        return allScopes;
+        return Collections.emptyList();
     }
 
     /**
@@ -1695,13 +1720,39 @@ public class MCPUtils {
     }
 
     private static List<KeyManagerConfigurationDTO> fetchKeyManagerConfigurationsFromEventHub(String tenantDomain) {
+        if (StringUtils.isBlank(tenantDomain)) {
+            return Collections.emptyList();
+        }
+        EventHubKeyManagerTenantCacheEntry cachedEntry = EVENT_HUB_KM_TENANT_CACHE.get(tenantDomain);
+        if (cachedEntry != null && !cachedEntry.isExpired()) {
+            if (log.isDebugEnabled()) {
+                log.debug("Using cached Event Hub Key Manager configurations for tenant: " + tenantDomain);
+            }
+            return cachedEntry.configurations;
+        }
+        if (cachedEntry != null) {
+            EVENT_HUB_KM_TENANT_CACHE.remove(tenantDomain, cachedEntry);
+        }
+
+        List<KeyManagerConfigurationDTO> loadedConfigurations =
+                loadKeyManagerConfigurationsFromEventHub(tenantDomain);
+        if (loadedConfigurations == null) {
+            return Collections.emptyList();
+        }
+        EVENT_HUB_KM_TENANT_CACHE.put(tenantDomain, new EventHubKeyManagerTenantCacheEntry(
+                Collections.unmodifiableList(new ArrayList<>(loadedConfigurations)), System.currentTimeMillis()));
+        populateMetadataKeyManagerCacheFromTenantLoad(loadedConfigurations);
+        return loadedConfigurations;
+    }
+
+    private static List<KeyManagerConfigurationDTO> loadKeyManagerConfigurationsFromEventHub(String tenantDomain) {
         EventHubConfigurationDto eventHubConfiguration =
                 ServiceReferenceHolder.getInstance().getAPIManagerConfiguration().getEventHubConfigurationDto();
         if (eventHubConfiguration == null || !eventHubConfiguration.isEnabled()) {
             if (log.isDebugEnabled()) {
                 log.debug("Event Hub is not enabled; cannot load disabled Key Manager configurations for MCP metadata");
             }
-            return Collections.emptyList();
+            return null;
         }
         HttpResponse httpResponse = null;
         try {
@@ -1737,7 +1788,32 @@ public class MCPUtils {
         } finally {
             consumeHttpResponseEntity(httpResponse);
         }
-        return Collections.emptyList();
+        return null;
+    }
+
+    /**
+     * Seeds per-Key-Manager metadata cache entries after a tenant-level Event Hub load.
+     */
+    private static void populateMetadataKeyManagerCacheFromTenantLoad(
+            List<KeyManagerConfigurationDTO> configurations) {
+        if (configurations == null || configurations.isEmpty()) {
+            return;
+        }
+        for (KeyManagerConfigurationDTO configuration : configurations) {
+            if (configuration == null) {
+                continue;
+            }
+            if (StringUtils.isNotBlank(configuration.getName())) {
+                MCP_METADATA_KEY_MANAGER_CACHE.putIfAbsent(
+                        buildMetadataKeyManagerCacheKey(APIConstants.SUPER_TENANT_DOMAIN, configuration.getName()),
+                        configuration);
+            }
+            if (StringUtils.isNotBlank(configuration.getUuid())) {
+                MCP_METADATA_KEY_MANAGER_CACHE.putIfAbsent(
+                        buildMetadataKeyManagerCacheKey(APIConstants.SUPER_TENANT_DOMAIN, configuration.getUuid()),
+                        configuration);
+            }
+        }
     }
 
     /**
