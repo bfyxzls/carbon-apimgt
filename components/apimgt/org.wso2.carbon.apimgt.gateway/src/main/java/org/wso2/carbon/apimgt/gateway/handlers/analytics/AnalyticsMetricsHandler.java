@@ -26,6 +26,7 @@ import org.apache.synapse.api.ApiUtils;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.wso2.carbon.apimgt.common.analytics.collectors.AnalyticsDataProvider;
 import org.wso2.carbon.apimgt.common.analytics.collectors.impl.GenericRequestDataCollector;
+import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
 import org.wso2.carbon.apimgt.gateway.handlers.DataPublisherUtil;
 import org.wso2.carbon.apimgt.gateway.handlers.streaming.AsyncAnalyticsDataProvider;
 import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
@@ -40,6 +41,7 @@ import java.util.Map;
  * Global synapse handler to publish analytics data to analytics cloud.
  */
 public class AnalyticsMetricsHandler extends AbstractExtendedSynapseHandler {
+
     private static final Log log = LogFactory.getLog(AnalyticsMetricsHandler.class);
 
     @Override
@@ -89,8 +91,7 @@ public class AnalyticsMetricsHandler extends AbstractExtendedSynapseHandler {
             return true;
         }
 
-        Object skipPublishMetrics = messageContext.getProperty(Constants.SKIP_METRICS_PUBLISHING);
-        if (skipPublishMetrics != null && (Boolean) skipPublishMetrics) {
+        if (shouldSkipAnalyticsPublishing(messageContext)) {
             return true;
         }
 
@@ -166,6 +167,32 @@ public class AnalyticsMetricsHandler extends AbstractExtendedSynapseHandler {
             return (String) headers.get(APIConstants.USER_AGENT);
         }
         return null;
+    }
+
+    /**
+     * Determines whether analytics/audit event publishing should be skipped for the current request.
+     * MCP {@code ping} health-check calls are excluded to avoid noisy audit records.
+     */
+    private boolean shouldSkipAnalyticsPublishing(MessageContext messageContext) {
+        Object skipPublishMetrics = messageContext.getProperty(Constants.SKIP_METRICS_PUBLISHING);
+        if (skipPublishMetrics != null && (Boolean) skipPublishMetrics) {
+            return true;
+        }
+        if (messageContext.getPropertyKeySet().contains("isMcp")) {
+            String mcpMethod = (String) messageContext.getProperty(APIMgtGatewayConstants.MCP_METHOD);
+            // TODO: 跳过ping,initialize,notifications/initialized,resources/templates/list方法，不进行审计日志的记录
+            if (APIConstants.MCP.METHOD_PING.equals(mcpMethod)
+                    || APIConstants.MCP.METHOD_INITIALIZE.equals(mcpMethod)
+                    || APIConstants.MCP.METHOD_TOOL_LIST.equals(mcpMethod)
+                    || APIConstants.MCP.METHOD_NOTIFICATION_INITIALIZED.equals(mcpMethod)
+                    || APIConstants.MCP.METHOD_RESOURCE_TEMPLATE_LIST.equals(mcpMethod)) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Skipping analytics publishing for MCP ping request");
+                }
+                return true;
+            }
+        }
+        return false;
     }
 
 }

@@ -81,6 +81,7 @@ import static org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler.MCP_MET
 import static org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler.MCP_NO_AUTH_REQUEST;
 import static org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler.MCP_REQUEST_BODY;
 import static org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler.MCP_RESULT_IS_ERROR;
+import static org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler.MCP_TOOL_NAME;
 
 public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
 
@@ -460,6 +461,9 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         if (messageContext.getPropertyKeySet().contains(MCP_METHOD)) {
             customProperties.put("mcpMethod", messageContext.getProperty(MCP_METHOD));
         }
+        if (messageContext.getPropertyKeySet().contains(MCP_TOOL_NAME)) {
+            customProperties.put("mcpToolName", messageContext.getProperty(MCP_TOOL_NAME));
+        }
         if (messageContext.getPropertyKeySet().contains("MCP_HTTP_METHOD")) {
             customProperties.put("mcpHttpMethod", messageContext.getProperty("MCP_HTTP_METHOD"));
         }
@@ -487,6 +491,10 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         if (messageContext.getPropertyKeySet().contains("Authorization")) {
             customProperties.put("Authorization",
                     messageContext.getProperty("Authorization"));
+        }
+        if (messageContext.getPropertyKeySet().contains(Constants.USER_AGENT_PROPERTY)) {
+            customProperties.put("User-Agent",
+                    messageContext.getProperty(Constants.USER_AGENT_PROPERTY));
         }
         if (messageContext.getPropertyKeySet().contains("headers")) {
             customProperties.put("headers",

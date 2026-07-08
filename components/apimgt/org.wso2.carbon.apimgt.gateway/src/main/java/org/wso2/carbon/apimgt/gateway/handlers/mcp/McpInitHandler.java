@@ -25,6 +25,7 @@ import com.google.gson.JsonSyntaxException;
 import org.apache.axiom.om.OMElement;
 import org.apache.axiom.soap.SOAPEnvelope;
 import org.apache.axis2.AxisFault;
+import org.apache.axis2.Constants;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -47,7 +48,10 @@ import org.wso2.carbon.apimgt.gateway.mcp.request.McpRequest;
 import org.wso2.carbon.apimgt.gateway.mcp.request.Params;
 import org.wso2.carbon.apimgt.gateway.mcp.request.ParamsDeserializer;
 import org.wso2.carbon.apimgt.gateway.mcp.response.McpResponseDto;
+import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
 import org.wso2.carbon.apimgt.gateway.handlers.Utils;
+import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityConstants;
+import org.apache.http.HttpHeaders;
 import org.apache.http.HttpStatus;
 import org.wso2.carbon.apimgt.gateway.utils.GatewayUtils;
 import org.wso2.carbon.apimgt.gateway.utils.MCPUtils;
@@ -95,7 +99,12 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
 
     public static final String MCP_TOOL_PARAMS = "MCP_TOOL_PARAMS";
 
+    public static final String MCP_TOOL_NAME = "MCP_TOOL_NAME";
+
     public static final String MCP_RESULT_IS_ERROR = "MCP_RESULT_IS_ERROR";
+
+    private static final String TOOLS_CALL_UNAUTHORIZED_RESPONSE_BODY =
+            "{\"message\":\"未检测到有效的 MCP 服务 Token，请前往购买页面订阅后获取\"}";
 
     private static final Log log = LogFactory.getLog(McpInitHandler.class);
 
@@ -155,8 +164,13 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
                 messageContext.setProperty("MCP_API_ELECTED_RESOURCE", MCP_RESOURCE);
                 MCPUtils.markMcpStreamableHttpAsAsync(messageContext);
             } else {
-                boolean isNoAuthMCPRequest = isNoAuthMCPRequest(buildMCPRequest(messageContext));
+                String mcpMethod = buildMCPRequest(messageContext);
+                boolean isNoAuthMCPRequest = isNoAuthMCPRequest(mcpMethod);
                 messageContext.setProperty(MCP_NO_AUTH_REQUEST, isNoAuthMCPRequest);
+                if (StringUtils.equals(mcpMethod, METHOD_TOOL_CALL) && !hasRequestCredentials(messageContext)) {
+                    handleToolsCallUnauthorized(messageContext);
+                    return false;
+                }
             }
         } catch (McpException e) {
             // Use HTTP 200 for JSON-RPC errors as per JSON-RPC 2.0 specification
@@ -170,6 +184,11 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
     @Override
     public boolean handleResponse(MessageContext messageContext) {
         if (messageContext.getProperty("isMcp") != null && isMcpFaultFlow(messageContext)) {
+            if (isToolsCallMissingTokenUnauthorized(messageContext)) {
+                setToolsCallUnauthorizedResponseBody(messageContext);
+                MCPUtils.setMcpWwwAuthenticateHeader(messageContext, HttpStatus.SC_UNAUTHORIZED, "invalid_request",
+                        "Access token is missing");
+            }
             MCPUtils.discardPassthroughMessage(messageContext);
             clearMcpMessageContextProperties(messageContext);
             return true;
@@ -196,6 +215,9 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
             int responseStatusCode = MCPUtils.resolveResponseStatusCode(messageContext);
             if (responseStatusCode == HttpStatus.SC_UNAUTHORIZED) {
                 MCPUtils.setMcpWwwAuthenticateHeader(messageContext, HttpStatus.SC_UNAUTHORIZED, null, null);
+                if (isToolsCallMissingTokenUnauthorized(messageContext)) {
+                    setToolsCallUnauthorizedResponseBody(messageContext);
+                }
             }
         }
         // Fix duplicate Content-Type issue: PassThrough Transport combines TRANSPORT_HEADERS Content-Type
@@ -327,6 +349,9 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
                 if (StringUtils.equals(method, METHOD_TOOL_CALL)) {
                     Params params = request.getParams();
                     String toolName = params.getToolName();
+                    if (StringUtils.isNotBlank(toolName)) {
+                        messageContext.setProperty(MCP_TOOL_NAME, toolName);
+                    }
                     API api = GatewayUtils.getAPI(messageContext);
                     URLMapping extendedOperation = api.getUrlMappings()
                             .stream()
@@ -688,6 +713,67 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
                 || messageContext.getProperty("MCP_ERROR_CODE") != null;
     }
 
+    private boolean hasRequestCredentials(MessageContext messageContext) {
+        org.apache.axis2.context.MessageContext axis2MC =
+                ((Axis2MessageContext) messageContext).getAxis2MessageContext();
+        Map headers = (Map) axis2MC.getProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS);
+        if (headers == null) {
+            return false;
+        }
+        String authorization = (String) headers.get(APIMgtGatewayConstants.AUTHORIZATION);
+        if (authorization == null) {
+            authorization = (String) headers.get(HttpHeaders.AUTHORIZATION);
+        }
+        if (StringUtils.isNotBlank(authorization)) {
+            String trimmedAuthorization = authorization.trim();
+            if (trimmedAuthorization.regionMatches(true, 0, "Bearer ", 0, 7)) {
+                return StringUtils.isNotBlank(trimmedAuthorization.substring(7).trim());
+            }
+            if (trimmedAuthorization.regionMatches(true, 0, "Basic ", 0, 6)) {
+                return StringUtils.isNotBlank(trimmedAuthorization.substring(6).trim());
+            }
+            return true;
+        }
+        String internalKey = (String) headers.get(APIMgtGatewayConstants.INTERNAL_KEY);
+        return StringUtils.isNotBlank(internalKey);
+    }
+
+    private boolean isToolsCallMissingTokenUnauthorized(MessageContext messageContext) {
+        if (!StringUtils.equals((String) messageContext.getProperty(MCP_METHOD), METHOD_TOOL_CALL)) {
+            return false;
+        }
+        if (MCPUtils.resolveResponseStatusCode(messageContext) != HttpStatus.SC_UNAUTHORIZED) {
+            return false;
+        }
+        Object errorCode = messageContext.getProperty(SynapseConstants.ERROR_CODE);
+        if (errorCode instanceof Integer
+                && (Integer) errorCode == APISecurityConstants.API_AUTH_MISSING_CREDENTIALS) {
+            return true;
+        }
+        return !hasRequestCredentials(messageContext);
+    }
+
+    private void handleToolsCallUnauthorized(MessageContext messageContext) {
+        setToolsCallUnauthorizedResponseBody(messageContext);
+        MCPUtils.setMcpWwwAuthenticateHeader(messageContext, HttpStatus.SC_UNAUTHORIZED, "invalid_request",
+                "Access token is missing");
+        MCPUtils.discardPassthroughMessage(messageContext);
+        Utils.sendFault(messageContext, HttpStatus.SC_UNAUTHORIZED);
+    }
+
+    private void setToolsCallUnauthorizedResponseBody(MessageContext messageContext) {
+        org.apache.axis2.context.MessageContext axis2MC =
+                ((Axis2MessageContext) messageContext).getAxis2MessageContext();
+        try {
+            JsonUtil.removeJsonPayload(axis2MC);
+            JsonUtil.getNewJsonPayload(axis2MC, TOOLS_CALL_UNAUTHORIZED_RESPONSE_BODY, true, true);
+            axis2MC.setProperty(Constants.Configuration.MESSAGE_TYPE, APIConstants.APPLICATION_JSON_MEDIA_TYPE);
+            axis2MC.setProperty(Constants.Configuration.CONTENT_TYPE, APIConstants.APPLICATION_JSON_MEDIA_TYPE);
+        } catch (AxisFault e) {
+            log.warn("Failed to set MCP tools/call unauthorized JSON response body", e);
+        }
+    }
+
     private void clearMcpMessageContextProperties(MessageContext messageContext) {
         messageContext.setProperty("isMcp", null);
         messageContext.setProperty("MCP_ID", null);
@@ -700,6 +786,7 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
         messageContext.setProperty(MCP_NO_AUTH_REQUEST, null);
         messageContext.setProperty(MCP_AUTH_CLAIM, null);
         messageContext.setProperty(MCP_TOOL_PARAMS, null);
+        messageContext.setProperty(MCP_TOOL_NAME, null);
         messageContext.setProperty(MCP_RESULT_IS_ERROR, null);
         messageContext.setProperty(
                 org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.IS_ASYNC_API, null);
