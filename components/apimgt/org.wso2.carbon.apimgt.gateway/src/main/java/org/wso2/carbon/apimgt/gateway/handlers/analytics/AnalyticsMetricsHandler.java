@@ -57,7 +57,9 @@ public class AnalyticsMetricsHandler extends AbstractExtendedSynapseHandler {
         if (!messageContext.getPropertyKeySet().contains(InboundWebsocketConstants.WEBSOCKET_SUBSCRIBER_PATH)) {
             String userAgent = getUserAgentAndCopyRequestHeadersToContext(messageContext);
             String userIp = DataPublisherUtil.getEndUserIP(messageContext);
-            messageContext.setProperty(Constants.USER_AGENT_PROPERTY, userAgent);
+            if (userAgent != null) {
+                messageContext.setProperty(Constants.USER_AGENT_PROPERTY, userAgent);
+            }
             if (userIp != null) {
                 messageContext.setProperty(Constants.USER_IP_PROPERTY, userIp);
             }
@@ -139,6 +141,11 @@ public class AnalyticsMetricsHandler extends AbstractExtendedSynapseHandler {
     /**
      * Extracts the `User-Agent` header from the transport headers in the given message context
      * and copies them (excluding sensitive headers) to the analytics metadata of the message context.
+     * <p>
+     * User-Agent is read from the original TRANSPORT_HEADERS map (typically a case-insensitive
+     * TreeMap), matching how Authorization is resolved in {@code OAuthAuthenticator}. Looking up
+     * after copying into a plain HashMap would miss headers whose casing differs from
+     * {@code User-Agent}.
      *
      * @param messageContext the Synapse message context containing the headers and other message data
      * @return the value of the `User-Agent` header if available in the transport headers, or null otherwise
@@ -155,16 +162,43 @@ public class AnalyticsMetricsHandler extends AbstractExtendedSynapseHandler {
             return null; // no headers available
         }
 
-        Map<String, Object> headers = new HashMap<>((Map<String, ?>) transportHeadersObj);
+        Map<?, ?> transportHeaders = (Map<?, ?>) transportHeadersObj;
+        // Read from the original map first (case-insensitive TreeMap), same approach as Authorization.
+        String userAgent = getHeaderIgnoreCase(transportHeaders, APIConstants.USER_AGENT);
 
-        if (!headers.isEmpty()) {
+        if (!transportHeaders.isEmpty()) {
             if (log.isDebugEnabled()) {
-                log.debug("Processing " + headers.size() + " request headers for analytics");
+                log.debug("Processing " + transportHeaders.size() + " request headers for analytics");
+            }
+            Map<String, Object> headers = new HashMap<>();
+            for (Map.Entry<?, ?> entry : transportHeaders.entrySet()) {
+                if (entry.getKey() != null) {
+                    headers.put(String.valueOf(entry.getKey()), entry.getValue());
+                }
             }
             headers.keySet().removeIf(APIConstants.AUTHORIZATION_HEADER_DEFAULT::equalsIgnoreCase);
             headers.keySet().removeIf(APIConstants.API_KEY_HEADER_DEFAULT::equalsIgnoreCase);
             axis2mc.setAnalyticsMetadata(Constants.REQUEST_HEADERS, headers);
-            return (String) headers.get(APIConstants.USER_AGENT);
+        }
+        return userAgent;
+    }
+
+    /**
+     * Resolves a transport header value in a case-insensitive manner.
+     */
+    private String getHeaderIgnoreCase(Map<?, ?> headers, String headerName) {
+        if (headers == null || headerName == null) {
+            return null;
+        }
+        Object value = headers.get(headerName);
+        if (value != null) {
+            return String.valueOf(value);
+        }
+        for (Map.Entry<?, ?> entry : headers.entrySet()) {
+            if (entry.getKey() != null && headerName.equalsIgnoreCase(String.valueOf(entry.getKey()))
+                    && entry.getValue() != null) {
+                return String.valueOf(entry.getValue());
+            }
         }
         return null;
     }

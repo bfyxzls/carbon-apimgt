@@ -492,9 +492,27 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
             customProperties.put("Authorization",
                     messageContext.getProperty("Authorization"));
         }
-        if (messageContext.getPropertyKeySet().contains(Constants.USER_AGENT_PROPERTY)) {
-            customProperties.put("User-Agent",
-                    messageContext.getProperty(Constants.USER_AGENT_PROPERTY));
+        Object userAgent = messageContext.getProperty(Constants.USER_AGENT_PROPERTY);
+        if (userAgent == null) {
+            // Fallback: OAuthAuthenticator stores the original request headers map on "headers"
+            Object headersProp = messageContext.getProperty("headers");
+            if (headersProp instanceof Map) {
+                Map<?, ?> requestHeaders = (Map<?, ?>) headersProp;
+                Object headerValue = requestHeaders.get(APIConstants.USER_AGENT);
+                if (headerValue == null) {
+                    for (Map.Entry<?, ?> entry : requestHeaders.entrySet()) {
+                        if (entry.getKey() != null
+                                && APIConstants.USER_AGENT.equalsIgnoreCase(String.valueOf(entry.getKey()))) {
+                            headerValue = entry.getValue();
+                            break;
+                        }
+                    }
+                }
+                userAgent = headerValue;
+            }
+        }
+        if (userAgent != null) {
+            customProperties.put("userAgent", userAgent);
         }
         if (messageContext.getPropertyKeySet().contains("headers")) {
             customProperties.put("headers",
