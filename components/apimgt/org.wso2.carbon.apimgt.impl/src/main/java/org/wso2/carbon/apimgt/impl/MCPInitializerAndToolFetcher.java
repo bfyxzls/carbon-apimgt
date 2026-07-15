@@ -28,7 +28,6 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.util.EntityUtils;
 import org.json.JSONObject;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.ExceptionCodes;
@@ -42,6 +41,9 @@ import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
 /**
  * Initializes an MCP server and fetches the available tools via JSON-RPC.
@@ -81,10 +83,17 @@ public class MCPInitializerAndToolFetcher {
         try (CloseableHttpClient httpClient =
                      (CloseableHttpClient) APIUtil.getHttpClient(endpoint.getPort(), endpoint.getProtocol())) {
 
+            String resolvedEndpoint = resolveMcpEndpoint(mcpServerUrl);
+            if (log.isDebugEnabled()) {
+                log.debug("Resolved MCP endpoint: " + resolvedEndpoint + " (from: " + mcpServerUrl + ")");
+            }
+
             // 1) initialize
             JSONObject initializePayload = buildInitializePayload();
-            JSONObject initializeResponse = sendJsonRpcRequest(httpClient, mcpServerUrl, initializePayload, null);
-            JSONObject initializeResult = parseJsonRpcResult(initializeResponse.getString(APIConstants.MCP.BODY_KEY));
+            JSONObject initializeResponse =
+                    sendJsonRpcRequest(httpClient, resolvedEndpoint, initializePayload, null, false);
+            JSONObject initializeResult =
+                    parseJsonRpcResult(initializeResponse.getString(APIConstants.MCP.BODY_KEY));
 
             if (initializeResult == null) {
                 throw new APIManagementException("Failed to initialize MCP server: result is null");
@@ -95,9 +104,14 @@ public class MCPInitializerAndToolFetcher {
                 log.debug("MCP initialization succeeded; sessionId=" + sessionId);
             }
 
-            // 2) tools/list
-            JSONObject toolsPayload = buildToolsListPayload(sessionId);
-            JSONObject toolsResponse = sendJsonRpcRequest(httpClient, mcpServerUrl, toolsPayload, sessionId);
+            // 2) notifications/initialized (required by MCP lifecycle before normal operations)
+            JSONObject initializedNotification = buildInitializedNotificationPayload();
+            sendJsonRpcRequest(httpClient, resolvedEndpoint, initializedNotification, sessionId, true);
+
+            // 3) tools/list
+            JSONObject toolsPayload = buildToolsListPayload();
+            JSONObject toolsResponse =
+                    sendJsonRpcRequest(httpClient, resolvedEndpoint, toolsPayload, sessionId, false);
 
             return parseJsonRpcResult(toolsResponse.getString(APIConstants.MCP.BODY_KEY));
         } catch (APIManagementException e) {
@@ -105,6 +119,20 @@ public class MCPInitializerAndToolFetcher {
         } catch (Exception e) {
             throw new APIManagementException("Error during MCP interaction: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Resolves the MCP JSON-RPC endpoint.
+     * Accepts either a base URL ({@code https://host}) or a full endpoint ({@code https://host/mcp})
+     * so {@code /mcp} is not appended twice when the caller already includes it.
+     */
+    private String resolveMcpEndpoint(String targetUrl) {
+
+        String trimmed = StringUtils.removeEnd(StringUtils.trimToEmpty(targetUrl), "/");
+        if (trimmed.toLowerCase(Locale.ROOT).endsWith(APIConstants.MCP.MCP_RESOURCES_MCP)) {
+            return trimmed;
+        }
+        return trimmed + APIConstants.MCP.MCP_RESOURCES_MCP;
     }
 
     /**
@@ -136,36 +164,43 @@ public class MCPInitializerAndToolFetcher {
     }
 
     /**
+     * Builds the JSON-RPC {@code notifications/initialized} payload.
+     */
+    private JSONObject buildInitializedNotificationPayload() {
+
+        JSONObject payload = new JSONObject();
+        payload.put(APIConstants.MCP.RpcConstants.JSON_RPC, APIConstants.MCP.RpcConstants.JSON_RPC_VERSION);
+        payload.put(APIConstants.MCP.RpcConstants.METHOD, APIConstants.MCP.METHOD_NOTIFICATION_INITIALIZED);
+        return payload;
+    }
+
+    /**
      * Builds the JSON-RPC tools/list payload.
      */
-    private JSONObject buildToolsListPayload(String sessionId) {
+    private JSONObject buildToolsListPayload() {
 
         JSONObject payload = new JSONObject();
         payload.put(APIConstants.MCP.RpcConstants.JSON_RPC, APIConstants.MCP.RpcConstants.JSON_RPC_VERSION);
         payload.put(APIConstants.MCP.RpcConstants.ID, 2);
         payload.put(APIConstants.MCP.RpcConstants.METHOD, APIConstants.MCP.METHOD_TOOL_LIST);
-
-        JSONObject params = new JSONObject();
-        if (sessionId != null && !sessionId.isEmpty()) {
-            params.put(APIConstants.MCP.SESSION_ID_KEY, sessionId);
-        }
-        payload.put(APIConstants.MCP.PARAMS_KEY, params);
+        payload.put(APIConstants.MCP.PARAMS_KEY, new JSONObject());
         return payload;
     }
 
     /**
-     * Sends a JSON-RPC request; returns wrapper with raw body and optional session id.
+     * Sends a JSON-RPC request/notification; returns wrapper with raw body and optional session id.
+     *
+     * @param notification if true, empty/202 responses are accepted without requiring a JSON-RPC result
      */
     private JSONObject sendJsonRpcRequest(CloseableHttpClient httpClient, String targetUrl, JSONObject jsonBody,
-                                          String sessionId) throws Exception {
+                                          String sessionId, boolean notification) throws Exception {
 
-        targetUrl = targetUrl.endsWith("/") ?
-                targetUrl + APIConstants.MCP.MCP_RESOURCES_MCP_WITHOUT_TRAILING_SLASH :
-                targetUrl + APIConstants.MCP.MCP_RESOURCES_MCP;
         HttpPost request = new HttpPost(targetUrl);
         request.setHeader(APIConstants.MCP.HEADER_CONTENT_TYPE,
                 ContentType.APPLICATION_JSON.withCharset(StandardCharsets.UTF_8).toString());
         request.setHeader(APIConstants.MCP.HEADER_ACCEPT, APIConstants.MCP.ACCEPT_JSON_AND_SSE);
+        // Required on all HTTP requests after initialize (also harmless on the initialize call itself).
+        request.setHeader(APIConstants.MCP.MCP_PROTOCOL_VERSION_HEADER, APIConstants.MCP.PROTOCOL_VERSION_2025_JUNE);
 
         if (secure && authHeaderName != null && !authHeaderName.isEmpty()) {
             request.setHeader(authHeaderName, authHeaderValue == null ? StringUtils.EMPTY : authHeaderValue);
@@ -219,6 +254,10 @@ public class MCPInitializerAndToolFetcher {
                     throw new APIManagementException("Failed to read MCP response body.", e);
                 }
             }
+            // Notifications (e.g. notifications/initialized) may return 202 with an empty body.
+            if (notification && StringUtils.isBlank(body)) {
+                body = StringUtils.EMPTY;
+            }
             Header sessionHeader = response.getFirstHeader(APIConstants.MCP.HEADER_MCP_SESSION_ID);
             String returnedSessionId = sessionHeader != null ? sessionHeader.getValue() : null;
 
@@ -239,7 +278,7 @@ public class MCPInitializerAndToolFetcher {
     private JSONObject parseJsonRpcResult(String responseText) throws APIManagementException {
 
         try {
-            String candidate = extractJsonCandidate(responseText);
+            String candidate = extractJsonRpcResponseCandidate(responseText);
             JSONObject json = new JSONObject(candidate);
 
             if (json.has(APIConstants.MCP.RESULT_KEY)) {
@@ -249,34 +288,93 @@ public class MCPInitializerAndToolFetcher {
                 Object errorObj = json.get(APIConstants.MCP.ERROR_KEY);
                 throw new APIManagementException("MCP server returned error: " + String.valueOf(errorObj));
             }
-            throw new APIManagementException("Unexpected JSON-RPC format: missing 'result'/'error'");
+            String snippet = StringUtils.abbreviate(StringUtils.trimToEmpty(responseText), 500);
+            throw new APIManagementException(
+                    "Unexpected JSON-RPC format: missing 'result'/'error'. Response snippet: " + snippet);
         } catch (APIManagementException e) {
             throw e;
         } catch (Exception e) {
-            throw new APIManagementException("Failed to parse JSON-RPC response: " + e.getMessage(), e);
+            String snippet = StringUtils.abbreviate(StringUtils.trimToEmpty(responseText), 500);
+            throw new APIManagementException(
+                    "Failed to parse JSON-RPC response: " + e.getMessage() + ". Response snippet: " + snippet, e);
         }
     }
 
     /**
-     * Extracts JSON from plain JSON or SSE-style response (last non-empty {@code data:} line).
+     * Extracts a JSON-RPC response candidate from plain JSON or SSE-style payloads.
+     * Prefers an object that contains {@code result} or {@code error}, because Streamable HTTP
+     * servers may emit notifications before/after the actual JSON-RPC response.
      */
-    private String extractJsonCandidate(String responseText) {
+    private String extractJsonRpcResponseCandidate(String responseText) {
 
-        if (responseText == null || responseText.isEmpty()) {
+        List<String> candidates = collectJsonCandidates(responseText);
+        if (candidates.isEmpty()) {
             return "{}";
         }
-        String[] lines = responseText.split("\n");
-        String lastData = null;
-        for (String line : lines) {
-            String trimmed = line.trim();
-            if (trimmed.startsWith(APIConstants.MCP.SSE_DATA_PREFIX)) {
-                String data = trimmed.substring(APIConstants.MCP.SSE_DATA_PREFIX.length()).trim();
-                if (!data.isEmpty()) {
-                    lastData = data;
+
+        String fallback = candidates.get(candidates.size() - 1);
+        for (int i = candidates.size() - 1; i >= 0; i--) {
+            String candidate = candidates.get(i);
+            try {
+                JSONObject json = new JSONObject(candidate);
+                if (json.has(APIConstants.MCP.RESULT_KEY) || json.has(APIConstants.MCP.ERROR_KEY)) {
+                    return candidate;
+                }
+            } catch (Exception e) {
+                // Keep scanning other candidates
+                if (log.isDebugEnabled()) {
+                    log.debug("Skipping non-JSON SSE/JSON-RPC candidate: " + e.getMessage());
                 }
             }
         }
-        return (lastData != null) ? lastData : responseText.trim();
+        return fallback;
+    }
+
+    /**
+     * Collects possible JSON payloads from a plain JSON body or SSE {@code data:} lines.
+     */
+    private List<String> collectJsonCandidates(String responseText) {
+
+        List<String> candidates = new ArrayList<>();
+        if (responseText == null || responseText.isEmpty()) {
+            return candidates;
+        }
+
+        String[] lines = responseText.split("\n");
+        boolean sawSseData = false;
+        StringBuilder multiLineData = new StringBuilder();
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith(APIConstants.MCP.SSE_DATA_PREFIX)) {
+                sawSseData = true;
+                String data = trimmed.substring(APIConstants.MCP.SSE_DATA_PREFIX.length()).trim();
+                if (!data.isEmpty()) {
+                    // SSE allows multi-line data; concatenate contiguous data: lines into one event chunk.
+                    if (multiLineData.length() > 0) {
+                        multiLineData.append('\n');
+                    }
+                    multiLineData.append(data);
+                }
+            } else if (sawSseData && trimmed.isEmpty() && multiLineData.length() > 0) {
+                // Blank line ends an SSE event.
+                candidates.add(multiLineData.toString());
+                multiLineData.setLength(0);
+            } else if (sawSseData && !trimmed.isEmpty() && !trimmed.startsWith("event:")
+                    && !trimmed.startsWith("id:") && !trimmed.startsWith("retry:")) {
+                // Non-data SSE field — flush any pending data block first.
+                if (multiLineData.length() > 0) {
+                    candidates.add(multiLineData.toString());
+                    multiLineData.setLength(0);
+                }
+            }
+        }
+        if (multiLineData.length() > 0) {
+            candidates.add(multiLineData.toString());
+        }
+        if (!sawSseData) {
+            candidates.add(responseText.trim());
+        }
+        return candidates;
     }
 
     /**
