@@ -399,6 +399,7 @@ public class OAuthAuthenticator implements Authenticator {
             //String tenantDomain = MultitenantUtils.getTenantDomain(info.getApiPublisher());
             synCtx.setProperty("api.ut.apiPublisher", info.getApiPublisher());
             synCtx.setProperty("API_NAME", info.getApiName());
+            synCtx.setProperty("userName",info.getEndUserName());
 
             /* GraphQL Query Analysis Information */
             if (APIConstants.GRAPHQL_API.equals(synCtx.getProperty(APIConstants.API_TYPE))) {

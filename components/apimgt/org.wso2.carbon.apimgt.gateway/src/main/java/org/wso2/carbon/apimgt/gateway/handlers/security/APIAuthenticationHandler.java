@@ -16,6 +16,8 @@
 
 package org.wso2.carbon.apimgt.gateway.handlers.security;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import io.swagger.v3.oas.models.OpenAPI;
 import org.apache.axis2.AxisFault;
 import org.apache.axis2.Constants;
@@ -24,7 +26,12 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.HttpHeaders;
+import org.apache.http.HttpResponse;
 import org.apache.http.HttpStatus;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
 import org.apache.synapse.ManagedLifecycle;
 import org.apache.synapse.Mediator;
 import org.apache.synapse.MessageContext;
@@ -694,7 +701,72 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
                         , optionalAuthentication.getErrorMessage());
             }
         }
+        // TODO: 需要判断用户是否有剩余积分
+        validatePoints(messageContext);
         return true;
+    }
+
+    /**
+     * 添加用户积分余额验证的方法
+     *
+     * @param messageContext
+     * @throws APISecurityException
+     */
+    private void validatePoints(MessageContext messageContext) throws APISecurityException {
+        if (messageContext.getProperty("userName") != null) {
+            String userNameStr = (String) messageContext.getProperty("userName");
+            if (userNameStr.endsWith("@carbon.super")) {
+                String userId = userNameStr.split("@carbon.super")[0];
+                String apiPortalUri = "https://gateway.pkulaw.com/api-portal";
+                if (System.getenv().containsKey("API_PORTAL_URI")) {
+                    apiPortalUri = System.getenv().get("API_PORTAL_URI");
+                }
+                String remainPointsUri = apiPortalUri + "/points/remaining/" + userId;
+                // 发起GET请求并解析响应
+                try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+                    HttpGet httpGet = new HttpGet(remainPointsUri);
+                    httpGet.setHeader("Accept", "application/json");
+                    httpGet.setHeader("Content-Type", "application/json");
+
+                    // 执行请求
+                    HttpResponse response = httpClient.execute(httpGet);
+                    String jsonResponse = EntityUtils.toString(response.getEntity(), "UTF-8");
+
+                    // 解析JSON
+                    JsonObject jsonObject = JsonParser.parseString(jsonResponse).getAsJsonObject();
+                    String code = jsonObject.get("code").getAsString();
+
+                    if ("200".equals(code)) {
+                        JsonObject dataObject = jsonObject.getAsJsonObject("data");
+                        String remainingPointsStr = dataObject.get("remainingPoints").getAsString();
+                        int remainingPoints = Integer.parseInt(remainingPointsStr);
+
+                        log.info("User " + userId + " remaining points: " + remainingPoints);
+
+                        // 如果积分<=0，报错
+                        if (remainingPoints <= 0) {
+                            String errorMsg =
+                                    "User " + userId + " has insufficient points. Remaining points: " + remainingPoints;
+                            log.error(errorMsg);
+                            Pair<Integer, String> error = Pair.of(90001, errorMsg);
+                            throw new APISecurityException(error.getKey(), error.getValue());
+                        }
+                    } else {
+                        String msg = jsonObject.get("msg").getAsString();
+                        log.error("API request failed with code: " + code + ", msg: " + msg);
+                        Pair<Integer, String> error = Pair.of(90001, msg);
+                        throw new APISecurityException(error.getKey(), error.getValue());
+                    }
+
+                } catch (Exception e) {
+                    log.error("Error while checking remaining points for user: " + userId, e);
+                    Pair<Integer, String> error =
+                            Pair.of(90001, "Error while checking remaining points for user: " + userId);
+                    throw new APISecurityException(error.getKey(), error.getValue());
+                }
+
+            }
+        }
     }
 
     private Pair<Integer, String> getError(List<AuthenticationResponse> authResponses) {
