@@ -740,9 +740,6 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
                         JsonObject dataObject = jsonObject.getAsJsonObject("data");
                         String remainingPointsStr = dataObject.get("remainingPoints").getAsString();
                         int remainingPoints = Integer.parseInt(remainingPointsStr);
-
-                        log.info("User " + userId + " remaining points: " + remainingPoints);
-
                         // 如果积分<=0，报错
                         if (remainingPoints <= 0) {
                             String errorMsg =
