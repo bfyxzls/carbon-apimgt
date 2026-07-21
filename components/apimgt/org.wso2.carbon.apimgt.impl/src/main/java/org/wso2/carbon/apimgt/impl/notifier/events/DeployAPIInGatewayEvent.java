@@ -29,6 +29,7 @@ public class DeployAPIInGatewayEvent extends Event {
     private Set<APIEvent> associatedApis;
     private String context;
     private boolean deleted;
+    private String apiDisplayName;
 
     public DeployAPIInGatewayEvent(String eventId, long timestamp, String type, String tenantDomain, int apiId,
                                    String uuid, Set<String> gatewayLabels, String name, String version, String provider,
@@ -222,5 +223,13 @@ public class DeployAPIInGatewayEvent extends Event {
             return;
         }
         this.platformGatewayDeploymentIds = new HashMap<>(platformGatewayDeploymentIds);
+    }
+
+    public String getApiDisplayName() {
+        return apiDisplayName;
+    }
+
+    public void setApiDisplayName(String apiDisplayName) {
+        this.apiDisplayName = apiDisplayName;
     }
 }

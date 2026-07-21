@@ -7,6 +7,7 @@ import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.APIProvider;
 import org.wso2.carbon.apimgt.api.model.API;
 import org.wso2.carbon.apimgt.api.model.APICategory;
+import org.wso2.carbon.apimgt.api.model.APIInfo;
 import org.wso2.carbon.apimgt.impl.APIManagerFactory;
 import org.wso2.carbon.apimgt.impl.dao.ApiMgtDAO;
 import org.wso2.carbon.apimgt.impl.notifier.events.APIEvent;
@@ -29,21 +30,35 @@ public class CustomApisNotifier extends ApisNotifier {
     public boolean publishEvent(Event event) throws NotifierException {
         // 对API的事件源进行增强，添加API分类信息到事件的自定义属性中，以便后续处理器可以使用这些信息进行更丰富的处理。
         if (event instanceof APIEvent) {
-            enrichApiUpdateEvent((APIEvent) event);
+            enrichApiEvent((APIEvent) event);
         }
         return super.publishEvent(event);
     }
 
-    private void enrichApiUpdateEvent(APIEvent apiEvent) {
-        apiEvent.setCategories(resolveApiCategoryNames(apiEvent));
-    }
-
-    private List<String> resolveApiCategoryNames(APIEvent apiEvent) {
+    private void enrichApiEvent(APIEvent apiEvent) {
         String apiUuid = apiEvent.getUuid();
         if (StringUtils.isBlank(apiUuid)) {
-            log.warn("API_UPDATE event has no API UUID; skipping category enrichment.");
-            return Collections.emptyList();
+            log.warn("API event has no API UUID; skipping enrichment.");
+            apiEvent.setCategories(Collections.emptyList());
+            return;
         }
+        apiEvent.setApiDisplayName(resolveApiDisplayName(apiUuid));
+        apiEvent.setCategories(resolveApiCategoryNames(apiUuid));
+    }
+
+    private String resolveApiDisplayName(String apiUuid) {
+        try {
+            APIInfo apiInfo = ApiMgtDAO.getInstance().getAPIInfoByUUID(apiUuid);
+            if (apiInfo != null) {
+                return apiInfo.getDisplayName();
+            }
+        } catch (APIManagementException e) {
+            log.warn("Failed to load API display name for event enrichment. API UUID: " + apiUuid, e);
+        }
+        return null;
+    }
+
+    private List<String> resolveApiCategoryNames(String apiUuid) {
         try {
             String organization = ApiMgtDAO.getInstance().getOrganizationByAPIUUID(apiUuid);
             APIProvider apiProvider = APIManagerFactory.getInstance()
@@ -58,7 +73,7 @@ public class CustomApisNotifier extends ApisNotifier {
                     .filter(StringUtils::isNotBlank)
                     .collect(Collectors.toList());
         } catch (APIManagementException e) {
-            log.warn("Failed to load API categories for API_UPDATE event. API UUID: " + apiUuid, e);
+            log.warn("Failed to load API categories for event enrichment. API UUID: " + apiUuid, e);
             return Collections.emptyList();
         }
     }

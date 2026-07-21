@@ -78,6 +78,7 @@ public class APIGatewayManager {
                 System.currentTimeMillis(), APIConstants.EventType.DEPLOY_API_IN_GATEWAY.name(), api.getOrganization(),
                 api.getId().getId(), api.getUuid(), gateways, apiIdentifier.getName(), apiIdentifier.getVersion(),
                 apiIdentifier.getProviderName(), api.getType(), api.getContext());
+        deployAPIInGatewayEvent.setApiDisplayName(api.getDisplayName());
         if (platformGatewayIds != null && !platformGatewayIds.isEmpty()) {
             deployAPIInGatewayEvent.setPlatformGatewayIds(platformGatewayIds);
         }
@@ -98,6 +99,7 @@ public class APIGatewayManager {
                 System.currentTimeMillis(), APIConstants.EventType.DEPLOY_API_IN_GATEWAY.name(), api.getOrganization(),
                 api.getProductId(), api.getUuid(), gateways, apiIdentifier.getName(), apiIdentifier.getVersion(),
                 PRODUCT_PREFIX, api.getType(), api.getContext());
+        deployAPIInGatewayEvent.setApiDisplayName(api.getDisplayName());
         if (platformGatewayIds != null && !platformGatewayIds.isEmpty()) {
             deployAPIInGatewayEvent.setPlatformGatewayIds(platformGatewayIds);
         }
@@ -124,6 +126,7 @@ public class APIGatewayManager {
                 api.getOrganization(), api.getId().getId(), api.getUuid(), gateways, apiIdentifier.getName(),
                 apiIdentifier.getVersion(), apiIdentifier.getProviderName(), api.getType(), api.getContext(),
                 onDeleteOrRetire);
+        deployAPIInGatewayEvent.setApiDisplayName(api.getDisplayName());
         if (platformGatewayIds != null && !platformGatewayIds.isEmpty()) {
             deployAPIInGatewayEvent.setPlatformGatewayIds(platformGatewayIds);
         }
@@ -143,6 +146,7 @@ public class APIGatewayManager {
                 apiProduct.getOrganization(), apiProduct.getProductId(), apiProduct.getUuid(), gateways,
                 apiProductIdentifier.getName(), apiProductIdentifier.getVersion(), PRODUCT_PREFIX,
                 APIConstants.API_PRODUCT, apiProduct.getContext(), apiEvents);
+        deployAPIInGatewayEvent.setApiDisplayName(apiProduct.getDisplayName());
         if (platformGatewayIds != null && !platformGatewayIds.isEmpty()) {
             deployAPIInGatewayEvent.setPlatformGatewayIds(platformGatewayIds);
         }

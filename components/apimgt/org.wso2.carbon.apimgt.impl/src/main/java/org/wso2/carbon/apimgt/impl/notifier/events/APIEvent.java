@@ -47,6 +47,7 @@ public class APIEvent extends Event {
     private String lifecycleEvent;
     // 分类
     private List<String> categories;
+    private String apiDisplayName;
 
     public List<String> getCategories() {
         return categories;
@@ -55,6 +56,15 @@ public class APIEvent extends Event {
     public void setCategories(List<String> categories) {
         this.categories = categories;
     }
+
+    public String getApiDisplayName() {
+        return apiDisplayName;
+    }
+
+    public void setApiDisplayName(String apiDisplayName) {
+        this.apiDisplayName = apiDisplayName;
+    }
+
     public APIEvent(String uuid, String logLevel, String type, String apiContext, String resourceMethod,
                     String resourcePath) {
         this.uuid = uuid;
