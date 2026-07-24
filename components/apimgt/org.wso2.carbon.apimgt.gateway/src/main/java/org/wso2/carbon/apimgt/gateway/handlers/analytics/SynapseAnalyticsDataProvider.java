@@ -456,6 +456,9 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         if (api != null) {
             customProperties.put(Constants.IS_EGRESS, api.getEgress());
             customProperties.put(Constants.SUBTYPE, api.getSubtype());
+            if (api.getDisplayName() != null) {
+                customProperties.put("apiDisplayName", api.getDisplayName());
+            }
         }
         // MCP工具调用检测 - 检查请求体中是否包含 "method": "tools/call"
         if (messageContext.getPropertyKeySet().contains(MCP_METHOD)) {

@@ -429,6 +429,7 @@ public class SubscriptionValidationDAO {
                         api.setVersion(version);
                         api.setProvider(provider);
                         api.setName(name);
+                        api.setDisplayName(resultSet.getString("API_DISPLAY_NAME"));
                         api.setApiType(apiType);
                         api.setContext(context);
                         api.setStatus(resultSet.getString("STATUS"));
@@ -1140,6 +1141,7 @@ public class SubscriptionValidationDAO {
                         api.setVersion(version);
                         api.setProvider(provider);
                         api.setName(name);
+                        api.setDisplayName(resultSet.getString("API_DISPLAY_NAME"));
                         api.setApiType(apiType);
                         api.setContext(context);
                         api.setStatus(resultSet.getString("STATUS"));
@@ -1270,6 +1272,7 @@ public class SubscriptionValidationDAO {
                         api.setVersion(version);
                         api.setProvider(provider);
                         api.setName(name);
+                        api.setDisplayName(resultSet.getString("API_DISPLAY_NAME"));
                         api.setApiType(apiType);
                         api.setPolicy(resultSet.getString("API_TIER"));
                         api.setContext(resultSet.getString("CONTEXT"));
@@ -1561,6 +1564,7 @@ public class SubscriptionValidationDAO {
                         api.setVersion(version);
                         api.setProvider(provider);
                         api.setName(name);
+                        api.setDisplayName(resultSet.getString("API_DISPLAY_NAME"));
                         api.setApiType(apiType);
                         api.setOrganization(resultSet.getString("ORGANIZATION"));
                         api.setPolicy(resultSet.getString("API_TIER"));
@@ -1655,6 +1659,7 @@ public class SubscriptionValidationDAO {
                         api.setVersion(version);
                         api.setProvider(provider);
                         api.setName(name);
+                        api.setDisplayName(resultSet.getString("API_DISPLAY_NAME"));
                         api.setApiType(apiType);
                         api.setContext(context);
                         api.setStatus(resultSet.getString("STATUS"));

@@ -36,6 +36,7 @@ public class API implements CacheableEntity<String> {
     private Integer apiId = null;
     private String provider = null;
     private String name = null;
+    private String displayName = null;
     private String version = null;
     private String context = null;
     private String contextTemplate = null;
@@ -187,6 +188,16 @@ public class API implements CacheableEntity<String> {
     public void setApiName(String apiName) {
 
         this.name = apiName;
+    }
+
+    public String getDisplayName() {
+
+        return displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+
+        this.displayName = displayName;
     }
 
     public String getApiVersion() {

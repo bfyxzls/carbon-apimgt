@@ -3,7 +3,6 @@ package org.wso2.carbon.apimgt.impl.notifier;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.APIProvider;
 import org.wso2.carbon.apimgt.api.model.API;
 import org.wso2.carbon.apimgt.api.model.APICategory;
@@ -28,9 +27,14 @@ public class CustomApisNotifier extends ApisNotifier {
 
     @Override
     public boolean publishEvent(Event event) throws NotifierException {
-        // 对API的事件源进行增强，添加API分类信息到事件的自定义属性中，以便后续处理器可以使用这些信息进行更丰富的处理。
+        // Enrichment must never block publishing: catch all Throwable so Event Hub / Kafka still receives the event.
         if (event instanceof APIEvent) {
-            enrichApiEvent((APIEvent) event);
+            try {
+                enrichApiEvent((APIEvent) event);
+            } catch (Throwable t) {
+                log.warn("Failed to enrich API event; publishing original event. UUID: "
+                        + ((APIEvent) event).getUuid(), t);
+            }
         }
         return super.publishEvent(event);
     }
@@ -52,7 +56,7 @@ public class CustomApisNotifier extends ApisNotifier {
             if (apiInfo != null) {
                 return apiInfo.getDisplayName();
             }
-        } catch (APIManagementException e) {
+        } catch (Exception e) {
             log.warn("Failed to load API display name for event enrichment. API UUID: " + apiUuid, e);
         }
         return null;
@@ -61,8 +65,14 @@ public class CustomApisNotifier extends ApisNotifier {
     private List<String> resolveApiCategoryNames(String apiUuid) {
         try {
             String organization = ApiMgtDAO.getInstance().getOrganizationByAPIUUID(apiUuid);
-            APIProvider apiProvider = APIManagerFactory.getInstance()
-                    .getAPIProvider(CarbonContext.getThreadLocalCarbonContext().getUsername());
+            String username = CarbonContext.getThreadLocalCarbonContext() != null
+                    ? CarbonContext.getThreadLocalCarbonContext().getUsername()
+                    : null;
+            if (StringUtils.isBlank(username)) {
+                log.warn("No username in CarbonContext; skipping category enrichment. API UUID: " + apiUuid);
+                return Collections.emptyList();
+            }
+            APIProvider apiProvider = APIManagerFactory.getInstance().getAPIProvider(username);
             API api = apiProvider.getLightweightAPIByUUID(apiUuid, organization);
             List<APICategory> apiCategories = api.getApiCategories();
             if (apiCategories == null || apiCategories.isEmpty()) {
@@ -72,7 +82,7 @@ public class CustomApisNotifier extends ApisNotifier {
                     .map(APICategory::getName)
                     .filter(StringUtils::isNotBlank)
                     .collect(Collectors.toList());
-        } catch (APIManagementException e) {
+        } catch (Exception e) {
             log.warn("Failed to load API categories for event enrichment. API UUID: " + apiUuid, e);
             return Collections.emptyList();
         }

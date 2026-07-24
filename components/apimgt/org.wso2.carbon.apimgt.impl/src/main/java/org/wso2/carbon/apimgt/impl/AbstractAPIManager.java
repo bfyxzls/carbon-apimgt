@@ -730,7 +730,8 @@ public abstract class AbstractAPIManager implements APIManager {
         defaultApp.setTier(APIUtil.getDefaultApplicationLevelPolicy(subscriber.getTenantId()));
         //application will not be shared within the group
         defaultApp.setGroupId("");
-        defaultApp.setTokenType(APIConstants.TOKEN_TYPE_JWT);
+        // TODO: 自动添加的应用tokenType为default，而不是jwt
+        defaultApp.setTokenType(APIConstants.DEFAULT);
         defaultApp.setUUID(UUID.randomUUID().toString());
         defaultApp.setDescription(APIConstants.DEFAULT_APPLICATION_DESCRIPTION);
         if (organization != null) {

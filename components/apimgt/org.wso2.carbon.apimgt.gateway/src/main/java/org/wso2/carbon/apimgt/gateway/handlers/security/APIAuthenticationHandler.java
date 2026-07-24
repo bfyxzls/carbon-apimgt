@@ -706,6 +706,17 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
         return true;
     }
 
+    private String stripBearerPrefix(String authorization) {
+        if (StringUtils.isBlank(authorization)) {
+            return null;
+        }
+        String trimmed = authorization.trim();
+        if (trimmed.regionMatches(true, 0, "Bearer ", 0, 7)) {
+            trimmed = trimmed.substring(7).trim();
+        }
+        return StringUtils.isNotBlank(trimmed) ? trimmed : null;
+    }
+
     /**
      * 添加用户积分余额验证的方法
      *
@@ -713,6 +724,23 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
      * @throws APISecurityException
      */
     private void validatePoints(MessageContext messageContext) throws APISecurityException {
+        // MCP 仅在 tools/call 时校验积分；initialize / tools/list / 连接握手等跳过。
+        // 除 API type=MCP 外，category 含 MCP 的 REST API 部署时也会挂上 McpInitHandler（见 TemplateBuilderUtil），
+        // 请求上会设置 isMcp，需按同样规则处理。
+        String apiType = (String) messageContext.getProperty(APIMgtGatewayConstants.API_TYPE);
+        boolean isMcpRelated = APIConstants.API_TYPE_MCP.equalsIgnoreCase(apiType)
+                || messageContext.getProperty("isMcp") != null;
+        if (isMcpRelated) {
+            String mcpMethod = (String) messageContext.getProperty(APIMgtGatewayConstants.MCP_METHOD);
+            if (!APIConstants.MCP.METHOD_TOOL_CALL.equals(mcpMethod)) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Skipping points validation for MCP-related API (type=" + apiType
+                            + "), method: " + mcpMethod);
+                }
+                return;
+            }
+        }
+
         if (messageContext.getProperty("userName") != null) {
             String userNameStr = (String) messageContext.getProperty("userName");
             if (userNameStr.endsWith("@carbon.super")) {
@@ -748,6 +776,8 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
                             Pair<Integer, String> error = Pair.of(90001, errorMsg);
                             throw new APISecurityException(error.getKey(), error.getValue());
                         }
+
+
                     } else {
                         String msg = jsonObject.get("msg").getAsString();
                         log.error("API request failed with code: " + code + ", msg: " + msg);
@@ -763,6 +793,48 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
                 }
 
             }
+        }
+
+        // 成员token的判断
+        String token = stripBearerPrefix((String) messageContext.getProperty("Authorization"));
+        String apiPortalUri = "https://gateway.pkulaw.com/api-portal";
+        if (System.getenv().containsKey("API_PORTAL_URI")) {
+            apiPortalUri = System.getenv().get("API_PORTAL_URI");
+        }
+        String tokenRemainPointsUri = apiPortalUri + "/points/member-token/available?token=" + token;
+        // 发起GET请求并解析响应
+        try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+            HttpGet httpGet = new HttpGet(tokenRemainPointsUri);
+            httpGet.setHeader("Accept", "application/json");
+            httpGet.setHeader("Content-Type", "application/json");
+
+            // 执行请求
+            HttpResponse response = httpClient.execute(httpGet);
+            String jsonResponse = EntityUtils.toString(response.getEntity(), "UTF-8");
+
+            // 解析JSON
+            JsonObject jsonObject = JsonParser.parseString(jsonResponse).getAsJsonObject();
+            String code = jsonObject.get("code").getAsString();
+            if ("200".equals(code)) {
+                Boolean result = jsonObject.get("data").getAsBoolean();
+                if (!result) {
+                    String msg = jsonObject.get("msg").getAsString();
+                    log.error("API request failed with code: " + code + ", msg: " + msg);
+                    Pair<Integer, String> error = Pair.of(90002, msg);
+                    throw new APISecurityException(error.getKey(), error.getValue());
+                }
+            } else {
+                String msg = jsonObject.get("msg").getAsString();
+                log.error("API request failed with code: " + code + ", msg: " + msg);
+                Pair<Integer, String> error = Pair.of(90002, msg);
+                throw new APISecurityException(error.getKey(), error.getValue());
+            }
+
+        } catch (Exception e) {
+            log.error("Error while checking remaining points for token: " + token, e);
+            Pair<Integer, String> error =
+                    Pair.of(90002, "Error while checking remaining points for token: " + token);
+            throw new APISecurityException(error.getKey(), error.getValue());
         }
     }
 

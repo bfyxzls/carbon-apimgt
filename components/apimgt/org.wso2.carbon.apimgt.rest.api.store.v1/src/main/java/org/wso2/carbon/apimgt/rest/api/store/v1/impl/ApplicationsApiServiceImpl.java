@@ -359,7 +359,9 @@ public class ApplicationsApiServiceImpl implements ApplicationsApiService {
         try {
             /* When new applications are created, we do not honor tokenType sent in the body
             and all the applications created will be of 'JWT' token type */
-            body.setTokenType(ApplicationDTO.TokenTypeEnum.JWT);
+            // body.setTokenType(ApplicationDTO.TokenTypeEnum.JWT);
+            // TODO: 直接生成Opaque的token，这样token短一些
+            body.setTokenType(ApplicationDTO.TokenTypeEnum.DEFAULT);
 
             String organization = RestApiUtil.getValidatedOrganization(messageContext);
             OrganizationInfo orgInfo = RestApiUtil.getOrganizationInfo(messageContext);

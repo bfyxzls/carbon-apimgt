@@ -30,6 +30,7 @@ public class APIDTO   {
     private Integer apiId = null;
     private String provider = null;
     private String name = null;
+    private String displayName = null;
     private String version = null;
     private String context = null;
     private String contextTemplate = null;
@@ -114,6 +115,24 @@ public class APIDTO   {
   }
   public void setName(String name) {
     this.name = name;
+  }
+
+  /**
+   * Display name of the API
+   **/
+  public APIDTO displayName(String displayName) {
+    this.displayName = displayName;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "Display name of the API")
+  @JsonProperty("displayName")
+  public String getDisplayName() {
+    return displayName;
+  }
+  public void setDisplayName(String displayName) {
+    this.displayName = displayName;
   }
 
   /**
@@ -382,6 +401,7 @@ public class APIDTO   {
         Objects.equals(apiId, API.apiId) &&
         Objects.equals(provider, API.provider) &&
         Objects.equals(name, API.name) &&
+        Objects.equals(displayName, API.displayName) &&
         Objects.equals(version, API.version) &&
         Objects.equals(context, API.context) &&
         Objects.equals(contextTemplate, API.contextTemplate) &&
@@ -400,7 +420,7 @@ public class APIDTO   {
 
   @Override
   public int hashCode() {
-    return Objects.hash(uuid, apiId, provider, name, version, context, contextTemplate, policy, apiType, status, organization, isDefaultVersion, apiPolicies, urlMappings, securityScheme, isSubscriptionValidationDisabled, isEgress, subtype);
+    return Objects.hash(uuid, apiId, provider, name, displayName, version, context, contextTemplate, policy, apiType, status, organization, isDefaultVersion, apiPolicies, urlMappings, securityScheme, isSubscriptionValidationDisabled, isEgress, subtype);
   }
 
   @Override
@@ -412,6 +432,7 @@ public class APIDTO   {
     sb.append("    apiId: ").append(toIndentedString(apiId)).append("\n");
     sb.append("    provider: ").append(toIndentedString(provider)).append("\n");
     sb.append("    name: ").append(toIndentedString(name)).append("\n");
+    sb.append("    displayName: ").append(toIndentedString(displayName)).append("\n");
     sb.append("    version: ").append(toIndentedString(version)).append("\n");
     sb.append("    context: ").append(toIndentedString(context)).append("\n");
     sb.append("    contextTemplate: ").append(toIndentedString(contextTemplate)).append("\n");

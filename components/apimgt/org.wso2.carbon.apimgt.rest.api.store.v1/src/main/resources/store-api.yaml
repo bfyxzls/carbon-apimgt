@@ -4458,6 +4458,7 @@ definitions:
         enum:
           - OAUTH
           - JWT
+          - DEFAULT
         description: |
           Type of the access token generated for this application.
 
@@ -4536,7 +4537,7 @@ definitions:
         example: admin
       tokenType:
         type: string
-        example: JWT
+        example: DEFAULT
 
   #-----------------------------------------------------
   # The Document List resource
