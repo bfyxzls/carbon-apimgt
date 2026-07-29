@@ -5959,10 +5959,11 @@ components:
             **OAUTH:** A UUID based access token
             **JWT:** A self-contained, signed JWT based access token which is issued by default.
           example: JWT
-          default: JWT
+          default: DEFAULT
           enum:
             - OAUTH
             - JWT
+            - DEFAULT
         status:
           type: string
           readOnly: true

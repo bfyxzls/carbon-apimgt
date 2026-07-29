@@ -85,7 +85,7 @@ public class SQLConstants {
             "   AM_SUBSCRIBER SB, " +
             "   AM_APPLICATION APP " +
             " WHERE " +
-            "   LOWER(SB.USER_ID) = LOWER(?) " +
+            "   SB.USER_ID = ? " +
             "   AND SB.TENANT_ID = ? " +
             "   AND SB.SUBSCRIBER_ID = APP.SUBSCRIBER_ID " +
             "   AND APP.APPLICATION_ID=SP.APPLICATION_ID " +
@@ -383,7 +383,7 @@ public class SQLConstants {
             " FROM " +
             "   AM_SUBSCRIBER " +
             " WHERE " +
-            "   LOWER(USER_ID) = LOWER(?) " +
+            "   USER_ID = ? " +
             "   AND TENANT_ID = ?";
 
     public static final String GET_SUBSCRIBED_APIS_SQL =
@@ -828,7 +828,7 @@ public class SQLConstants {
             "   API.API_PROVIDER  = ?" +
             "   AND API.API_NAME = ?" +
             "   AND API.API_VERSION = ?" +
-            "   AND LOWER(SUB.USER_ID) = LOWER(?)" +
+            "   AND SUB.USER_ID = ?" +
             "   AND SUB.TENANT_ID = ? " +
             "   AND APP.SUBSCRIBER_ID = SUB.SUBSCRIBER_ID" +
             "   AND API.API_ID = SUBS.API_ID" +
@@ -873,7 +873,7 @@ public class SQLConstants {
                     "   API.API_PROVIDER  = ?" +
                     "   AND API.API_NAME = ?" +
                     "   AND API.API_VERSION = ?" +
-                    "   AND LOWER(SUB.USER_ID) = LOWER(?)" +
+                    "   AND SUB.USER_ID = ?" +
                     "   AND SUB.TENANT_ID = ? " +
                     "   AND SUBS.APPLICATION_ID = ? " +
                     "   AND APP.SUBSCRIBER_ID = SUB.SUBSCRIBER_ID" +
@@ -1063,12 +1063,12 @@ public class SQLConstants {
             "   AM_APPLICATION APP," +
             "   AM_SUBSCRIBER SUB " +
             " WHERE " +
-            "   LOWER(APP.NAME) = LOWER(?)" + "   " +
+            "   APP.NAME = ?" + "   " +
             "   AND APP.ORGANIZATION = ? " +
             "   AND APP.SUBSCRIBER_ID = SUB.SUBSCRIBER_ID";
 
     public static final String GET_APPLICATION_ID_PREFIX_FOR_GROUP_COMPARISON = " SELECT APP.APPLICATION_ID FROM "
-            + "AM_APPLICATION APP, AM_SUBSCRIBER SUB WHERE LOWER(APP.NAME) = LOWER(?) "
+            + "AM_APPLICATION APP, AM_SUBSCRIBER SUB WHERE APP.NAME = ? "
             + "AND APP.SUBSCRIBER_ID = SUB.SUBSCRIBER_ID";
 
     public static final String GET_APPLICATION_ID_SQL =
@@ -1202,7 +1202,7 @@ public class SQLConstants {
                 " WHERE " +
                 "   SUB.SUBSCRIBER_ID = APP.SUBSCRIBER_ID " +
                 " AND " +
-                "   (GROUP_ID= ?  OR  ((GROUP_ID = '' OR GROUP_ID IS NULL) AND LOWER (SUB.USER_ID) = LOWER(?)))"+
+                "   (GROUP_ID= ?  OR  ((GROUP_ID = '' OR GROUP_ID IS NULL) AND SUB.USER_ID = ?))"+
                 " And "+
                 "    NAME like ?";
 
@@ -1229,7 +1229,7 @@ public class SQLConstants {
             " AND (" +
             "   (APPLICATION_ID IN ( SELECT APPLICATION_ID FROM AM_APPLICATION_GROUP_MAPPING WHERE GROUP_ID IN ($params) AND TENANT = ?)) " +
             "           OR   " +
-            "   LOWER (SUB.USER_ID) = LOWER(?) )"+
+            "   SUB.USER_ID = ? )"+
             " And "+
             "    NAME like ?";
 
@@ -1256,7 +1256,7 @@ public class SQLConstants {
                 " WHERE " +
                 "   SUB.SUBSCRIBER_ID = APP.SUBSCRIBER_ID " +
                 " AND " +
-                "    LOWER(SUB.USER_ID) = LOWER(?)"+
+                "    SUB.USER_ID = ?"+
                 " And "+
                 "    NAME like ?";
 
@@ -1378,7 +1378,7 @@ public class SQLConstants {
             " FROM " +
             "   AM_SUBSCRIBER SUB " +
             " WHERE " +
-            "   LOWER(SUB.USER_ID) = LOWER(?) " +
+            "   SUB.USER_ID = ? " +
             "   AND SUB.TENANT_ID = ?";
 
     public static final String GET_SUBSCRIBER_DETAILS_SQL =
@@ -2035,7 +2035,7 @@ public class SQLConstants {
                 "AM_API_COMMENTS.COMMENT_ID = ?";
 
     public static final String GET_API_CONTEXT_SQL =
-            "SELECT CONTEXT_TEMPLATE FROM AM_API WHERE  LOWER(CONTEXT_TEMPLATE) = LOWER(?) AND ORGANIZATION = ?";
+            "SELECT CONTEXT_TEMPLATE FROM AM_API WHERE  CONTEXT_TEMPLATE = ? AND ORGANIZATION = ?";
 
     public static final String GET_API_CONTEXT_SQL_FOR_API_PRODUCTS =
             "SELECT CONTEXT FROM AM_API WHERE (CONTEXT= ? OR CONTEXT= ? OR CONTEXT_TEMPLATE= ?) AND ORGANIZATION = ?";
@@ -2287,26 +2287,26 @@ public class SQLConstants {
             "DELETE FROM AM_SUBSCRIPTION WHERE API_ID = ? AND APPLICATION_ID = ? ";
 
     public static final String GET_API_NAME_NOT_MATCHING_CONTEXT_SQL =
-            "SELECT COUNT(API_ID) AS API_COUNT FROM AM_API WHERE LOWER(API_NAME) = LOWER(?) AND ORGANIZATION = ? AND CONTEXT NOT LIKE ?";
+            "SELECT COUNT(API_ID) AS API_COUNT FROM AM_API WHERE API_NAME = ? AND ORGANIZATION = ? AND CONTEXT NOT LIKE ?";
 
     public static final String GET_API_NAME_MATCHING_CONTEXT_SQL =
-            "SELECT COUNT(API_ID) AS API_COUNT FROM AM_API WHERE LOWER(API_NAME) = LOWER(?) AND ORGANIZATION = ? AND "
+            "SELECT COUNT(API_ID) AS API_COUNT FROM AM_API WHERE API_NAME = ? AND ORGANIZATION = ? AND "
                     + "CONTEXT LIKE ?";
 
     public static final String GET_API_NAME_DIFF_CASE_NOT_MATCHING_CONTEXT_SQL =
-            "SELECT COUNT(API_ID) AS API_COUNT FROM AM_API WHERE LOWER(API_NAME) = LOWER(?) AND CONTEXT NOT LIKE ? "
+            "SELECT COUNT(API_ID) AS API_COUNT FROM AM_API WHERE API_NAME = ? AND CONTEXT NOT LIKE ? "
         + "AND NOT (API_NAME = ?) AND ORGANIZATION = ?";
 
     public static final String GET_API_NAME_DIFF_CASE_MATCHING_CONTEXT_SQL =
-            "SELECT COUNT(API_ID) AS API_COUNT FROM AM_API WHERE LOWER(API_NAME) = LOWER(?) AND CONTEXT LIKE ? " +
+            "SELECT COUNT(API_ID) AS API_COUNT FROM AM_API WHERE API_NAME = ? AND CONTEXT LIKE ? " +
                     "AND NOT (API_NAME = ?) AND ORGANIZATION = ?";
 
     public static final String GET_CONTEXT_TEMPLATE_COUNT_SQL_MATCHES_ORGANIZATION =
-            "SELECT COUNT(CONTEXT_TEMPLATE) AS CTX_COUNT FROM AM_API WHERE LOWER(CONTEXT_TEMPLATE) = ? " +
+            "SELECT COUNT(CONTEXT_TEMPLATE) AS CTX_COUNT FROM AM_API WHERE CONTEXT_TEMPLATE = ? " +
                     "AND ORGANIZATION = ?";
 
     public static final String GET_CONTEXT_TEMPLATE_COUNT_SQL_MATCHES_ORGANIZATION_AND_GATEWAY_VENDOR =
-            "SELECT COUNT(CONTEXT_TEMPLATE) AS CTX_COUNT FROM AM_API WHERE LOWER(CONTEXT_TEMPLATE) = ? " +
+            "SELECT COUNT(CONTEXT_TEMPLATE) AS CTX_COUNT FROM AM_API WHERE CONTEXT_TEMPLATE = ? " +
                     "AND ORGANIZATION = ? AND GATEWAY_VENDOR = ?";
 
 
@@ -3044,10 +3044,10 @@ public class SQLConstants {
     public static final String GET_LABEL_IDS_BY_TENANT_DOMAIN_SQL = "SELECT UUID FROM AM_LABEL WHERE TENANT_DOMAIN = ?";
 
     public static final String IS_LABEL_NAME_EXISTS_SQL = "SELECT COUNT(UUID) AS LABEL_COUNT FROM AM_LABEL " +
-            "WHERE LOWER(NAME) = LOWER(?) AND TENANT_DOMAIN = ?";
+            "WHERE NAME = ? AND TENANT_DOMAIN = ?";
 
     public static final String IS_LABEL_NAME_EXISTS_FOR_ANOTHER_UUID_SQL = "SELECT COUNT(UUID) AS LABEL_COUNT FROM AM_LABEL " +
-            "WHERE LOWER(NAME) = LOWER(?) AND TENANT_DOMAIN = ? AND UUID != ?";
+            "WHERE NAME = ? AND TENANT_DOMAIN = ? AND UUID != ?";
 
     public static final String GET_LABEL_BY_UUID_AND_TENANT_DOMAIN__SQL = "SELECT * FROM AM_LABEL WHERE UUID = ? AND TENANT_DOMAIN = ?";
 
@@ -3085,10 +3085,10 @@ public class SQLConstants {
             + "WHERE ORGANIZATION = ? ORDER BY NAME";
 
     public static final String IS_API_CATEGORY_NAME_EXISTS = "SELECT COUNT(UUID) AS API_CATEGORY_COUNT FROM "
-            + "AM_API_CATEGORIES WHERE LOWER(NAME) = LOWER(?) AND ORGANIZATION = ?";
+            + "AM_API_CATEGORIES WHERE NAME = ? AND ORGANIZATION = ?";
 
     public static final String IS_API_CATEGORY_NAME_EXISTS_FOR_ANOTHER_UUID = "SELECT COUNT(UUID) AS API_CATEGORY_COUNT FROM "
-            + "AM_API_CATEGORIES WHERE LOWER(NAME) = LOWER(?) AND ORGANIZATION = ? AND UUID != ?";
+            + "AM_API_CATEGORIES WHERE NAME = ? AND ORGANIZATION = ? AND UUID != ?";
 
     public static final String GET_API_CATEGORY_BY_ID = "SELECT * FROM AM_API_CATEGORIES WHERE UUID = ?";
 

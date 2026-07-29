@@ -1257,16 +1257,14 @@ public class ApiMgtDAO {
         String whereClauseWithGroupId = " AND (APP.GROUP_ID = ? OR ((APP.GROUP_ID='' OR APP.GROUP_ID IS NULL)"
                 + " AND SUB.USER_ID = ?))";
         String whereClauseWithGroupIdorceCaseInsensitiveComp = " AND (APP.GROUP_ID = ?"
-                + " OR ((APP.GROUP_ID='' OR APP.GROUP_ID IS NULL) AND LOWER(SUB.USER_ID) = LOWER(?)))";
+                + " OR ((APP.GROUP_ID='' OR APP.GROUP_ID IS NULL) AND SUB.USER_ID = ?))";
         String whereClause = " AND SUB.USER_ID = ? ";
-        String whereClauseCaseSensitive = " AND LOWER(SUB.USER_ID) = LOWER(?) ";
+        String whereClauseCaseSensitive = " AND SUB.USER_ID = ? ";
 
         String whereClauseWithMultiGroupId = " AND  ( (APP.APPLICATION_ID IN (SELECT APPLICATION_ID FROM " +
                 "AM_APPLICATION_GROUP_MAPPING WHERE GROUP_ID IN ($params)  AND TENANT = ?))  OR  ( SUB.USER_ID = ? ))";
         String whereClauseWithMultiGroupIdCaseInsensitive = " AND  ( (APP.APPLICATION_ID IN  (SELECT APPLICATION_ID " +
-                "FROM AM_APPLICATION_GROUP_MAPPING  WHERE GROUP_ID IN ($params) AND TENANT = ?))  OR  ( LOWER(SUB" +
-                ".USER_ID) = LOWER" +
-                "(?) ))";
+                "FROM AM_APPLICATION_GROUP_MAPPING  WHERE GROUP_ID IN ($params) AND TENANT = ?))  OR  ( SUB.USER_ID = ? ))";
 
         try {
             connection = APIMgtDBUtil.getConnection();
@@ -1386,7 +1384,7 @@ public class ApiMgtDAO {
                     "AM_APPLICATION_GROUP_MAPPING WHERE GROUP_ID IN ($params) AND TENANT = ?))  OR  ( SUB.USER_ID = ?" +
                     " ))";
             String whereClauseWithUserId = " AND SUB.USER_ID = ? ";
-            String whereClauseCaseSensitive = " AND LOWER(SUB.USER_ID) = LOWER(?) ";
+            String whereClauseCaseSensitive = " AND SUB.USER_ID = ? ";
             String appIdentifier;
 
             boolean hasGrouping = false;
@@ -1479,7 +1477,7 @@ public class ApiMgtDAO {
                     sqlQuery += " AND  ( (APP.APPLICATION_ID IN  (SELECT APPLICATION_ID " +
                             " FROM AM_APPLICATION_GROUP_MAPPING  " +
                             " WHERE GROUP_ID IN (" + paramString + ") AND TENANT = ?))" +
-                            "  OR  ( LOWER(SUB.USER_ID) = LOWER(?) ))";
+                            "  OR  ( SUB.USER_ID = ? ))";
                 } else {
                     sqlQuery += " AND  ( (APP.APPLICATION_ID IN (SELECT APPLICATION_ID FROM " +
                             "AM_APPLICATION_GROUP_MAPPING WHERE GROUP_ID IN (" + paramString + ") AND TENANT = ?))  " +
@@ -1488,7 +1486,7 @@ public class ApiMgtDAO {
             } else {
                 if (forceCaseInsensitiveComparisons) {
                     sqlQuery += " AND (APP.GROUP_ID = ? OR ((APP.GROUP_ID='' OR APP.GROUP_ID IS NULL)" +
-                            " AND LOWER(SUB.USER_ID) = LOWER(?)))";
+                            " AND SUB.USER_ID = ?))";
                 } else {
                     sqlQuery += " AND (APP.GROUP_ID = ? OR ((APP.GROUP_ID='' OR APP.GROUP_ID IS NULL)" +
                             " AND SUB.USER_ID = ?))";
@@ -1496,7 +1494,7 @@ public class ApiMgtDAO {
             }
         } else {
             if (forceCaseInsensitiveComparisons) {
-                sqlQuery += " AND LOWER(SUB.USER_ID) = LOWER(?)  ";
+                sqlQuery += " AND SUB.USER_ID = ?  ";
             } else {
                 sqlQuery += " AND  SUB.USER_ID = ? ";
             }
@@ -3751,7 +3749,7 @@ public class ApiMgtDAO {
         String whereClauseWithGroupId = " AND (APP.GROUP_ID = ? OR ((APP.GROUP_ID='' OR APP.GROUP_ID IS NULL)"
                 + " AND SUB.USER_ID = ?))";
         String whereClauseWithGroupIdCaseInsensitive = " AND (APP.GROUP_ID = ? "
-                + "OR ((APP.GROUP_ID='' OR APP.GROUP_ID IS NULL) AND LOWER(SUB.USER_ID) = LOWER(?)))";
+                + "OR ((APP.GROUP_ID='' OR APP.GROUP_ID IS NULL) AND SUB.USER_ID = ?))";
 
         String whereClauseWithMultiGroupId = " AND  ( (APP.APPLICATION_ID IN (SELECT APPLICATION_ID  FROM " +
                 "AM_APPLICATION_GROUP_MAPPING WHERE GROUP_ID IN ($params) AND TENANT = ?))  OR  ( SUB.USER_ID = ? ) " +
@@ -3759,11 +3757,11 @@ public class ApiMgtDAO {
 
         String whereClauseWithMultiGroupIdCaseInsensitive = " AND  ( (APP.APPLICATION_ID IN  (SELECT APPLICATION_ID " +
                 "FROM AM_APPLICATION_GROUP_MAPPING WHERE GROUP_ID IN ($params) AND TENANT = ?)) " +
-                "OR (LOWER(SUB.USER_ID) = LOWER(?))" +
+                "OR (SUB.USER_ID = ?)" +
                 "OR (APP.APPLICATION_ID IN (SELECT APPLICATION_ID FROM AM_APPLICATION WHERE GROUP_ID = ?)))";
 
         String whereClause = " AND SUB.USER_ID = ? ";
-        String whereClauseCaseInsensitive = " AND LOWER(SUB.USER_ID) = LOWER(?) ";
+        String whereClauseCaseInsensitive = " AND SUB.USER_ID = ? ";
 
         try {
             connection = APIMgtDBUtil.getConnection();
@@ -3923,7 +3921,7 @@ public class ApiMgtDAO {
         int appId = 0;
         String sqlQuery = SQLConstants.GET_APPLICATION_ID_PREFIX;
         String whereClause = " AND SUB.USER_ID = ? ";
-        String whereClauseCaseInsensitive = " AND LOWER(SUB.USER_ID) = LOWER(?) ";
+        String whereClauseCaseInsensitive = " AND SUB.USER_ID = ? ";
         try {
             connection = APIMgtDBUtil.getConnection();
             if (forceCaseInsensitiveComparisons) {
@@ -4216,7 +4214,9 @@ public class ApiMgtDAO {
         ResultSet rs = null;
         Application[] applications = null;
         String sqlQuery = null;
-        boolean isOrgSharingEnabled = true; //TODO need to come from config or from user info
+        // Avoid ORGSHARING SQL when shared org is null (SHARED_ORGANIZATION = NULL never matches and hurts plans)
+        boolean isOrgSharingEnabled = StringUtils.isNotBlank(sharedOrganization);
+        boolean hasSearch = StringUtils.isNotBlank(search);
         if (groupingId != null && !"null".equals(groupingId) && !groupingId.isEmpty()) {
             if (multiGroupAppSharingEnabled) {
                 if (forceCaseInsensitiveComparisons) {
@@ -4273,6 +4273,15 @@ public class ApiMgtDAO {
                 sqlQuery = sqlQuery.replace("$3", sortColumn);
             }
 
+            // Empty search previously became LIKE '%%' and prevented index-friendly plans.
+            // Do NOT allow a trailing optional ')' after '?', or it will eat the subquery close paren
+            // before ")x left join ..." and produce invalid SQL.
+            if (!hasSearch) {
+                sqlQuery = sqlQuery.replaceAll(
+                        "(?i)\\s+And\\s+(?:LOWER\\s*\\(\\s*NAME\\s*\\)|NAME)\\s+like\\s+(?:LOWER\\s*\\(\\s*\\?\\s*\\)|\\?)",
+                        "");
+            }
+
             if (groupingId != null && !"null".equals(groupingId) && !groupingId.isEmpty()) {
                 if (multiGroupAppSharingEnabled) {
                     String tenantDomain = MultitenantUtils.getTenantDomain(subscriber.getName());
@@ -4283,34 +4292,45 @@ public class ApiMgtDAO {
                     prepStmt.setString(++noOfParams, subscriber.getName());
                     prepStmt.setString(++noOfParams, tenantDomain + '/' + groupingId);
                     prepStmt.setString(++noOfParams, organization);
-                    prepStmt.setString(++noOfParams, "%" + search + "%");
+                    if (hasSearch) {
+                        prepStmt.setString(++noOfParams, "%" + search + "%");
+                    }
                     prepStmt.setInt(++noOfParams, start);
                     prepStmt.setInt(++noOfParams, offset);
                 } else {
                     prepStmt = connection.prepareStatement(sqlQuery);
-                    prepStmt.setString(1, groupingId);
-                    prepStmt.setString(2, subscriber.getName());
-                    prepStmt.setString(3, organization);
-                    prepStmt.setString(4, "%" + search + "%");
-                    prepStmt.setInt(5, start);
-                    prepStmt.setInt(6, offset);
+                    int idx = 1;
+                    prepStmt.setString(idx++, groupingId);
+                    prepStmt.setString(idx++, subscriber.getName());
+                    prepStmt.setString(idx++, organization);
+                    if (hasSearch) {
+                        prepStmt.setString(idx++, "%" + search + "%");
+                    }
+                    prepStmt.setInt(idx++, start);
+                    prepStmt.setInt(idx, offset);
                 }
             } else {
                 if (isOrgSharingEnabled) {
                     prepStmt = connection.prepareStatement(sqlQuery);
-                    prepStmt.setString(1, subscriber.getName());
-                    prepStmt.setString(2, sharedOrganization);
-                    prepStmt.setString(3, organization);
-                    prepStmt.setString(4, "%" + search + "%");
-                    prepStmt.setInt(5, start);
-                    prepStmt.setInt(6, offset);
+                    int idx = 1;
+                    prepStmt.setString(idx++, subscriber.getName());
+                    prepStmt.setString(idx++, sharedOrganization);
+                    prepStmt.setString(idx++, organization);
+                    if (hasSearch) {
+                        prepStmt.setString(idx++, "%" + search + "%");
+                    }
+                    prepStmt.setInt(idx++, start);
+                    prepStmt.setInt(idx, offset);
                 } else {
                     prepStmt = connection.prepareStatement(sqlQuery);
-                    prepStmt.setString(1, subscriber.getName());
-                    prepStmt.setString(2, organization);
-                    prepStmt.setString(3, "%" + search + "%");
-                    prepStmt.setInt(4, start);
-                    prepStmt.setInt(5, offset);
+                    int idx = 1;
+                    prepStmt.setString(idx++, subscriber.getName());
+                    prepStmt.setString(idx++, organization);
+                    if (hasSearch) {
+                        prepStmt.setString(idx++, "%" + search + "%");
+                    }
+                    prepStmt.setInt(idx++, start);
+                    prepStmt.setInt(idx, offset);
                 }
             }
             if (log.isDebugEnabled()) {
@@ -4391,11 +4411,11 @@ public class ApiMgtDAO {
             if (multiGroupAppSharingEnabled) {
                 whereClauseWithGroupId = " AND ( (APP.APPLICATION_ID IN (SELECT APPLICATION_ID  FROM " +
                         "AM_APPLICATION_GROUP_MAPPING WHERE GROUP_ID IN ($params) AND TENANT = ?)) " +
-                        "OR (LOWER(SUB.USER_ID) = LOWER(?))" +
+                        "OR (SUB.USER_ID = ?)" +
                         "OR (APP.APPLICATION_ID IN (SELECT APPLICATION_ID FROM AM_APPLICATION WHERE GROUP_ID = ?)))";
             } else {
                 whereClauseWithGroupId = "   AND " + "     (GROUP_ID= ? " + "      OR "
-                        + "     ((GROUP_ID='' OR GROUP_ID IS NULL) AND LOWER(SUB.USER_ID) = LOWER(?))) ";
+                        + "     ((GROUP_ID='' OR GROUP_ID IS NULL) AND SUB.USER_ID = ?)) ";
             }
         } else {
             if (multiGroupAppSharingEnabled) {
@@ -4411,7 +4431,7 @@ public class ApiMgtDAO {
 
         String whereClause;
         if (forceCaseInsensitiveComparisons) {
-            whereClause = "   AND " + " LOWER(SUB.USER_ID) = LOWER(?)";
+            whereClause = "   AND " + " SUB.USER_ID = ?";
         } else {
             whereClause = "   AND " + " SUB.USER_ID = ?";
         }
@@ -6619,7 +6639,7 @@ public class ApiMgtDAO {
             String query = "SELECT APP.APPLICATION_ID FROM AM_SUBSCRIBER SUB, AM_APPLICATION APP";
             String whereClause = "  WHERE SUB.USER_ID =? AND APP.APPLICATION_ID=? AND " +
                     "SUB.SUBSCRIBER_ID=APP.SUBSCRIBER_ID";
-            String whereClauseCaseInSensitive = "  WHERE LOWER(SUB.USER_ID) =LOWER(?) AND APP.APPLICATION_ID=? AND SUB"
+            String whereClauseCaseInSensitive = "  WHERE SUB.USER_ID = ? AND APP.APPLICATION_ID=? AND SUB"
                     + ".SUBSCRIBER_ID=APP.SUBSCRIBER_ID";
             String whereClauseWithGroupId = "  WHERE  (APP.GROUP_ID = ? OR ((APP.GROUP_ID='' OR APP.GROUP_ID IS NULL)"
                     + " AND SUB.USER_ID = ?)) AND " + "APP.APPLICATION_ID = ? AND SUB.SUBSCRIBER_ID = APP" +
@@ -6699,13 +6719,13 @@ public class ApiMgtDAO {
 
             String query = SQLConstants.GET_APPLICATION_BY_NAME_PREFIX;
             String whereClause = "  WHERE SUB.USER_ID =? AND APP.NAME=? AND SUB.SUBSCRIBER_ID=APP.SUBSCRIBER_ID";
-            String whereClauseCaseInSensitive = "  WHERE LOWER(SUB.USER_ID) =LOWER(?) AND APP.NAME=? AND SUB" + "" +
+            String whereClauseCaseInSensitive = "  WHERE SUB.USER_ID = ? AND APP.NAME=? AND SUB" + "" +
                     ".SUBSCRIBER_ID=APP.SUBSCRIBER_ID";
             String whereClauseWithGroupId = "  WHERE  (APP.GROUP_ID = ? OR ((APP.GROUP_ID='' OR APP.GROUP_ID IS NULL)"
                     + " AND SUB.USER_ID = ?)) AND " + "APP.NAME = ? AND SUB.SUBSCRIBER_ID = APP.SUBSCRIBER_ID";
             String whereClauseWithGroupIdCaseInSensitive =
                     "  WHERE  (APP.GROUP_ID = ? OR ((APP.GROUP_ID='' OR APP.GROUP_ID IS NULL)"
-                            + " AND LOWER(SUB.USER_ID) = LOWER(?))) AND "
+                            + " AND SUB.USER_ID = ?)) AND "
                             + "APP.NAME = ? AND SUB.SUBSCRIBER_ID = APP.SUBSCRIBER_ID";
 
             String whereClauseWithMultiGroupId = "  WHERE  (((APP.APPLICATION_ID IN (SELECT APPLICATION_ID  FROM " +
@@ -6717,7 +6737,7 @@ public class ApiMgtDAO {
                             + "AM_APPLICATION_GROUP_MAPPING WHERE GROUP_ID IN ($params) AND TENANT = ?)) "
                             + "OR (APP.APPLICATION_ID IN (SELECT APPLICATION_ID FROM AM_APPLICATION " +
                             "WHERE GROUP_ID = ?))) "
-                            + "AND LOWER(SUB.USER_ID) = LOWER(?)) AND APP.NAME = ? AND SUB.SUBSCRIBER_ID = " +
+                            + "AND SUB.USER_ID = ?) AND APP.NAME = ? AND SUB.SUBSCRIBER_ID = " +
                             "APP.SUBSCRIBER_ID";
 
             if (groupId != null && !"null".equals(groupId) && !groupId.isEmpty()) {
@@ -6944,19 +6964,19 @@ public class ApiMgtDAO {
             String query = SQLConstants.GET_APPLICATION_BY_ID_SQL;
 
             String whereClause = "  AND SUB.USER_ID =?";
-            String whereClauseCaseInSensitive = "  AND LOWER(SUB.USER_ID) =LOWER(?)";
+            String whereClauseCaseInSensitive = "  AND SUB.USER_ID = ?";
             String whereClauseWithGroupId = "  AND  (APP.GROUP_ID = ? OR ((APP.GROUP_ID='' OR APP.GROUP_ID IS NULL)"
                     + " AND SUB.USER_ID = ?))";
             String whereClauseWithGroupIdCaseInSensitive = "  AND  (APP.GROUP_ID = ? OR ((APP.GROUP_ID='' OR APP" +
                     ".GROUP_ID IS NULL)"
-                    + " AND LOWER(SUB.USER_ID) = LOWER(?)))";
+                    + " AND SUB.USER_ID = ?))";
 
             String whereClauseWithMultiGroupId = "  AND  ((APP.APPLICATION_ID IN (SELECT APPLICATION_ID  FROM " +
                     "AM_APPLICATION_GROUP_MAPPING WHERE GROUP_ID IN ($params) AND TENANT = ?))  OR   SUB.USER_ID = ? )";
             String whereClauseWithMultiGroupIdCaseInSensitive = "  AND  ((APP.APPLICATION_ID IN (SELECT " +
                     "APPLICATION_ID  FROM " +
-                    "AM_APPLICATION_GROUP_MAPPING WHERE GROUP_ID IN ($params) AND TENANT = ?))  OR   LOWER(SUB" +
-                    ".USER_ID) = LOWER(?) )";
+                    "AM_APPLICATION_GROUP_MAPPING WHERE GROUP_ID IN ($params) AND TENANT = ?))  OR   SUB" +
+                    ".USER_ID = ? )";
 
             if (groupId != null && !"null".equals(groupId) && !groupId.isEmpty()) {
                 if (multiGroupAppSharingEnabled) {

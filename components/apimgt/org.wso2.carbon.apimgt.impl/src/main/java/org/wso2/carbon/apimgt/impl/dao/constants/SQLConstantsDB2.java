@@ -56,7 +56,7 @@ public class SQLConstantsDB2 extends SQLConstants{
                     " AND " +
                     "   APP.ORGANIZATION = ? " +
                     " And " +
-                    "    LOWER (NAME) like LOWER (?)" +
+                    "    NAME like ?" +
                     " ) a )x left join AM_BLOCK_CONDITIONS bl on  ( bl.TYPE = 'APPLICATION' AND bl.BLOCK_CONDITION = concat(concat(x.USER_ID,':'),x.name)) " +
                     " ORDER BY $1 $2 limit ? , ? ";
 
@@ -89,11 +89,11 @@ public class SQLConstantsDB2 extends SQLConstants{
                     " WHERE " +
                     "   SUB.SUBSCRIBER_ID = APP.SUBSCRIBER_ID " +
                     " AND " +
-                    "   (GROUP_ID= ?  OR (GROUP_ID='' AND LOWER (SUB.USER_ID) = LOWER (?)))"+
+                    "   (GROUP_ID= ?  OR (GROUP_ID='' AND SUB.USER_ID = ?))"+
                     " AND " +
                     "   APP.ORGANIZATION = ? " +
                     " And "+
-                    "    LOWER (NAME) like LOWER (?)" +
+                    "    NAME like ?" +
                     " ) a )x left join AM_BLOCK_CONDITIONS bl on  ( bl.TYPE = 'APPLICATION' AND bl.BLOCK_CONDITION = concat(concat(x.USER_ID,':'),x.name)) " +
                     " ORDER BY $1 $2 limit ? , ? ";
 
@@ -127,7 +127,7 @@ public class SQLConstantsDB2 extends SQLConstants{
                     " AND " +
                     "   APP.ORGANIZATION = ? " +
                     " And "+
-                    "    LOWER (NAME) like LOWER (?)" +
+                    "    NAME like ?" +
                     " ) a )x left join AM_BLOCK_CONDITIONS bl on  ( bl.TYPE = 'APPLICATION' AND bl.BLOCK_CONDITION = concat(concat(x.USER_ID,':'),x.name)) " +
                     " ORDER BY $1 $2 limit ? , ? ";
 
@@ -158,11 +158,11 @@ public class SQLConstantsDB2 extends SQLConstants{
                     " WHERE " +
                     "   SUB.SUBSCRIBER_ID = APP.SUBSCRIBER_ID " +
                     " AND " +
-                    "   LOWER (SUB.USER_ID) = LOWER(?)" +
+                    "   SUB.USER_ID = ?" +
                     " AND " +
                     "   APP.ORGANIZATION = ? " +
                     " And "+
-                    "    LOWER (NAME) like LOWER (?)" +
+                    "    NAME like ?" +
                     " ) a )x left join AM_BLOCK_CONDITIONS bl on  ( bl.TYPE = 'APPLICATION' AND bl.BLOCK_CONDITION = concat(concat(x.USER_ID,':'),x.name)) " +
                     " ORDER BY $1 $2 limit ? , ? ";
 
@@ -192,14 +192,14 @@ public class SQLConstantsDB2 extends SQLConstants{
                     " AND (" +
                     "    (APPLICATION_ID IN ( SELECT APPLICATION_ID FROM AM_APPLICATION_GROUP_MAPPING WHERE GROUP_ID IN ($params) AND TENANT = ?)) " +
                     "           OR " +
-                    "    (LOWER (SUB.USER_ID) = LOWER(?))" +
+                    "    (SUB.USER_ID = ?)" +
                     "           OR " +
                     "    (APP.APPLICATION_ID IN (SELECT APPLICATION_ID FROM AM_APPLICATION WHERE GROUP_ID = ?))" +
                     " )" +
                     " AND " +
                     "   APP.ORGANIZATION = ? " +
                     " And "+
-                    "    LOWER (NAME) like LOWER (?)"+
+                    "    NAME like ?"+
                     " ORDER BY $1 $2 " +
                     " limit ? , ? "+
                     " )x left join AM_BLOCK_CONDITIONS bl on  ( bl.TYPE = 'APPLICATION' AND bl.BLOCK_CONDITION = concat(concat(x.USER_ID,':'),x.name)) ";
@@ -238,7 +238,7 @@ public class SQLConstantsDB2 extends SQLConstants{
                     " AND " +
                     "   APP.ORGANIZATION = ? " +
                     " And " +
-                    "    LOWER (NAME) like LOWER (?)"+
+                    "    NAME like ?"+
                     " )x left join AM_BLOCK_CONDITIONS bl on  ( bl.TYPE = 'APPLICATION' AND bl.BLOCK_CONDITION = concat(concat(x.USER_ID,':'),x.name)) " +
                     " ORDER BY $1 $2 limit ? , ?";
 
@@ -272,7 +272,7 @@ public class SQLConstantsDB2 extends SQLConstants{
                     " AND " +
                     "   APP.ORGANIZATION = ? " +
                     " And "+
-                    "    LOWER (NAME) like LOWER (?)" +
+                    "    NAME like ?" +
                     " ) a )x left join AM_BLOCK_CONDITIONS bl on  ( bl.TYPE = 'APPLICATION' AND bl.BLOCK_CONDITION = concat(concat(x.USER_ID,':'),x.name)) " +
                     " ORDER BY $1 $2 limit ? , ? ";
 
@@ -302,11 +302,11 @@ public class SQLConstantsDB2 extends SQLConstants{
                     " WHERE " +
                     "   SUB.SUBSCRIBER_ID = APP.SUBSCRIBER_ID " +
                     " AND " +
-                    "   (LOWER (SUB.USER_ID) = LOWER(?) OR APP.SHARED_ORGANIZATION = ?)" +
+                    "   (SUB.USER_ID = ? OR APP.SHARED_ORGANIZATION = ?)" +
                     " AND " +
                     "   APP.ORGANIZATION = ? " +
                     " And "+
-                    "    LOWER (NAME) like LOWER (?)" +
+                    "    NAME like ?" +
                     " ) a )x left join AM_BLOCK_CONDITIONS bl on  ( bl.TYPE = 'APPLICATION' AND bl.BLOCK_CONDITION = concat(concat(x.USER_ID,':'),x.name)) " +
                     " ORDER BY $1 $2 limit ? , ? ";
 
