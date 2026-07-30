@@ -632,12 +632,18 @@ public class ThrottleHandler extends AbstractHandler implements ManagedLifecycle
             return true;
         }
 
+        // MCP throttling only applies to tools/call (actual tool invocations).
+        // Besides API type=MCP, legacy MCP services published as HTTP also set isMcp
+        // via McpInitHandler (category-based), so both must be considered.
         String apiType = (String) messageContext.getProperty(APIMgtGatewayConstants.API_TYPE);
-        if (APIConstants.API_TYPE_MCP.equalsIgnoreCase(apiType)) {
+        boolean isMcpRelated = APIConstants.API_TYPE_MCP.equalsIgnoreCase(apiType)
+                || messageContext.getProperty("isMcp") != null;
+        if (isMcpRelated) {
             String mcpMethod = (String) messageContext.getProperty(APIMgtGatewayConstants.MCP_METHOD);
             if (!APIConstants.MCP.METHOD_TOOL_CALL.equalsIgnoreCase(mcpMethod)) {
                 if (log.isDebugEnabled()) {
-                    log.debug("Skipping MCP call request throttling.");
+                    log.debug("Skipping MCP request throttling for non-tools/call method: " + mcpMethod
+                            + " (apiType=" + apiType + ")");
                 }
                 return true;
             }
