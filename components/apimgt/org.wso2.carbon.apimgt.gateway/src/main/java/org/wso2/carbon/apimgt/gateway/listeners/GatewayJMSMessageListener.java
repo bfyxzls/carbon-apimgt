@@ -188,6 +188,11 @@ public class GatewayJMSMessageListener implements MessageListener, JMSConnection
                                     startTenantFlow(tenantDomain);
                                     tenantFlowStarted = true;
                                     inMemoryApiDeployer.deployAPI(gatewayEvent);
+                                    // Reload subscription-store API (urlMappings/schemas) AFTER artifact
+                                    // deploy. A pre-deploy reload can race the revision mapping commit and
+                                    // leave MCP tools/list serving stale schemas until Gateway restart.
+                                    ServiceReferenceHolder.getInstance().getKeyManagerDataService()
+                                            .updateDeployedAPIRevision(gatewayEvent);
                                 } catch (ArtifactSynchronizerException e) {
                                     log.error("Error in deploying artifacts for " + gatewayEvent.getUuid() +
                                             "in the Gateway");

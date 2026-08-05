@@ -48,6 +48,7 @@ public class API implements CacheableEntity<String> {
     private boolean isDefaultVersion = false;
     private String securityScheme;
     private String revisionId;
+    private String environment;
     private Map<String, String> apiProperties = new HashMap<>();
     private List<OperationPolicy> apiPolicies = new ArrayList<>();
     private boolean isSubscriptionValidationDisabled = false;
@@ -341,6 +342,14 @@ public class API implements CacheableEntity<String> {
 
     public void setRevisionId(String revisionId) {
         this.revisionId = revisionId;
+    }
+
+    public String getEnvironment() {
+        return environment;
+    }
+
+    public void setEnvironment(String environment) {
+        this.environment = environment;
     }
 
     public String getSecurityScheme() {

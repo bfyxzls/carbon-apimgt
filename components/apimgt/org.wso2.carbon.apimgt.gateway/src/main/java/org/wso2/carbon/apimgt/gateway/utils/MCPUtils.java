@@ -307,9 +307,50 @@ public class MCPUtils {
      * @return the response payload as a String
      */
     public static McpResponseDto handleMcpToolList(Object id, API matchedApi, boolean isThirdParty) {
-        return new McpResponseDto(
-                MCPPayloadGenerator.generateToolListPayload(id, matchedApi.getUrlMappings(),
-                        isThirdParty), 200, null);
+        logMcpToolListSource(matchedApi);
+        String payload = MCPPayloadGenerator.generateToolListPayload(id, matchedApi.getUrlMappings(),
+                isThirdParty);
+        // Log the exact JSON that will be written to the Axis2 message (before any client/proxy).
+        // If this is new but the caller still sees old tools, the stale data is outside Gateway
+        // (MCP client cache, LB to another GW pod, or a different URL).
+        log.info("MCP tools/list generated response payload for apiUUID="
+                + (matchedApi != null ? matchedApi.getUuid() : null)
+                + ", revisionUUID=" + (matchedApi != null ? matchedApi.getRevisionId() : null)
+                + ", payload=" + payload);
+        return new McpResponseDto(payload, 200, null);
+    }
+
+    /**
+     * Logs the in-memory API revision and tool schemas used to build MCP tools/list.
+     * Useful when Gateway tools/list differs from Publisher / DB after deploy.
+     */
+    private static void logMcpToolListSource(API matchedApi) {
+        if (matchedApi == null) {
+            log.warn("MCP tools/list: matched API is null");
+            return;
+        }
+        List<URLMapping> urlMappings = matchedApi.getUrlMappings();
+        int mappingCount = urlMappings != null ? urlMappings.size() : 0;
+        StringBuilder toolsDetail = new StringBuilder();
+        if (urlMappings != null) {
+            for (URLMapping mapping : urlMappings) {
+                if (mapping == null) {
+                    continue;
+                }
+                toolsDetail.append("\n  - name=").append(mapping.getUrlPattern())
+                        .append(", httpMethod=").append(mapping.getHttpMethod())
+                        .append(", schemaDefinition=").append(mapping.getSchemaDefinition());
+            }
+        }
+        log.info("MCP tools/list source: apiUUID=" + matchedApi.getUuid()
+                + ", name=" + matchedApi.getApiName()
+                + ", version=" + matchedApi.getVersion()
+                + ", context=" + matchedApi.getContext()
+                + ", subtype=" + matchedApi.getSubtype()
+                + ", revisionUUID=" + matchedApi.getRevisionId()
+                + ", environment=" + matchedApi.getEnvironment()
+                + ", urlMappingCount=" + mappingCount
+                + ", tools=[" + toolsDetail + "\n]");
     }
 
     /**

@@ -23,6 +23,10 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonSyntaxException;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.apimgt.api.model.subscription.URLMapping;
 import org.wso2.carbon.apimgt.gateway.mcp.response.InitializeResult;
 import org.wso2.carbon.apimgt.gateway.mcp.response.McpError;
@@ -38,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 
 public class MCPPayloadGenerator {
+    private static final Log log = LogFactory.getLog(MCPPayloadGenerator.class);
     private static final Gson gson = new GsonBuilder().serializeNulls().setPrettyPrinting().create();
 
     public static String getErrorResponse(Object id, int code, String message, Object data) {
@@ -104,28 +109,79 @@ public class MCPPayloadGenerator {
         McpResponse<ToolListResult> toolListResponse = new McpResponse<>(id);
         ToolListResult toolListResult = new ToolListResult();
         List<ToolListResult.ToolInfo> toolInfoList = new ArrayList<>();
+        int mappingCount = extendedOperations != null ? extendedOperations.size() : 0;
+        log.info("MCP tools/list serialize start: mappingCount=" + mappingCount + ", isThirdParty=" + isThirdParty);
 
-        for (URLMapping extendedOperation : extendedOperations) {
-            ToolListResult.ToolInfo tool = new ToolListResult.ToolInfo();
-            tool.setName(extendedOperation.getUrlPattern());
-            tool.setDescription(extendedOperation.getDescription());
-            String schema = extendedOperation.getSchemaDefinition();
-            if (schema != null) {
-                ToolListResult.JsonSchema schemaObject = gson.fromJson(schema, ToolListResult.JsonSchema.class);
-                if (!isThirdParty) {
-                    tool.setInputSchema(sanitizeInputSchema(schemaObject));
-                } else {
-                    // For third-party tools, we do not sanitize the input schema
-                    tool.setInputSchema(schemaObject);
+        if (extendedOperations != null) {
+            for (URLMapping extendedOperation : extendedOperations) {
+                if (extendedOperation == null) {
+                    log.warn("MCP tools/list serialize: skipping null URLMapping");
+                    continue;
                 }
+                String toolName = extendedOperation.getUrlPattern();
+                String httpMethod = extendedOperation.getHttpMethod();
+                ToolListResult.ToolInfo tool = new ToolListResult.ToolInfo();
+                tool.setName(toolName);
+                tool.setDescription(extendedOperation.getDescription());
+                String schema = extendedOperation.getSchemaDefinition();
+                log.info("MCP tools/list serialize tool: name=" + toolName
+                        + ", httpMethod=" + httpMethod
+                        + ", rawSchemaDefinition=" + schema);
 
+                if (schema != null) {
+                    try {
+                        ToolListResult.JsonSchema schemaObject =
+                                gson.fromJson(schema, ToolListResult.JsonSchema.class);
+                        String afterParse = gson.toJson(schemaObject);
+                        log.info("MCP tools/list serialize tool after Gson.fromJson: name=" + toolName
+                                + ", parsedSchema=" + afterParse);
+                        if (schemaObject == null) {
+                            log.warn("MCP tools/list serialize: Gson.fromJson returned null for tool=" + toolName
+                                    + ", rawSchema=" + schema);
+                        } else if (!isThirdParty) {
+                            ToolListResult.JsonSchema sanitized = sanitizeInputSchema(schemaObject);
+                            String afterSanitize = gson.toJson(sanitized);
+                            log.info("MCP tools/list serialize tool after sanitize: name=" + toolName
+                                    + ", sanitizedSchema=" + afterSanitize);
+                            tool.setInputSchema(sanitized);
+                        } else {
+                            // For third-party tools, we do not sanitize the input schema
+                            tool.setInputSchema(schemaObject);
+                            log.info("MCP tools/list serialize tool skipped sanitize (thirdParty): name=" + toolName);
+                        }
+                    } catch (JsonParseException e) {
+                        log.error("MCP tools/list serialize FAILED (JSON parse) for tool=" + toolName
+                                + ", httpMethod=" + httpMethod
+                                + ", rawSchemaDefinition=" + schema, e);
+                        // Keep tool without inputSchema so remaining tools still return; failure is visible in logs.
+                    } catch (RuntimeException e) {
+                        log.error("MCP tools/list serialize FAILED (unexpected) for tool=" + toolName
+                                + ", httpMethod=" + httpMethod
+                                + ", rawSchemaDefinition=" + schema, e);
+                    }
+                } else {
+                    log.info("MCP tools/list serialize tool has null schemaDefinition: name=" + toolName
+                            + ", httpMethod=" + httpMethod);
+                }
+                toolInfoList.add(tool);
             }
-            toolInfoList.add(tool);
         }
+
         toolListResult.setTools(toolInfoList);
         toolListResponse.setResult(toolListResult);
-        return gson.toJson(toolListResponse);
+        try {
+            String payload = gson.toJson(toolListResponse);
+            log.info("MCP tools/list serialize final payload: toolCount=" + toolInfoList.size()
+                    + ", payload=" + payload);
+            return payload;
+        } catch (RuntimeException e) {
+            log.error("MCP tools/list serialize FAILED while writing final JSON-RPC payload, toolCount="
+                    + toolInfoList.size(), e);
+            throw e;
+        }
     }
+
+    private static final String[] SCHEMA_PARAM_PREFIXES = {"query_", "header_", "path_"};
 
     private static ToolListResult.JsonSchema sanitizeInputSchema(ToolListResult.JsonSchema inputSchema) {
         if (inputSchema == null) {
@@ -137,24 +193,22 @@ public class MCPPayloadGenerator {
         }
         inputSchema.removeProperty("contentType");
 
-        // remove the header, query, and path prefixes from the required fields
+        // Only strip OpenAPI-derived location prefixes (query_/header_/path_).
+        // Do NOT split on the first '_' — that corrupts legitimate MCP param names
+        // like decision_date_start / case_type / courthouse_name.
         List<String> requiredProperties = inputSchema.getRequired();
         List<String> sanitizedRequiredProperties = new ArrayList<>();
         if (requiredProperties != null && !requiredProperties.isEmpty()) {
             for (String requiredProperty : requiredProperties) {
-                String sanitizedRequiredProperty;
-                if (!"requestBody".equalsIgnoreCase(requiredProperty)) {
-                    String[] parts = requiredProperty.split("_", 2);
-                    sanitizedRequiredProperty = parts.length > 1 ? parts[1] : requiredProperty;
+                if ("requestBody".equalsIgnoreCase(requiredProperty)) {
+                    sanitizedRequiredProperties.add(requiredProperty);
                 } else {
-                    sanitizedRequiredProperty = requiredProperty;
+                    sanitizedRequiredProperties.add(stripSchemaParamPrefix(requiredProperty));
                 }
-                sanitizedRequiredProperties.add(sanitizedRequiredProperty);
             }
         }
         inputSchema.setRequired(sanitizedRequiredProperties);
 
-        // remove the header, query, and path prefixes from the properties keys
         Map<String, Object> properties = inputSchema.getProperties();
         Map<String, Object> sanitizedProperties = new HashMap<>();
         if (properties != null && !properties.isEmpty()) {
@@ -164,14 +218,27 @@ public class MCPPayloadGenerator {
                     sanitizedProperties.put("requestBody", entry.getValue());
                     continue;
                 }
-                String[] parts = key.split("_", 2);
-                String sanitizedKey = parts.length > 1 ? parts[1] : key;
-                Object property = entry.getValue();
-                sanitizedProperties.put(sanitizedKey, property);
+                sanitizedProperties.put(stripSchemaParamPrefix(key), entry.getValue());
             }
         }
         inputSchema.setProperties(sanitizedProperties);
         return inputSchema;
+    }
+
+    /**
+     * Strips OpenAPI parameter location prefixes used when APIM maps REST ops to MCP tools.
+     * Leaves other names (including those with underscores) unchanged.
+     */
+    private static String stripSchemaParamPrefix(String name) {
+        if (name == null) {
+            return null;
+        }
+        for (String prefix : SCHEMA_PARAM_PREFIXES) {
+            if (name.regionMatches(true, 0, prefix, 0, prefix.length())) {
+                return name.substring(prefix.length());
+            }
+        }
+        return name;
     }
 
     public static String generateMCPResponsePayload(Object id, boolean isError, String body) {
@@ -210,8 +277,14 @@ public class MCPPayloadGenerator {
     }
 
     private static String generateEmptyResult(Object id) {
-        McpResponse<JsonObject> response = new McpResponse<>(id);
-        response.setResult(new JsonObject());
+        JsonObject response = new JsonObject();
+        response.addProperty("jsonrpc", "2.0");
+        if (id instanceof Number) {
+            response.addProperty("id", (Number) id);
+        } else {
+            response.addProperty("id", String.valueOf(id));
+        }
+        response.add("result", new JsonObject());
         return gson.toJson(response);
     }
 }
