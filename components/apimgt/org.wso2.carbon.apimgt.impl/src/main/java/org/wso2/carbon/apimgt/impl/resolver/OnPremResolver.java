@@ -60,6 +60,11 @@ public class OnPremResolver implements OrganizationResolver {
                 if (APIConstants.ORG_ALL_QUERY_PARAM.equals(tenantDomain)){
                     return tenantDomain;
                 }
+                // WSO2/System is not a Carbon tenant; it is the logical organization id used for
+                // Global Key Manager configurations. Allow it through without isTenantAvailable().
+                if (APIConstants.GLOBAL_KEY_MANAGER_TENANT_DOMAIN.equals(tenantDomain)) {
+                    return tenantDomain;
+                }
                 if (!APIUtil.isTenantAvailable(tenantDomain)) {
                     String errorMessage = "Provided tenant domain '" + tenantDomain + "' is invalid";
                     throw new APIMgtBadRequestException(errorMessage);

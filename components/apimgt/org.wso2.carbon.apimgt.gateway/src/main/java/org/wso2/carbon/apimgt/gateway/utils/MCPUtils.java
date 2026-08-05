@@ -1704,7 +1704,6 @@ public class MCPUtils {
         String[] tenantCandidates = {
                 APIConstants.SUPER_TENANT_DOMAIN,
                 organization,
-                APIConstants.GLOBAL_KEY_MANAGER_TENANT_DOMAIN,
                 GatewayUtils.getTenantDomain()
         };
         for (String tenant : tenantCandidates) {
