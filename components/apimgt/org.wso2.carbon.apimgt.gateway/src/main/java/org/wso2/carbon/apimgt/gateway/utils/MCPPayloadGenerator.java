@@ -24,7 +24,6 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
-import com.google.gson.JsonSyntaxException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.apimgt.api.model.subscription.URLMapping;
@@ -42,8 +41,12 @@ import java.util.List;
 import java.util.Map;
 
 public class MCPPayloadGenerator {
+
     private static final Log log = LogFactory.getLog(MCPPayloadGenerator.class);
+
     private static final Gson gson = new GsonBuilder().serializeNulls().setPrettyPrinting().create();
+
+    private static final String[] SCHEMA_PARAM_PREFIXES = {"query_", "header_", "path_"};
 
     public static String getErrorResponse(Object id, int code, String message, Object data) {
         McpError error = new McpError(code, message, data);
@@ -72,7 +75,7 @@ public class MCPPayloadGenerator {
         result.setServerInfo(serverInfo);
 
         InitializeResult.Capabilities capabilities = getCapabilities(toolListChangeNotified);
-        
+
         result.setCapabilities(capabilities);
         initializeResponse.setResult(result);
 
@@ -110,7 +113,6 @@ public class MCPPayloadGenerator {
         ToolListResult toolListResult = new ToolListResult();
         List<ToolListResult.ToolInfo> toolInfoList = new ArrayList<>();
         int mappingCount = extendedOperations != null ? extendedOperations.size() : 0;
-        log.info("MCP tools/list serialize start: mappingCount=" + mappingCount + ", isThirdParty=" + isThirdParty);
 
         if (extendedOperations != null) {
             for (URLMapping extendedOperation : extendedOperations) {
@@ -124,25 +126,16 @@ public class MCPPayloadGenerator {
                 tool.setName(toolName);
                 tool.setDescription(extendedOperation.getDescription());
                 String schema = extendedOperation.getSchemaDefinition();
-                log.info("MCP tools/list serialize tool: name=" + toolName
-                        + ", httpMethod=" + httpMethod
-                        + ", rawSchemaDefinition=" + schema);
-
                 if (schema != null) {
                     try {
                         ToolListResult.JsonSchema schemaObject =
                                 gson.fromJson(schema, ToolListResult.JsonSchema.class);
-                        String afterParse = gson.toJson(schemaObject);
-                        log.info("MCP tools/list serialize tool after Gson.fromJson: name=" + toolName
-                                + ", parsedSchema=" + afterParse);
                         if (schemaObject == null) {
                             log.warn("MCP tools/list serialize: Gson.fromJson returned null for tool=" + toolName
                                     + ", rawSchema=" + schema);
                         } else if (!isThirdParty) {
                             ToolListResult.JsonSchema sanitized = sanitizeInputSchema(schemaObject);
                             String afterSanitize = gson.toJson(sanitized);
-                            log.info("MCP tools/list serialize tool after sanitize: name=" + toolName
-                                    + ", sanitizedSchema=" + afterSanitize);
                             tool.setInputSchema(sanitized);
                         } else {
                             // For third-party tools, we do not sanitize the input schema
@@ -159,9 +152,6 @@ public class MCPPayloadGenerator {
                                 + ", httpMethod=" + httpMethod
                                 + ", rawSchemaDefinition=" + schema, e);
                     }
-                } else {
-                    log.info("MCP tools/list serialize tool has null schemaDefinition: name=" + toolName
-                            + ", httpMethod=" + httpMethod);
                 }
                 toolInfoList.add(tool);
             }
@@ -171,8 +161,6 @@ public class MCPPayloadGenerator {
         toolListResponse.setResult(toolListResult);
         try {
             String payload = gson.toJson(toolListResponse);
-            log.info("MCP tools/list serialize final payload: toolCount=" + toolInfoList.size()
-                    + ", payload=" + payload);
             return payload;
         } catch (RuntimeException e) {
             log.error("MCP tools/list serialize FAILED while writing final JSON-RPC payload, toolCount="
@@ -180,8 +168,6 @@ public class MCPPayloadGenerator {
             throw e;
         }
     }
-
-    private static final String[] SCHEMA_PARAM_PREFIXES = {"query_", "header_", "path_"};
 
     private static ToolListResult.JsonSchema sanitizeInputSchema(ToolListResult.JsonSchema inputSchema) {
         if (inputSchema == null) {

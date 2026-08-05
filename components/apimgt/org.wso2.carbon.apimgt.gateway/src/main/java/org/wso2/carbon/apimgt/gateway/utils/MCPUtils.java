@@ -43,6 +43,7 @@ import org.apache.synapse.transport.nhttp.NhttpConstants;
 import org.apache.synapse.transport.passthru.PassThroughConstants;
 import org.apache.synapse.transport.passthru.util.RelayUtils;
 import org.wso2.carbon.apimgt.api.APIManagementException;
+import org.wso2.carbon.apimgt.api.dto.KeyManagerConfigurationDTO;
 import org.wso2.carbon.apimgt.api.model.APIOperationMapping;
 import org.wso2.carbon.apimgt.api.model.BackendOperation;
 import org.wso2.carbon.apimgt.api.model.BackendOperationMapping;
@@ -57,14 +58,13 @@ import org.wso2.carbon.apimgt.gateway.exception.McpExceptionWithId;
 import org.wso2.carbon.apimgt.gateway.handlers.Utils;
 import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityConstants;
 import org.wso2.carbon.apimgt.gateway.handlers.streaming.sse.SseApiConstants;
-import org.wso2.carbon.apimgt.api.dto.KeyManagerConfigurationDTO;
 import org.wso2.carbon.apimgt.gateway.internal.DataHolder;
 import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
-import org.wso2.carbon.apimgt.impl.dto.EventHubConfigurationDto;
 import org.wso2.carbon.apimgt.gateway.mcp.request.McpRequest;
 import org.wso2.carbon.apimgt.gateway.mcp.request.Params;
 import org.wso2.carbon.apimgt.gateway.mcp.response.McpResponseDto;
 import org.wso2.carbon.apimgt.impl.APIConstants;
+import org.wso2.carbon.apimgt.impl.dto.EventHubConfigurationDto;
 import org.wso2.carbon.apimgt.impl.dto.KeyManagerDto;
 import org.wso2.carbon.apimgt.impl.factory.KeyManagerHolder;
 import org.wso2.carbon.apimgt.impl.kmclient.model.OpenIdConnectConfiguration;
@@ -92,8 +92,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 public class MCPUtils {
@@ -126,21 +126,12 @@ public class MCPUtils {
 
     private static final Gson MCP_METADATA_GSON = new Gson();
 
-    private static final class EventHubKeyManagerTenantCacheEntry {
+    /**
+     * Minimal SSE preamble for Streamable HTTP {@code GET /mcp}. Clients use this channel for server-initiated
+     * JSON-RPC messages after {@code initialize} on POST; the gateway answers POST synchronously today.
+     */
+    private static final String STREAMABLE_HTTP_SSE_PREAMBLE = ": stream open\n\n";
 
-        private final List<KeyManagerConfigurationDTO> configurations;
-        private final long loadedAtMs;
-
-        private EventHubKeyManagerTenantCacheEntry(List<KeyManagerConfigurationDTO> configurations,
-                                                   long loadedAtMs) {
-            this.configurations = configurations;
-            this.loadedAtMs = loadedAtMs;
-        }
-
-        private boolean isExpired() {
-            return System.currentTimeMillis() - loadedAtMs > EVENT_HUB_KM_TENANT_CACHE_TTL_MS;
-        }
-    }
     /**
      * Validates the MCP request.
      *
@@ -307,16 +298,9 @@ public class MCPUtils {
      * @return the response payload as a String
      */
     public static McpResponseDto handleMcpToolList(Object id, API matchedApi, boolean isThirdParty) {
-        logMcpToolListSource(matchedApi);
+        // logMcpToolListSource(matchedApi);
         String payload = MCPPayloadGenerator.generateToolListPayload(id, matchedApi.getUrlMappings(),
                 isThirdParty);
-        // Log the exact JSON that will be written to the Axis2 message (before any client/proxy).
-        // If this is new but the caller still sees old tools, the stale data is outside Gateway
-        // (MCP client cache, LB to another GW pod, or a different URL).
-        log.info("MCP tools/list generated response payload for apiUUID="
-                + (matchedApi != null ? matchedApi.getUuid() : null)
-                + ", revisionUUID=" + (matchedApi != null ? matchedApi.getRevisionId() : null)
-                + ", payload=" + payload);
         return new McpResponseDto(payload, 200, null);
     }
 
@@ -1919,12 +1903,6 @@ public class MCPUtils {
     }
 
     /**
-     * Minimal SSE preamble for Streamable HTTP {@code GET /mcp}. Clients use this channel for server-initiated
-     * JSON-RPC messages after {@code initialize} on POST; the gateway answers POST synchronously today.
-     */
-    private static final String STREAMABLE_HTTP_SSE_PREAMBLE = ": stream open\n\n";
-
-    /**
      * Answers Streamable HTTP {@code GET /mcp} with {@code text/event-stream} (MCP 2025-03-26 transport).
      */
     public static boolean writeStreamableHttpGetResponse(MessageContext messageContext) {
@@ -1993,6 +1971,23 @@ public class MCPUtils {
             log.error("Error while generating MCP oauth-protected-resource metadata " +
                     axis2MessageContext.getLogIDString(), e);
             return false;
+        }
+    }
+
+    private static final class EventHubKeyManagerTenantCacheEntry {
+
+        private final List<KeyManagerConfigurationDTO> configurations;
+
+        private final long loadedAtMs;
+
+        private EventHubKeyManagerTenantCacheEntry(List<KeyManagerConfigurationDTO> configurations,
+                                                   long loadedAtMs) {
+            this.configurations = configurations;
+            this.loadedAtMs = loadedAtMs;
+        }
+
+        private boolean isExpired() {
+            return System.currentTimeMillis() - loadedAtMs > EVENT_HUB_KM_TENANT_CACHE_TTL_MS;
         }
     }
 
