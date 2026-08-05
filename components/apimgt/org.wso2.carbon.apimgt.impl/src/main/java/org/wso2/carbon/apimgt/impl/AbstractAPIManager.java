@@ -727,7 +727,9 @@ public abstract class AbstractAPIManager implements APIManager {
             throws APIManagementException {
 
         Application defaultApp = new Application(APIConstants.DEFAULT_APPLICATION_NAME, subscriber);
-        defaultApp.setTier(APIUtil.getDefaultApplicationLevelPolicy(subscriber.getTenantId()));
+        // defaultApp.setTier(APIUtil.getDefaultApplicationLevelPolicy(subscriber.getTenantId()));
+        // 这块需要默认为应用添加一个tier，默认是Unlimited
+        defaultApp.setTier("300PerMin");
         //application will not be shared within the group
         defaultApp.setGroupId("");
         // TODO: 自动添加的应用tokenType为default，而不是jwt
