@@ -118,7 +118,6 @@ public class TemplateBuilderUtil {
                 soapToRestMediationDtos);
         Map<String, String> latencyStatsProperties = new HashMap<String, String>();
         latencyStatsProperties.put(APIConstants.API_UUID, api.getUUID());
-        log.info("APITemplateBuilderImpl api type:"+api.getType());
 
         if (!APIUtil.isStreamingApi(api)) {
             vtb.addHandler(

@@ -63,8 +63,6 @@ public class APIGatewayManager {
     private void sendDeploymentEvent(API api, Set<String> publishedGateways,
                                      Set<String> platformGatewayIds, String revisionUuidForPlatform,
                                      Map<String, String> platformGatewayDeploymentIds) {
-        log.info("Sending deployment event for API: " + api.getId().getName() + " version: " + api.getId().getVersion()
-                + " to gateways");
         APIIdentifier apiIdentifier = api.getId();
         Set<String> gateways = publishedGateways != null ? publishedGateways : new HashSet<>();
         boolean useRevisionAsEventId = revisionUuidForPlatform != null && !revisionUuidForPlatform.isEmpty()
@@ -224,8 +222,6 @@ public class APIGatewayManager {
     public void deployToGateway(API api, String tenantDomain, Set<String> gatewaysToPublish,
                                 Set<String> platformGatewayIds, String revisionUuid,
                                 Map<String, String> platformGatewayDeploymentIds) {
-        log.info("Deploying API: " + api.getId().getName() + " version: " + api.getId().getVersion() + " to tenant: "
-                + tenantDomain);
         if (platformGatewayIds != null && !platformGatewayIds.isEmpty() && log.isDebugEnabled()) {
             log.debug("Deploying to " + platformGatewayIds.size() + " platform gateways with revision: "
                     + revisionUuid);
@@ -291,8 +287,6 @@ public class APIGatewayManager {
     public void unDeployFromGateway(APIProduct apiProduct, String tenantDomain, Set<API> associatedAPIs,
                                     Set<String> gatewaysToRemove, Set<String> synapseLabelsToRemove,
                                     Set<String> platformGatewayIds) throws APIManagementException {
-        log.info("Undeploying API Product: " + apiProduct.getId().getName() + " version: " + apiProduct.getId()
-                .getVersion() + " from gateways");
         String apiProductUuid = apiProduct.getUuid();
         APIProductIdentifier apiProductIdentifier = apiProduct.getId();
         try {

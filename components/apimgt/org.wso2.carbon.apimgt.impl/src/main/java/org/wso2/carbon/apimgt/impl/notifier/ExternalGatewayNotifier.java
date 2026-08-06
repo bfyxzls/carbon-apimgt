@@ -150,8 +150,6 @@ public class ExternalGatewayNotifier extends DeployAPIInGatewayNotifier {
                                 APIUtil.updateApiExternalApiMapping(apiId, environments.get(deploymentEnv).getUuid(),
                                         updatedReferenceArtifact);
                             }
-                            log.info("Successfully deployed API: " + api.getUuid() + " to environment: " +
-                                    deploymentEnv);
                         }
                     }
                 } catch (APIManagementException e) {

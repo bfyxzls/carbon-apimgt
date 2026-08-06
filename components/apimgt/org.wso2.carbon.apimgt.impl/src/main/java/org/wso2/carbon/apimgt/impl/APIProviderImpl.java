@@ -2890,8 +2890,6 @@ class APIProviderImpl extends AbstractAPIManager implements APIProvider {
         APIGatewayManager gatewayManager = APIGatewayManager.getInstance();
         Map<String, String> platformGatewayDeploymentIds = resolvePlatformGatewayDeploymentIds(api.getUuid(),
                 targets.getPlatformGatewayIds());
-        log.info("Undeploy API: " + api.getId().getApiName() + " from " + environmentsToRemove.size()
-                + " environments");
         gatewayManager.unDeployFromGateway(api, targets.getSynapseLabels(), onDeleteOrRetire,
                 targets.getPlatformGatewayIds().isEmpty() ? null : targets.getPlatformGatewayIds(),
                 platformGatewayDeploymentIds);

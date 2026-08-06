@@ -459,7 +459,6 @@ public class GatewayStartupListener extends AbstractAxis2ConfigurationContextObs
                 boolean isArtifactsDeployed = deployArtifactsAtStartup(tenantDomain);
                 if (isArtifactsDeployed) {
                     DataHolder.getInstance().setTenantDeployStatus(tenantDomain);
-                    log.info("Synapse Artifacts deployed Successfully in the Gateway");
                     retry = false;
                 } else {
                     throw new ArtifactSynchronizerException("Unable to deploy synapse artifacts at gateway");
@@ -510,7 +509,6 @@ public class GatewayStartupListener extends AbstractAxis2ConfigurationContextObs
                 boolean isArtifactsDeployed = deployGatewayPolicyArtifactsAtStartup(tenantDomain);
                 DataHolder.getInstance().setAllGatewayPoliciesDeployed(isArtifactsDeployed);
                 if (isArtifactsDeployed) {
-                    log.info("Gateway policy artifacts deployed Successfully in the Gateway");
                     retry = false;
                 } else {
                     throw new ArtifactSynchronizerException("Unable to deploy gateway policy artifacts at gateway");

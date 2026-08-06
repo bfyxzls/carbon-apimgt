@@ -57,7 +57,6 @@ public final class DeploymentModeResolver {
      *         {@link DeploymentTargets#getPlatformGatewayIds()}
      */
     public static DeploymentTargets resolve(String organization, Set<String> environmentNames) {
-        log.info("Resolving deployment targets for organization: " + organization);
         Set<String> synapseLabels = new HashSet<>();
         Set<String> platformGatewayIds = new HashSet<>();
 
