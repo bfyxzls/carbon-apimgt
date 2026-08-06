@@ -1781,14 +1781,6 @@ components:
           type: string
           description: The subtype of the API.
           example: Default
-        revisionId:
-          type: string
-          description: UUID of the API revision deployed to the requested gateway label.
-          example: 6b53f157-3595-4d9c-a3b8-2d1f7c5e9a10
-        environment:
-          type: string
-          description: Gateway deployment label / environment name for the loaded revision.
-          example: Default
     synapseArtifact:
       type: object
       properties:

@@ -17,6 +17,7 @@
 package org.wso2.carbon.apimgt.gateway.handlers.security;
 
 import org.apache.axis2.Constants;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.HttpStatus;
@@ -95,11 +96,13 @@ public class CORSRequestHandler extends AbstractHandler implements ManagedLifecy
             allowHeaders = APIUtil.getAllowedHeaders();
         }
         if (authorizationHeader != null) {
-            allowHeaders += APIConstants.MULTI_ATTRIBUTE_SEPARATOR_DEFAULT + authorizationHeader;
+            appendAllowHeaderIfAbsent(authorizationHeader);
         }
         if (apiKeyHeader != null) {
-            allowHeaders += APIConstants.MULTI_ATTRIBUTE_SEPARATOR_DEFAULT + apiKeyHeader;
+            appendAllowHeaderIfAbsent(apiKeyHeader);
         }
+        // Publisher MCP Playground / Try Out sends Internal-Key on cross-origin calls.
+        appendAllowHeaderIfAbsent(APIMgtGatewayConstants.INTERNAL_KEY);
         if (allowedOrigins == null) {
             String allowedOriginsList = APIUtil.getAllowedOrigins();
             if (!allowedOriginsList.isEmpty()) {
@@ -120,6 +123,25 @@ public class CORSRequestHandler extends AbstractHandler implements ManagedLifecy
         }
 
         initializeHeaderValues = true;
+    }
+
+    /**
+     * Appends a header to Access-Control-Allow-Headers when it is not already listed (case-insensitive).
+     */
+    private void appendAllowHeaderIfAbsent(String header) {
+        if (StringUtils.isBlank(header)) {
+            return;
+        }
+        if (StringUtils.isBlank(allowHeaders)) {
+            allowHeaders = header;
+            return;
+        }
+        for (String existing : allowHeaders.split(APIConstants.MULTI_ATTRIBUTE_SEPARATOR_DEFAULT)) {
+            if (header.equalsIgnoreCase(existing.trim())) {
+                return;
+            }
+        }
+        allowHeaders += APIConstants.MULTI_ATTRIBUTE_SEPARATOR_DEFAULT + header;
     }
 
     public void destroy() {

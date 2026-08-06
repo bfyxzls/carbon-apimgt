@@ -403,7 +403,7 @@
         <Access-Control-Allow-Methods>GET,PUT,POST,DELETE,PATCH,OPTIONS</Access-Control-Allow-Methods>
 
         <!-- Configure Access-Control-Allow-Headers -->
-        <Access-Control-Allow-Headers>authorization,Access-Control-Allow-Origin,Content-Type,SOAPAction</Access-Control-Allow-Headers>
+        <Access-Control-Allow-Headers>authorization,Access-Control-Allow-Origin,Content-Type,SOAPAction,apikey,Internal-Key</Access-Control-Allow-Headers>
 
         <!--<Access-Control-Expose-Headers>Cache-Control,Content-Language,Content-Type,Expires,Last-Modified,Pragma</Access-Control-Expose-Headers>-->
 

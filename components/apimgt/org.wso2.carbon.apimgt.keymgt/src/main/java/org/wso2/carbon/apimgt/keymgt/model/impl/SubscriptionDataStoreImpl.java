@@ -879,26 +879,16 @@ public class SubscriptionDataStoreImpl implements SubscriptionDataStore {
     public void addOrUpdateAPIRevisionWithUrlTemplates(DeployAPIInGatewayEvent event) {
 
         try {
-            String key = event.getContext() + DELEM_PERIOD + event.getVersion();
-            API api = apiMap.get(key);
+            API api = apiMap.get(event.getContext() + ":" + event.getVersion());
             if (APIConstants.EventType.REMOVE_API_FROM_GATEWAY.name().equals(event.getType())) {
                 if (api != null) {
                     removeAPI(api);
                 }
             } else {
-                // Reload with retry: DEPLOY JMS can race ahead of DB commit of
-                // AM_DEPLOYMENT_REVISION_MAPPING, leaving stale urlMappings/schemas
-                // (e.g. MCP tools/list) in Gateway memory even though SQL already shows
-                // the new revision.
-                API newAPI = loadApiWithRetry(event.getContext(), event.getVersion());
+                API newAPI = new SubscriptionDataLoaderImpl().getApi(event.getContext(), event.getVersion());
                 if (newAPI != null) {
                     addOrUpdateAPI(newAPI);
-                    clearResourceCache(newAPI, event.getTenantDomain());
-                    return;
                 }
-                log.warn("Failed to reload API url mappings after deploy for "
-                        + event.getContext() + " " + event.getVersion()
-                        + ". Gateway may serve stale resource/MCP tool metadata until restart.");
             }
             if (api != null) {
                 clearResourceCache(api, event.getTenantDomain());
@@ -906,31 +896,6 @@ public class SubscriptionDataStoreImpl implements SubscriptionDataStore {
         } catch (DataLoadingException e) {
             log.error("Exception while loading api for " + event.getContext() + " " + event.getVersion(), e);
         }
-    }
-
-    private API loadApiWithRetry(String context, String version) throws DataLoadingException {
-
-        DataLoadingException lastException = null;
-        for (int attempt = 0; attempt < 3; attempt++) {
-            try {
-                API loaded = new SubscriptionDataLoaderImpl().getApi(context, version);
-                if (loaded != null) {
-                    return loaded;
-                }
-            } catch (DataLoadingException e) {
-                lastException = e;
-            }
-            try {
-                Thread.sleep(500L * (attempt + 1));
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-                break;
-            }
-        }
-        if (lastException != null) {
-            throw lastException;
-        }
-        return null;
     }
 
     private void clearResourceCache(API api, String tenantDomain) {

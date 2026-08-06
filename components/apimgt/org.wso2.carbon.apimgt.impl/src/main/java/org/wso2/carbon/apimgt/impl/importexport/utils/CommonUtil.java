@@ -370,7 +370,7 @@ public class CommonUtil {
 
                 // create the parent directory structure
                 if (destinationParent.mkdirs()) {
-                    log.info("Creation of folder is successful. Directory Name : " + destinationParent.getName());
+                    log.debug("Creation of folder is successful. Directory Name : " + destinationParent.getName());
                 }
 
                 if (!entry.isDirectory()) {

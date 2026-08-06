@@ -170,10 +170,6 @@ public class McpMediator extends AbstractMediator implements ManagedLifecycle {
             messageContext.setProperty(MCP_PROCESSED, "true");
             if (mcpResponse != null) {
                 try {
-                    log.info("MCP mediator writing local response for method=" + mcpMethod
-                            + ", api=" + matchedAPI.getApiName() + ":" + matchedAPI.getVersion()
-                            + ", httpStatus=" + mcpResponse.getStatusCode()
-                            + ", body=" + mcpResponse.getResponse());
                     JsonUtil.removeJsonPayload(axis2MessageContext);
                     JsonUtil.getNewJsonPayload(axis2MessageContext, mcpResponse.getResponse(), true, true);
                     axis2MessageContext.setProperty(Constants.Configuration.MESSAGE_TYPE, APIConstants.APPLICATION_JSON_MEDIA_TYPE);

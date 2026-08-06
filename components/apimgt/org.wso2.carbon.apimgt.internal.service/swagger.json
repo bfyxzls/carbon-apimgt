@@ -1350,11 +1350,6 @@
           "example" : "APIProduct",
           "description" : "Type of the API."
         },
-        "displayName" : {
-          "type" : "string",
-          "example" : "APIProduct",
-          "description" : "Display name of the API."
-        },
         "status" : {
           "type" : "string",
           "example" : "APIProduct",

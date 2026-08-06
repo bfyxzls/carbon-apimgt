@@ -156,8 +156,6 @@ public class SubscriptionValidationDataUtil {
             apidto.setUrlMappings(urlMappingsDTO);
             apidto.setIsEgress(model.isEgress() != 0);
             apidto.setSubtype(model.getSubtype());
-            apidto.setRevisionId(model.getRevision());
-            apidto.setEnvironment(model.getEnvironment());
         }
         return apidto;
     }
@@ -258,8 +256,6 @@ public class SubscriptionValidationDataUtil {
             apidto.setUrlMappings(urlMappingsDTO);
             apidto.setIsEgress(model.isEgress() != 0);
             apidto.setSubtype(model.getSubtype());
-            apidto.setRevisionId(model.getRevision());
-            apidto.setEnvironment(model.getEnvironment());
             apiListdto.setCount(1);
             apiListdto.getList().add(apidto);
         } else {

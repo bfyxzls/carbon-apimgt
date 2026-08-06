@@ -970,16 +970,12 @@ public class ApisApiServiceImplUtils {
             if (uriTemplate.getUriTemplate() == null || uriTemplate.getUriTemplate().isEmpty()) {
                 uriTemplate.setUriTemplate(operationTarget);
             }
-            // Always sync description/schema from the backend tools definition.
-            // Otherwise refresh + updateApi restores old SCHEMA_DEFINITION via
-            // populateExistingSchemaDefinitions, and findMatchingTools previously
-            // only filled empty schemas — so Gateway tools/list stayed stale after
-            // create-revision + deploy.
-            String toolDescription = descriptionByToolName.get(operationTarget);
-            if (StringUtils.isNotBlank(toolDescription)) {
-                uriTemplate.setDescription(toolDescription);
+            if (uriTemplate.getDescription() == null || uriTemplate.getDescription().isEmpty()) {
+                uriTemplate.setDescription(descriptionByToolName.get(operationTarget));
             }
-            uriTemplate.setSchemaDefinition(toolSchema);
+            if (uriTemplate.getSchemaDefinition() == null || uriTemplate.getSchemaDefinition().isEmpty()) {
+                uriTemplate.setSchemaDefinition(toolSchema);
+            }
             backendMapping.setBackendId(backendId);
             if (!tools.add(uriTemplate.getUriTemplate())) {
                 log.error("Duplicate MCP tool detected: " + uriTemplate.getUriTemplate());

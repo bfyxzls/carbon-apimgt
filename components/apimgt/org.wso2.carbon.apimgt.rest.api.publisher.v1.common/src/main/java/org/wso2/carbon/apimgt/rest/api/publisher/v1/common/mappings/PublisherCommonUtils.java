@@ -437,12 +437,7 @@ public class PublisherCommonUtils {
     private static void handleBackendSubtypes(API apiToUpdate, API originalAPI, APIProvider apiProvider)
             throws APIManagementException {
 
-        // For SERVER_PROXY, backend.definition (refreshed from upstream MCP) is the source of truth
-        // for tool schemas. Do not restore old SCHEMA_DEFINITION from DB first — that caused
-        // Publisher-refreshed tools to stay stale on Gateway after revision deploy.
-        if (!APIConstants.API_SUBTYPE_SERVER_PROXY.equals(originalAPI.getSubtype())) {
-            populateExistingSchemaDefinitions(apiToUpdate, originalAPI.getUriTemplates());
-        }
+        populateExistingSchemaDefinitions(apiToUpdate, originalAPI.getUriTemplates());
 
         List<Backend> backends =
                 apiProvider.getMCPServerBackends(apiToUpdate.getUuid(), originalAPI.getOrganization());
