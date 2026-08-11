@@ -190,6 +190,8 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
                         "Access token is missing");
             }
             MCPUtils.discardPassthroughMessage(messageContext);
+            // Preserve skip decision before clearing isMcp/mcpToolName; analytics runs later on response out-flow.
+            markSkipAnalyticsIfNotAuditableMcpRequest(messageContext);
             clearMcpMessageContextProperties(messageContext);
             return true;
         }
@@ -771,6 +773,31 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
             axis2MC.setProperty(Constants.Configuration.CONTENT_TYPE, APIConstants.APPLICATION_JSON_MEDIA_TYPE);
         } catch (AxisFault e) {
             log.warn("Failed to set MCP tools/call unauthorized JSON response body", e);
+        }
+    }
+
+    /**
+     * Marks analytics publishing to be skipped for MCP requests that must not produce audit rows
+     * (non-POST transport, missing tool name). Uses {@code SKIP_METRICS_PUBLISHING} because fault
+     * handling clears {@code isMcp}/{@code MCP_TOOL_NAME} before AnalyticsMetricsHandler runs.
+     */
+    private void markSkipAnalyticsIfNotAuditableMcpRequest(MessageContext messageContext) {
+        String httpMethod = (String) messageContext.getProperty(HTTP_METHOD);
+        if (StringUtils.isEmpty(httpMethod)) {
+            Object axis2Method = ((Axis2MessageContext) messageContext).getAxis2MessageContext()
+                    .getProperty(Constants.Configuration.HTTP_METHOD);
+            httpMethod = axis2Method != null ? String.valueOf(axis2Method) : null;
+        }
+        if (StringUtils.isNotEmpty(httpMethod) && !APIConstants.HTTP_POST.equalsIgnoreCase(httpMethod)) {
+            messageContext.setProperty(
+                    org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.SKIP_METRICS_PUBLISHING, true);
+            return;
+        }
+        Object mcpToolName = messageContext.getProperty(MCP_TOOL_NAME);
+        String toolName = mcpToolName != null ? String.valueOf(mcpToolName).trim() : null;
+        if (StringUtils.isEmpty(toolName) || "null".equalsIgnoreCase(toolName)) {
+            messageContext.setProperty(
+                    org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.SKIP_METRICS_PUBLISHING, true);
         }
     }
 

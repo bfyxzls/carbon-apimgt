@@ -1637,9 +1637,6 @@ public class MCPUtils {
                 getAllKeyManagerConfigurationsForMetadata(organization), keyManagerNameOrId, organization);
         if (configuration != null) {
             MCP_METADATA_KEY_MANAGER_CACHE.put(cacheKey, configuration);
-            log.info("Loaded Key Manager '" + configuration.getName() + "' (enabled=" + configuration.isEnabled()
-                    + ", allowedOrganizations=" + configuration.getAllowedOrganizations()
-                    + ") from Event Hub for MCP well-known metadata, mcpOrganization=" + organization);
         }
         return configuration;
     }

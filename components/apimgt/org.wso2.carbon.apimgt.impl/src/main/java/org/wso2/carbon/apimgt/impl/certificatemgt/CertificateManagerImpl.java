@@ -95,9 +95,6 @@ public class CertificateManagerImpl implements CertificateManager {
                 } else if (responseCode.getResponseCode() == ResponseCode.CERTIFICATE_EXPIRED.getResponseCode()) {
                     log.error("Could not add Certificate. Certificate has already expired.");
                     certificateMgtDAO.deleteCertificate(alias, endpoint, tenantId);
-                } else {
-                    log.info("Certificate is successfully added to the Publisher client Trust Store with Alias '"
-                            + alias + "'");
                 }
                 return responseCode;
             } else {
@@ -154,9 +151,6 @@ public class CertificateManagerImpl implements CertificateManager {
                     } else if (responseCode.getResponseCode() == ResponseCode.CERTIFICATE_NOT_FOUND.getResponseCode()) {
                         log.warn("The Certificate for Alias '" + alias + "' has been previously removed from " +
                                 "Trust Store. Hence DB entry is removed.");
-                    } else {
-                        log.info("Certificate is successfully removed from the Publisher Trust Store with Alias '"
-                                + alias + "'");
                     }
                     return responseCode;
                 } else {
@@ -240,7 +234,6 @@ public class CertificateManagerImpl implements CertificateManager {
         if (isListener) {
             ResponseCode responseCode = certificateMgtUtils.addCertificateToListenerTrustStore(certificate, alias);
             if (responseCode == ResponseCode.ALIAS_EXISTS_IN_TRUST_STORE) {
-                log.info("The Alias '" + alias + "' exists in the Gateway Trust Store.");
                 result = true;
             } else {
                 result = responseCode != ResponseCode.INTERNAL_SERVER_ERROR;
@@ -249,7 +242,6 @@ public class CertificateManagerImpl implements CertificateManager {
         } else {
             ResponseCode responseCode = certificateMgtUtils.addCertificateToSenderTrustStore(certificate, alias);
             if (responseCode == ResponseCode.ALIAS_EXISTS_IN_TRUST_STORE) {
-                log.info("The Alias '" + alias + "' exists in the Gateway Trust Store.");
                 result = true;
             } else {
                 result = responseCode != ResponseCode.INTERNAL_SERVER_ERROR;
@@ -257,12 +249,7 @@ public class CertificateManagerImpl implements CertificateManager {
             fileUpdateSucceed = touchSSLSenderConfigFile();
         }
         result = result && fileUpdateSucceed;
-        if (result) {
-            log.info("The certificate with Alias '" + alias + "' is successfully added to the Gateway "
-                    + "Trust Store.");
-        } else {
-            log.error("Error adding the certificate with Alias '" + alias + "' to the Gateway Trust Store");
-        }
+
         return result;
     }
 
@@ -306,10 +293,7 @@ public class CertificateManagerImpl implements CertificateManager {
 
         if (isListener) {
             ResponseCode responseCode = certificateMgtUtils.removeCertificateFromListenerTrustStore(alias);
-            if (responseCode != ResponseCode.INTERNAL_SERVER_ERROR) {
-                log.info("The certificate with Alias '" + alias + "' is successfully removed from the Gateway "
-                        + "Trust Store.");
-            } else {
+            if (responseCode == ResponseCode.INTERNAL_SERVER_ERROR) {
                 log.error(
                         "Error removing the certificate with Alias '" + alias + "' from the Gateway " + "Trust Store.");
                 return false;
@@ -317,10 +301,7 @@ public class CertificateManagerImpl implements CertificateManager {
             return touchSSLListenerConfigFile();
         } else {
             ResponseCode responseCode = certificateMgtUtils.removeCertificateFromSenderTrustStore(alias);
-            if (responseCode != ResponseCode.INTERNAL_SERVER_ERROR) {
-                log.info("The certificate with Alias '" + alias + "' is successfully removed from the Gateway "
-                        + "Trust Store.");
-            } else {
+            if (responseCode == ResponseCode.INTERNAL_SERVER_ERROR) {
                 log.error(
                         "Error removing the certificate with Alias '" + alias + "' from the Gateway " + "Trust Store.");
                 return false;
@@ -532,9 +513,7 @@ public class CertificateManagerImpl implements CertificateManager {
         File file = new File(senderProfilePath);
         if (file.exists()) {
             success = file.setLastModified(System.currentTimeMillis());
-            if (success) {
-                log.info("The Transport Sender will be re-initialized in few minutes.");
-            } else {
+            if (!success) {
                 if (log.isDebugEnabled()) {
                     log.debug("Error when modifying the sslprofiles.xml file");
                 }
@@ -561,9 +540,7 @@ public class CertificateManagerImpl implements CertificateManager {
             File file = new File(listenerProfileFilePath);
             if (file.exists()) {
                 success = file.setLastModified(System.currentTimeMillis());
-                if (success) {
-                    log.info("The Transport listener will be re-initialized in few minutes.");
-                } else {
+                if (!success) {
                     if (log.isDebugEnabled()) {
                         log.debug(
                                 "Error when modifying listener profile config file in path " + listenerProfileFilePath);

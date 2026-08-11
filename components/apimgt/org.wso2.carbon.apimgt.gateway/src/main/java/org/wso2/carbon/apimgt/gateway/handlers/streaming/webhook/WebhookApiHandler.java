@@ -174,7 +174,6 @@ public class WebhookApiHandler extends APIAuthenticationHandler {
         if (api != null) {
             for (URLMapping mapping : api.getUrlMappings()) {
                 if (topicName.equals(mapping.getUrlPattern())) {
-                    log.info("Valid topic found for webhook event");
                     return true;
                 }
             }

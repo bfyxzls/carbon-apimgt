@@ -211,7 +211,6 @@ public class RecommenderDetailsExtractor implements RecommenderEventPublisher {
             payload.put("action", APIConstants.ADD_API);
             payload.put("payload", obj);
             publishEvent(payload.toString());
-            log.info("Add API event for " + apiName + " API was published to the recommendation server");
         } else {
             JSONObject obj = new JSONObject();
             obj.put("api_name", apiName);
@@ -221,7 +220,6 @@ public class RecommenderDetailsExtractor implements RecommenderEventPublisher {
             payload.put(APIConstants.ACTION_STRING, APIConstants.DELETE_API);
             payload.put(APIConstants.PAYLOAD_STRING, obj);
             publishEvent(payload.toString());
-            log.info("Delete API event for " + apiName + " API was published to the recommendation server");
         }
     }
 
@@ -242,7 +240,6 @@ public class RecommenderDetailsExtractor implements RecommenderEventPublisher {
         payload.put(APIConstants.ACTION_STRING, APIConstants.ADD_NEW_APPLICATION);
         payload.put(APIConstants.PAYLOAD_STRING, obj);
         publishEvent(payload.toString());
-        log.info("Add Application event for " + appName + " application was published to the recommendation server");
     }
 
     @Override
@@ -255,7 +252,6 @@ public class RecommenderDetailsExtractor implements RecommenderEventPublisher {
         payload.put(APIConstants.ACTION_STRING, APIConstants.DELETE_APPLICATION);
         payload.put(APIConstants.PAYLOAD_STRING, obj);
         publishEvent(payload.toString());
-        log.info("Delete Application event for Application id " + appId + " was sent to recommendations server");
     }
 
     @Override
@@ -415,7 +411,6 @@ public class RecommenderDetailsExtractor implements RecommenderEventPublisher {
 
             HttpResponse httpResponse = httpClient.execute(method);
             if (httpResponse.getStatusLine().getStatusCode() == HttpStatus.SC_OK) {
-                log.info("Recommendations received for the user " + userName + " from recommendations server");
                 String contentString = EntityUtils.toString(httpResponse.getEntity());
                 if (log.isDebugEnabled()) {
                     log.debug("Recommendations received for user " + userName + " is " + contentString);

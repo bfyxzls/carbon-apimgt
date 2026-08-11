@@ -185,7 +185,6 @@ public class BasicAuthClientPool {
 
         try {
             basicAuthClientPool.close();
-            log.info("BasicAuthClientPool cleaned up successfully");
         } catch (Exception e) {
             log.warn("Error while cleaning up the BasicAuth client pool", e);
         }

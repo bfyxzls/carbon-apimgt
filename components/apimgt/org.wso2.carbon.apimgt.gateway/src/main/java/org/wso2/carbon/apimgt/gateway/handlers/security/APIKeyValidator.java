@@ -163,8 +163,6 @@ public class APIKeyValidator {
 
                 if (info != null) {
                     if (APIUtil.isAccessTokenExpired(info)) {
-                        log.info("Invalid OAuth Token : Access Token " + GatewayUtils.getMaskedToken(apiKey) + " " +
-                                "expired.");
                         info.setAuthorized(false);
                         // in cache, if token is expired  remove cache entry.
                         getGatewayKeyCache().remove(cacheKey);

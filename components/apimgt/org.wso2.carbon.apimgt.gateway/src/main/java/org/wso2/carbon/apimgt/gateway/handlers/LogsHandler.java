@@ -69,7 +69,6 @@ public class LogsHandler extends AbstractSynapseHandler {
     private static final String RESPONSE_OUT = "RESPONSE_OUT";
 
     public LogsHandler() {
-        log.info("Started log handler");
     }
 
     private boolean isEnabled() {
@@ -154,14 +153,6 @@ public class LogsHandler extends AbstractSynapseHandler {
                     String uuIdHeader = (String) messageContext.getProperty(UUID_HEADER);
                     String correlationIdHeader = (String) messageContext.getProperty(CORRELATION_ID_HEADER);
                     ThreadContext.put(APIConstants.CORRELATION_ID, correlationIdHeader);
-                    log.info(beTotalLatency + "|HTTP|" + LogUtils.getAPIName(messageContext) + "|"
-                            + LogUtils.getRestMethod(messageContext) + "|" + LogUtils.getAPICtx(messageContext)
-                            + LogUtils.getElectedResource(messageContext) + "|" + apiTo + "|" + authHeader + "|"
-                            + orgIdHeader + "|" + SrcIdHeader + "|" + applIdHeader + "|" + uuIdHeader + "|"
-                            + getContentLength(messageContext) + "|" + responseSize + "|"
-                            + LogUtils.getRestHttpResponseStatusCode(messageContext) + "|"
-                            + LogUtils.getApplicationName(messageContext) + "|"
-                            + LogUtils.getConsumerKey(messageContext) + "|" + responseTime);
                 } catch (Exception e) {
                     log.error(RESPONSE_EVENT_PUBLICATION_ERROR + e.getMessage(), e);
                     return false;

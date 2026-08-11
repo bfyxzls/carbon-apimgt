@@ -71,8 +71,6 @@ public class ServerStartupListener implements ServerStartupObserver {
                     }
                 }
             }
-        } else {
-            log.info("Running on migration enabled mode: Stopped at ServerStartupListener completed");
         }
 
         Thread thread = new Thread(() -> {
@@ -115,7 +113,6 @@ public class ServerStartupListener implements ServerStartupObserver {
                 // delete extensions directory from the webapp folders if they exist
                 FileUtils.deleteDirectory(new File(authenticationEndpointWebAppExtPath));
                 FileUtils.deleteDirectory(new File(accountRecoveryWebAppExtPath));
-                log.info("Starting to copy identity page extensions...");
                 String headerJsp = resourceExtDirectoryPath + File.separator + headerJspFile;
                 String footerJsp = resourceExtDirectoryPath + File.separator + footerJspFile;
                 String titleJsp = resourceExtDirectoryPath + File.separator + titleJspFile;
@@ -152,7 +149,6 @@ public class ServerStartupListener implements ServerStartupObserver {
                     FileUtils.copyDirectory(new File(customAssetsExtDirectoryPath),
                             new File(accountRecoveryWebAppExtPath + File.separator + customAssetsDir));
                 }
-                log.info("Successfully completed copying identity page extensions");
             }
         } catch (IOException ex) {
             log.error("An error occurred while copying extension files to web apps", ex);

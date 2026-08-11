@@ -2278,7 +2278,6 @@ class APIProviderImpl extends AbstractAPIManager implements APIProvider {
                             getCommonOperationPolicyByPolicyName(policy.getPolicyName(),
                                     policy.getPolicyVersion(), tenantDomain, false);
                     if (commonPolicyData != null) {
-                        log.info(commonPolicyData.getPolicyId());
                         // A common policy is found for specified policy. This will be validated according to the provided
                         // attributes and added to API policy list
                         if (log.isDebugEnabled()) {
@@ -7651,8 +7650,6 @@ class APIProviderImpl extends AbstractAPIManager implements APIProvider {
                 dedupedDeployments.add(d);
             }
         }
-        log.info("Processing API revision deployment for API: " + apiId + ", revision: " + apiRevisionUUID
-                + ", deployments count: " + dedupedDeployments.size());
 
         if (!isInitiatedFromGateway) {
             handlePendingDeployments(apiId, apiRevisionUUID, dedupedDeployments);
@@ -7877,8 +7874,6 @@ class APIProviderImpl extends AbstractAPIManager implements APIProvider {
                     GatewayArtifactsMgtDAO.getInstance()
                             .addAndRemovePublishedGatewayLabels(apiId, revisionUUID,
                                     targetEnvironments, gatewayVhosts, deploymentsToRemove);
-                    log.info("Deploying API revision: " + revisionUUID + " to " + targetEnvironments.size()
-                            + " environments");
                     gatewayManager.deployToGateway(api, organization, targets.getSynapseLabels(),
                             targets.getPlatformGatewayIds().isEmpty() ? null : targets.getPlatformGatewayIds(),
                             revisionUUID, platformGatewayDeploymentIds);

@@ -134,9 +134,7 @@ public class MethodTimeLogger
                 }
             }
         }
-        log.info((System.currentTimeMillis() - start) + "|METHOD|" +
-                MethodSignature.class.cast(point.getSignature()).getDeclaringTypeName() + "|" +
-                MethodSignature.class.cast(point.getSignature()).getMethod().getName()+ "|" + argString);
+
         return result;
     }
 }

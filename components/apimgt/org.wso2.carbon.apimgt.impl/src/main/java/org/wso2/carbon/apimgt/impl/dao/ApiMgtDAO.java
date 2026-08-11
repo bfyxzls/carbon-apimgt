@@ -5570,7 +5570,7 @@ public class ApiMgtDAO {
             } catch (SubscriptionAlreadyExistingException e) {
                 log.error("Error while adding subscription " + e.getMessage(), e);
             } catch (SubscriptionBlockedException e) {
-                log.info("Subscription is blocked: " + e.getMessage());
+                log.error("Subscription is blocked: " + e.getMessage());
             }
         }
     }
@@ -15281,7 +15281,7 @@ public class ApiMgtDAO {
         query = query.replace("$params", paramString);
 
         if (log.isDebugEnabled()) {
-            log.info("Prepared statement query :" + query);
+            log.debug("Prepared statement query :" + query);
         }
 
         PreparedStatement preparedStatement = conn.prepareStatement(query);
@@ -15310,7 +15310,6 @@ public class ApiMgtDAO {
             rs = ps.executeQuery();
 
         } catch (SQLException e) {
-            log.info("AM_APPLICATION_GROUP_MAPPING :- " + e.getMessage(), e);
             return false;
         } finally {
 

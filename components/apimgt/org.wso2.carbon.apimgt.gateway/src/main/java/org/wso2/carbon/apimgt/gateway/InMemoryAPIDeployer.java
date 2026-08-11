@@ -264,7 +264,6 @@ public class InMemoryAPIDeployer {
                     }
                     List<String> gatewayRuntimeArtifacts = ServiceReferenceHolder.getInstance().getArtifactRetriever()
                             .retrieveAllArtifacts(encodedString, tenantDomain);
-                    log.info("Retrieved " + gatewayRuntimeArtifacts.size() + " artifacts for deployment");
                     if (gatewayRuntimeArtifacts.isEmpty()) {
                         return true;
                     }
@@ -366,8 +365,6 @@ public class InMemoryAPIDeployer {
     }
 
     private void deployAPIFromDTO(GatewayAPIDTO gatewayAPIDTO, APIGatewayAdmin apiGatewayAdmin) throws AxisFault {
-        log.info("Deploying synapse artifacts of API ID: " + gatewayAPIDTO.getApiId() +
-                " and Context: " + gatewayAPIDTO.getApiContext());
         apiGatewayAdmin.deployAPI(gatewayAPIDTO);
         addDeployedCertificatesToAPIAssociation(gatewayAPIDTO);
         addDeployedGraphqlQLToAPI(gatewayAPIDTO);
@@ -636,8 +633,6 @@ public class InMemoryAPIDeployer {
                 jwksAPIDto.setName(JWTConstants.GATEWAY_JWKS_API_NAME);
                 jwksAPIDto.setTenantDomain(tenantDomain);
                 jwksAPIDto.setApiDefinition(jwksSynapseAPI);
-
-                log.info("Deploying synapse artifacts of " + jwksAPIDto.getName());
                 APIGatewayAdmin apiGatewayAdmin = new APIGatewayAdmin();
                 apiGatewayAdmin.deployAPI(jwksAPIDto);
                 DataHolder.getInstance().markAPIAsDeployed(jwksAPIDto);
@@ -689,8 +684,6 @@ public class InMemoryAPIDeployer {
             gatewayAPIDTO.setName(APIMgtGatewayConstants.MCP_GLOBAL_WELL_KNOWN_API_NAME);
             gatewayAPIDTO.setTenantDomain(tenantDomain);
             gatewayAPIDTO.setApiDefinition(synapseAPI);
-
-            log.info("Deploying synapse artifacts of " + gatewayAPIDTO.getName());
             APIGatewayAdmin apiGatewayAdmin = new APIGatewayAdmin();
             apiGatewayAdmin.deployAPI(gatewayAPIDTO);
             DataHolder.getInstance().markAPIAsDeployed(gatewayAPIDTO);
@@ -745,8 +738,6 @@ public class InMemoryAPIDeployer {
             healthCheckAPIDto.setName(HealthCheckConstants.HEALTH_CHECK_API_NAME);
             healthCheckAPIDto.setTenantDomain(tenantDomain);
             healthCheckAPIDto.setApiDefinition(healthCheckSynapseAPI);
-
-            log.info("Deploying synapse artifacts of " + healthCheckAPIDto.getName());
             APIGatewayAdmin apiGatewayAdmin = new APIGatewayAdmin();
             apiGatewayAdmin.deployAPI(healthCheckAPIDto);
             DataHolder.getInstance().markAPIAsDeployed(healthCheckAPIDto);

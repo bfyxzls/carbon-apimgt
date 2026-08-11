@@ -473,7 +473,6 @@ public class APIManagerComponent {
         };
         String[] rxtFilePaths = file.list(filenameFilter);
         if (rxtFilePaths == null || rxtFilePaths.length == 0) {
-            log.info("No RXTs Found.");
             return;
         }
         RegistryService registryService = ServiceReferenceHolder.getInstance().getRegistryService();
@@ -608,11 +607,7 @@ public class APIManagerComponent {
                 } catch (OutputEventAdapterException e) {
                     log.warn("Exception occurred while creating WSO2 Event Adapter. Request Blocking may not work " + "properly", e);
                 }
-            } else {
-                log.info("Wso2Event Publisher not enabled.");
             }
-        } else {
-            log.info("api-manager.xml not loaded. Wso2Event Publisher will not be enabled.");
         }
     }
 
@@ -702,7 +697,6 @@ public class APIManagerComponent {
                     adapterParameters.put(APIConstants.PUBLISHING_TIME_OUT, "0");
                     adapterConfiguration.setStaticProperties(adapterParameters);
                     ServiceReferenceHolder.getInstance().getOutputEventAdapterService().create(adapterConfiguration);
-                    log.info("API Recommendation system for dev portal is activated");
                 } catch (OutputEventAdapterException e) {
                     log.error("Exception occurred while creating recommendationEventPublisher Adapter." +
                             " Request Blocking may not work properly", e);
@@ -942,11 +936,7 @@ public class APIManagerComponent {
                 } catch (EventPublisherException e) {
                     throw new APIManagementException(e);
                 }
-            } else {
-                log.info("Wso2Event Publisher not enabled.");
             }
-        } else {
-            log.info("api-manager.xml not loaded. Wso2Event Publisher will not be enabled.");
         }
     }
 

@@ -619,8 +619,6 @@ public final class APIUtil {
                     throw new DataLoadingException("Error while retrieving "
                             + path + ". Received response with status code "
                             + httpResponse.getStatusLine().getStatusCode());
-                } else if (retryCount > 0) {
-                    log.info("Successfully retrieved " + path);
                 }
                 retry = false;
             } catch (IOException | DataLoadingException ex) {
@@ -11095,9 +11093,7 @@ public final class APIUtil {
 
                                 policyData.setMd5Hash(getHashOfOperationPolicy(policyData));
                                 apiMgtDAO.addCommonOperationPolicy(policyData);
-                                log.info("Common operation policy " + policySpec.getName() + "_" + policySpec.getVersion()
-                                        + " was added to the organization " + organization + " successfully");
-                            }
+                          }
                         } catch (IOException | APIManagementException e) {
                             log.error("Invalid policy specification for file " + file.getName()
                                     + ".Hence skipped from importing as a common operation policy.", e);

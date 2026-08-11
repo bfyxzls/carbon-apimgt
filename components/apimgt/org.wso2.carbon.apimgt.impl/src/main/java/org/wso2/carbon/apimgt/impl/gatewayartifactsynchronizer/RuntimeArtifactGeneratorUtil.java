@@ -211,7 +211,6 @@ public class RuntimeArtifactGeneratorUtil {
         }
         if (gatewayArtifacts != null) {
             if (gatewayArtifacts.isEmpty()) {
-                log.info("No API Artifacts");
             }
             for (APIRuntimeArtifactDto apiRuntimeArtifactDto : gatewayArtifacts) {
                 ArtifactSynchronizerUtil.setArtifactProperties(apiRuntimeArtifactDto);
@@ -238,9 +237,7 @@ public class RuntimeArtifactGeneratorUtil {
             gatewayArtifacts = gatewayArtifactsMgtDAO.retrieveAllGatewayArtifacts();
         }
         if (gatewayArtifacts != null) {
-            if (gatewayArtifacts.isEmpty()) {
-                log.info("No API Artifacts");
-            }
+
             for (APIRuntimeArtifactDto apiRuntimeArtifactDto : gatewayArtifacts) {
                 ArtifactSynchronizerUtil.setArtifactProperties(apiRuntimeArtifactDto);
             }

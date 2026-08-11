@@ -85,8 +85,8 @@ public class TracingReporter implements Reporter {
                 }
                 break;
             default:
-                if (log.isInfoEnabled()) {
-                    log.info(toStructuredMessage(timeStamp, span));
+                if (log.isDebugEnabled()) {
+                    log.debug(toStructuredMessage(timeStamp, span));
                 }
         }
     }

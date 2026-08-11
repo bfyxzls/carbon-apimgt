@@ -82,8 +82,6 @@ public class WebsocketHandler extends CombinedChannelDuplexHandler<WebsocketInbo
 
         if (msg instanceof CloseWebSocketFrame) {
             if (((CloseWebSocketFrame) msg).statusCode() > 1001) {
-                log.info("ERROR_CODE = " + ((CloseWebSocketFrame) msg).statusCode() + ", ERROR_MESSAGE = "
-                                 + ((CloseWebSocketFrame) msg).reasonText());
                 InboundProcessorResponseDTO responseDTO = inboundHandler().getWebSocketProcessor().handleResponse(
                         (WebSocketFrame) msg, inboundMessageContext);
                 responseDTO.setErrorCode(((CloseWebSocketFrame) msg).statusCode());

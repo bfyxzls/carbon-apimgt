@@ -137,8 +137,6 @@ public class JMSTransportHandler {
                         jobQueueSize, messageListener);
         jmsMessageListener.startListener();
         jmsListenerList.add(jmsMessageListener);
-        log.info("Starting jms topic consumer thread for the " + topicName + " topic...");
-
     }
 
     private JMSListener createJMSMessageListener(String topicName, int minThreadPoolSize, int maxThreadPoolSize,
@@ -161,9 +159,6 @@ public class JMSTransportHandler {
     }
 
     public void unSubscribeFromEvents() {
-
-        log.info("Starting to Shutdown the Listener...");
-
         if (!stopIssued && jmsConnectionFactory != null) {
             // To prevent multiple components executing stop at the same time,
             // we are checking if a shutdown triggered by a previous thread is in progress.

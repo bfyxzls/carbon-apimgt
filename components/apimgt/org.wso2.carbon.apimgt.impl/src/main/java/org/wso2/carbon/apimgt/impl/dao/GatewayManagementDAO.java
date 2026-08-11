@@ -208,8 +208,6 @@ public class GatewayManagementDAO {
             try {
                 insertGatewayInstance(connection, gatewayId, organization, envLabels, lastUpdated, gwProperties);
                 connection.commit();
-                log.info("Successfully inserted gateway instance with ID: " + gatewayId + " for organization: "
-                        + organization);
             } catch (APIManagementException e) {
                 connection.rollback();
                 throw e;

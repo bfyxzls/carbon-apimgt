@@ -240,9 +240,6 @@ public class Utils {
             if ((currentTime) > (issuedTime + validityPeriod)) {
                 accessTokenDO.setValidationStatus(
                         APIConstants.KeyValidationStatus.API_AUTH_INVALID_CREDENTIALS);
-                if (accessTokenDO.getEndUserToken() != null) {
-                    log.info("Token " + accessTokenDO.getEndUserToken() + " expired.");
-                }
                 return true;
             }
         }

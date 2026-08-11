@@ -87,13 +87,9 @@ public class NewAPIVersionEmailNotifier extends Notifier {
 
                     publishNotification(emailProperties, adapterName, message);
 
-                    log.info("notification sent to Email Adapter ");
-
                 } catch (OutputEventAdapterException e) {
                     throw new NotificationException("Adapter Creation Failed ", e);
                 }
-            } else {
-                log.info("Empty email list. Please set subscriber's email addresses");
             }
         } else {
             if (log.isDebugEnabled()) {

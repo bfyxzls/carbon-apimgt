@@ -17,6 +17,7 @@
 
 package org.wso2.carbon.apimgt.gateway.handlers.analytics;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.synapse.AbstractExtendedSynapseHandler;
@@ -28,6 +29,8 @@ import org.wso2.carbon.apimgt.common.analytics.collectors.AnalyticsDataProvider;
 import org.wso2.carbon.apimgt.common.analytics.collectors.impl.GenericRequestDataCollector;
 import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
 import org.wso2.carbon.apimgt.gateway.handlers.DataPublisherUtil;
+import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityUtils;
+import org.wso2.carbon.apimgt.gateway.handlers.security.AuthenticationContext;
 import org.wso2.carbon.apimgt.gateway.handlers.streaming.AsyncAnalyticsDataProvider;
 import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
 import org.wso2.carbon.apimgt.gateway.utils.GatewayUtils;
@@ -206,10 +209,12 @@ public class AnalyticsMetricsHandler extends AbstractExtendedSynapseHandler {
     /**
      * Determines whether analytics/audit event publishing should be skipped for the current request.
      * <p>
-     * For MCP traffic, only {@code tools/call} with a resolved {@code mcpToolName} is audited.
-     * Handshake / list / ping / SSE GET / well-known etc. set {@code isMcp=1} but have no tool name;
-     * they often still carry an Authorization header while auth is skipped ({@code MCP_NO_AUTH}),
-     * which previously produced noisy "anonymous" app audit rows with a token present.
+     * For MCP traffic, only authenticated {@code tools/call} invocations with a resolved
+     * {@code mcpToolName} and a real {@code applicationId} are audited.
+     * Non-POST transport calls (SSE GET, well-known GET, OPTIONS), handshake / list / ping, and
+     * requests without an application (which would otherwise become {@code applicationId=UNKNOWN})
+     * are skipped. MCP detection uses both {@code API_TYPE=MCP} and {@code isMcp}, because fault
+     * flows may clear {@code isMcp} before analytics runs.
      * </p>
      */
     private boolean shouldSkipAnalyticsPublishing(MessageContext messageContext) {
@@ -217,22 +222,72 @@ public class AnalyticsMetricsHandler extends AbstractExtendedSynapseHandler {
         if (skipPublishMetrics != null && (Boolean) skipPublishMetrics) {
             return true;
         }
-        if (messageContext.getPropertyKeySet().contains("isMcp")) {
-            Object mcpToolName = messageContext.getProperty(APIMgtGatewayConstants.MCP_TOOL_NAME);
-            if (mcpToolName == null) {
-                // Fallback: McpInitHandler also uses the same property key
-                mcpToolName = messageContext.getProperty("MCP_TOOL_NAME");
+
+        if (!isMcpRelatedRequest(messageContext)) {
+            return false;
+        }
+
+        String httpMethod = resolveHttpMethod(messageContext);
+        if (StringUtils.isNotEmpty(httpMethod) && !APIConstants.HTTP_POST.equalsIgnoreCase(httpMethod)) {
+            if (log.isDebugEnabled()) {
+                log.debug("Skipping analytics publishing for non-POST MCP request, method=" + httpMethod);
             }
-            String toolName = mcpToolName != null ? String.valueOf(mcpToolName).trim() : null;
-            if (toolName == null || toolName.isEmpty() || "null".equalsIgnoreCase(toolName)) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Skipping analytics publishing for MCP request without mcpToolName, method="
-                            + messageContext.getProperty(APIMgtGatewayConstants.MCP_METHOD));
-                }
-                return true;
+            return true;
+        }
+
+        Object mcpToolName = messageContext.getProperty(APIMgtGatewayConstants.MCP_TOOL_NAME);
+        if (mcpToolName == null) {
+            mcpToolName = messageContext.getProperty("MCP_TOOL_NAME");
+        }
+        String toolName = mcpToolName != null ? String.valueOf(mcpToolName).trim() : null;
+        if (StringUtils.isEmpty(toolName) || "null".equalsIgnoreCase(toolName)) {
+            if (log.isDebugEnabled()) {
+                log.debug("Skipping analytics publishing for MCP request without mcpToolName, method="
+                        + messageContext.getProperty(APIMgtGatewayConstants.MCP_METHOD));
             }
+            return true;
+        }
+
+        if (!hasResolvableApplicationId(messageContext)) {
+            if (log.isDebugEnabled()) {
+                log.debug("Skipping analytics publishing for MCP request without applicationId");
+            }
+            return true;
         }
         return false;
+    }
+
+    /**
+     * MCP APIs use API_TYPE=MCP; legacy HTTP APIs with MCP category set {@code isMcp} in McpInitHandler.
+     */
+    private boolean isMcpRelatedRequest(MessageContext messageContext) {
+        String apiType = (String) messageContext.getProperty(APIMgtGatewayConstants.API_TYPE);
+        return APIConstants.API_TYPE_MCP.equalsIgnoreCase(apiType)
+                || messageContext.getProperty("isMcp") != null;
+    }
+
+    private String resolveHttpMethod(MessageContext messageContext) {
+        String httpMethod = (String) messageContext.getProperty(APIMgtGatewayConstants.HTTP_METHOD);
+        if (StringUtils.isNotEmpty(httpMethod)) {
+            return httpMethod;
+        }
+        Object axis2Method = ((Axis2MessageContext) messageContext).getAxis2MessageContext()
+                .getProperty(org.apache.axis2.Constants.Configuration.HTTP_METHOD);
+        return axis2Method != null ? String.valueOf(axis2Method) : null;
+    }
+
+    /**
+     * Returns true when AuthenticationContext carries a usable application UUID
+     * (not null/blank/{@code UNKNOWN}).
+     */
+    private boolean hasResolvableApplicationId(MessageContext messageContext) {
+        AuthenticationContext authContext = APISecurityUtils.getAuthenticationContext(messageContext);
+        if (authContext == null) {
+            return false;
+        }
+        String applicationId = authContext.getApplicationUUID();
+        return StringUtils.isNotEmpty(applicationId)
+                && !Constants.UNKNOWN_VALUE.equalsIgnoreCase(applicationId);
     }
 
 }

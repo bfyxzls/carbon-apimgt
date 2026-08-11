@@ -87,8 +87,6 @@ public class ZillizVectorDBProviderServiceImpl implements VectorDBProviderServic
                     APIConstants.AI.VECTOR_DB_PROVIDER_TTL_DEFAULT);
             ttl = Integer.parseInt(APIConstants.AI.VECTOR_DB_PROVIDER_TTL_DEFAULT);
         }
-
-        log.info("Initializing Zilliz REST client with URI: " + uri);
     }
 
     @Override public String getType() { return APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_TYPE; }
@@ -98,7 +96,6 @@ public class ZillizVectorDBProviderServiceImpl implements VectorDBProviderServic
      */
     @Override
     public void createIndex(Map<String, String> providerConfig) throws APIManagementException {
-        log.info("Creating Zilliz vector index");
         try {
             // Check if collection exists
             String checkUrl = uri + APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_HAS_COLLECTION_ENDPOINT;
@@ -129,7 +126,6 @@ public class ZillizVectorDBProviderServiceImpl implements VectorDBProviderServic
                     JSONObject dataObj = checkObj.optJSONObject(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_DATA);
                     boolean exists = dataObj != null && dataObj.optBoolean(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_HAS, false);
                     if (exists) {
-                        log.info("Collection already exists: " + collectionName);
                         return;
                     }
                 } else {
@@ -175,15 +171,11 @@ public class ZillizVectorDBProviderServiceImpl implements VectorDBProviderServic
                 int createStatusCode = createResponse.getStatusLine().getStatusCode();
                 String createResponseStr = EntityUtils.toString(createResponse.getEntity());
                 if (createStatusCode != HttpStatus.SC_OK) {
-                    if (createStatusCode == HttpStatus.SC_CONFLICT) {
-                        log.info("Collection already exists: " + collectionName);
-                    } else {
+                    if (createStatusCode != HttpStatus.SC_CONFLICT) {
                         String errorMsg = "Failed to create collection: " + createResponseStr;
                         log.error(errorMsg);
                         throw new APIManagementException(errorMsg);
                     }
-                } else {
-                    log.info("Successfully created collection: " + collectionName);
                 }
             }
         } catch (IOException e) {
@@ -293,9 +285,6 @@ public class ZillizVectorDBProviderServiceImpl implements VectorDBProviderServic
                         + ": " + EntityUtils.toString(insertResponse.getEntity());
                 log.error(errorMsg);
                 throw new APIManagementException(errorMsg);
-            } else {
-                log.info("Successfully stored response in Zilliz for API ID: " +
-                        filter.get(APIConstants.AI.VECTOR_DB_PROVIDER_API_ID));
             }
         } catch (IOException e) {
             String apiId = filter.get(APIConstants.AI.VECTOR_DB_PROVIDER_API_ID);

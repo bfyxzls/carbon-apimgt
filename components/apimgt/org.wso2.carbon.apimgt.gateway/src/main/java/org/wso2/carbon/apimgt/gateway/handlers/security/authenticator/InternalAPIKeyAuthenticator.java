@@ -108,9 +108,6 @@ public class InternalAPIKeyAuthenticator implements Authenticator {
     public AuthenticationResponse authenticate(MessageContext synCtx) {
         API retrievedApi = GatewayUtils.getAPI(synCtx);
         if (retrievedApi != null) {
-            if (log.isDebugEnabled()) {
-                log.info("Internal Key Authentication initialized");
-            }
 
             try {
                 // Extract internal from the request while removing it from the msg context.

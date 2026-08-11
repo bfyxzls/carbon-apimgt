@@ -78,13 +78,10 @@ public class JMSListenerStartupShutdownListener implements ServerStartupObserver
                 }
                 if (Boolean.parseBoolean(apimConfiguration.getFirstProperty(APIConstants.
                         ENABLE_CERTIFICATE_MANAGEMENT_EVENT_LISTENING))) {
-                    log.info("Certificate management event listening is enabled. Subscribing to notification topic.");
                     jmsTransportHandlerForEventHub.subscribeForJmsEvents(APIConstants.TopicNames.TOPIC_NOTIFICATION,
                             new CertificateManagerJMSMessageListener());
                 }
             }
-        } else {
-            log.info("Running on migration enabled mode: Stopped at JMSListenerStartupShutdownListener completed");
         }
 
     }

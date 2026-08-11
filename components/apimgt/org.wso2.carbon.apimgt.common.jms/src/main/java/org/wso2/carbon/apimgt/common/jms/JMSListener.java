@@ -79,8 +79,6 @@ public class JMSListener implements Runnable {
         while (!connected) {
             boolean jmsProviderStarted = checkJMSConnection(stm);
             if (jmsProviderStarted) {
-                log.info("Connection attempt: " + r + " for JMS Provider for listener: " + listenerName
-                        + " was successful!");
                 connected = true;
                 stm.start();
 
@@ -90,9 +88,6 @@ public class JMSListener implements Runnable {
                     // messages if at least one consumer exists. This is of not much importance,
                     // except for automated tests.
                     if (stm.getConsumerCount() > 0) {
-                        log.info("Started to listen on destination : " + stm.getDestinationJNDIName() +
-                                " of type " + JMSUtils.getDestinationTypeAsString(stm.getDestinationType()) +
-                                " for listener " + listenerName);
                         return;
                     }
                     try {

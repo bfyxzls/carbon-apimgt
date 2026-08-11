@@ -119,10 +119,8 @@ public class FederatedAPIDiscoveryRunner implements FederatedAPIDiscoveryService
                     }
                     int scheduleWindow = environment.getApiDiscoveryScheduledWindow();
                     if (GatewayMode.WRITE_ONLY.getMode().equals(environment.getMode()) || scheduleWindow <= 0) {
-                        log.info("Federated API discovery is disabled for environment: " + environment.getName());
                     } else {
-                        log.info("Initializing federated API discovery for environment: " + environment.getName()
-                                + " and organization: " + organization);
+
                         FederatedAPIDiscovery federatedAPIDiscovery = (FederatedAPIDiscovery)
                                 Class.forName(gatewayConfiguration.getDiscoveryImplementation())
                                         .getDeclaredConstructor().newInstance();
@@ -410,8 +408,6 @@ public class FederatedAPIDiscoveryRunner implements FederatedAPIDiscoveryService
                 heartbeat.cancel(true);
                 scheduledHeartBeatTasks.remove(taskKey);
             }
-            log.info("Stopped federated API discovery task for environment: " + environment.getName()
-                    + " in organization: " + organization);
         }
     }
 

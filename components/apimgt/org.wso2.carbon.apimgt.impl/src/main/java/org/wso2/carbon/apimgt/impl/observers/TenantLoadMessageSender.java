@@ -78,7 +78,6 @@ public class TenantLoadMessageSender extends AbstractAxis2ConfigurationContextOb
         while (numberOfRetries < retryCount) {
             try {
                 clusteringAgent.sendMessage(request, true);
-                log.info("Sent [" + request.toString() + "]");
                 break;
 
             } catch (ClusteringFault e) {

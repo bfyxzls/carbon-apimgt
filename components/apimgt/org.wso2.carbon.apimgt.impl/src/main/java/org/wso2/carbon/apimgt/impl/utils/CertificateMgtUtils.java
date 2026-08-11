@@ -1010,19 +1010,14 @@ public class CertificateMgtUtils {
                     while (serverCert.available() > 0) {
                         Certificate certificate = cf.generateCertificate(serverCert);
                         //Check whether the Alias exists in the trust store.
-                        if (trustStore.containsAlias(alias)) {
-                            log.info("Provided certificate alias: " + alias + " already exists in the " +
-                                    "truststore.");
-                        } else {
+                        if (!trustStore.containsAlias(alias)) {
                             /*
                              * If alias is not exists, check whether the certificate is expired or not. If expired
                              * set the
                              * expired flag.
                              * */
                             X509Certificate x509Certificate = (X509Certificate) certificate;
-                            if (x509Certificate.getNotAfter().getTime() <= System.currentTimeMillis()) {
-                                log.info("Provided certificate " + alias + " is expired.");
-                            } else {
+                            if (x509Certificate.getNotAfter().getTime() > System.currentTimeMillis()) {
                                 //If not expired add the certificate to trust store.
                                 trustStore.setCertificateEntry(alias, certificate);
                             }

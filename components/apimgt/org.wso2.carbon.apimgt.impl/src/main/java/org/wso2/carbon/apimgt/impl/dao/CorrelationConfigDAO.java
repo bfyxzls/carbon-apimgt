@@ -57,7 +57,6 @@ public class CorrelationConfigDAO {
         correlationComponents = ServiceReferenceHolder.getInstance().getAPIManagerConfigurationService()
                 .getAPIManagerConfiguration().getProperty(APIConstants.CORRELATION_LOG_COMPONENTS);
         correlationComponents.replaceAll(String::trim);
-        log.info("Correlation Components " + correlationComponents.toString());
     }
 
     public static CorrelationConfigDAO getInstance() {

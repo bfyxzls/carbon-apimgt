@@ -113,11 +113,6 @@ public class BasicAuthAuthenticator implements Authenticator {
      */
     @MethodStats
     public AuthenticationResponse authenticate(MessageContext synCtx) {
-
-        if (log.isDebugEnabled()) {
-            log.info("Basic Authentication initialized");
-        }
-
         openAPI = (OpenAPI) synCtx.getProperty(APIMgtGatewayConstants.OPEN_API_OBJECT);
         if (openAPI == null && !APIConstants.GRAPHQL_API.equals(synCtx.getProperty(APIConstants.API_TYPE))) {
             log.error("OpenAPI definition is missing in the gateway. Basic authentication cannot be performed.");

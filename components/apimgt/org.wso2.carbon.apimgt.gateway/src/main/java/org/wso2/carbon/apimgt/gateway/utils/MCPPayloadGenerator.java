@@ -140,7 +140,6 @@ public class MCPPayloadGenerator {
                         } else {
                             // For third-party tools, we do not sanitize the input schema
                             tool.setInputSchema(schemaObject);
-                            log.info("MCP tools/list serialize tool skipped sanitize (thirdParty): name=" + toolName);
                         }
                     } catch (JsonParseException e) {
                         log.error("MCP tools/list serialize FAILED (JSON parse) for tool=" + toolName

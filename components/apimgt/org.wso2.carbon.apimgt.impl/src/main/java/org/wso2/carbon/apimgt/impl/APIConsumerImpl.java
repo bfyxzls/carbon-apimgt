@@ -2086,10 +2086,6 @@ public class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
                          * the default value.
                          */
                         String oldValue = applicationAttributes.put(attributeName, defaultValue);
-                        if (StringUtils.isNotEmpty(oldValue)) {
-                            log.info("Replaced provided value: " + oldValue + " with default the value" +
-                                    " for the hidden application attribute: " + attributeName);
-                        }
                     } else if (!applicationAttributes.keySet().contains(attributeName)) {
                         if (StringUtils.isNotEmpty(defaultValue)) {
                             /*
@@ -2097,8 +2093,6 @@ public class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
                              * the default value.
                              */
                             applicationAttributes.put(attributeName, defaultValue);
-                            log.info("Added default value: " + defaultValue + " as required attribute: " +
-                                    attributeName + "is not provided");
                         } else {
                             /*
                              * If a required attribute is not provided but a default value not given, we throw a bad
@@ -2359,10 +2353,6 @@ public class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
                 if (BooleanUtils.isTrue(required)) {
                     if (BooleanUtils.isTrue(hidden)) {
                         String oldValue = applicationAttributes.put(attributeName, defaultValue);
-                        if (StringUtils.isNotEmpty(oldValue)) {
-                            log.info("Replaced provided value: " + oldValue + " with the default/existing value for" +
-                                    " the hidden application attribute: " + attributeName);
-                        }
                     } else if (!applicationAttributes.keySet().contains(attributeName)) {
                         if (StringUtils.isNotEmpty(defaultValue)) {
                             applicationAttributes.put(attributeName, defaultValue);

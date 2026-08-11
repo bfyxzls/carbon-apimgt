@@ -26,9 +26,6 @@ public class SimpleLoggingObserver implements APIStatusObserver {
 
     @Override
     public boolean statusChanged(String previous, String current, API api) {
-        log.info("API status updated from: " + previous + " to: " +
-                current + " for the API: " + api.getId().getApiName() + " (" +
-                api.getId().getVersion() + ')');
         return true;
     }
 }
