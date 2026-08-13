@@ -223,6 +223,14 @@ public class AnalyticsMetricsHandler extends AbstractExtendedSynapseHandler {
             return true;
         }
 
+        // AuthFaultDataCollector always sets applicationId=UNKNOWN — skip before collect/publish.
+        if (isAuthFaultRequest(messageContext)) {
+            if (log.isDebugEnabled()) {
+                log.debug("Skipping analytics publishing for auth fault (applicationId would be UNKNOWN)");
+            }
+            return true;
+        }
+
         if (!isMcpRelatedRequest(messageContext)) {
             return false;
         }
@@ -255,6 +263,24 @@ public class AnalyticsMetricsHandler extends AbstractExtendedSynapseHandler {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Auth fault range (900900–901000, excluding resource-not-found 900906).
+     * These always become applicationId=UNKNOWN in AuthFaultDataCollector.
+     */
+    private boolean isAuthFaultRequest(MessageContext messageContext) {
+        if (!messageContext.getPropertyKeySet().contains(SynapseConstants.ERROR_CODE)) {
+            return false;
+        }
+        Object errorCodeObj = messageContext.getProperty(SynapseConstants.ERROR_CODE);
+        if (!(errorCodeObj instanceof Integer)) {
+            return false;
+        }
+        int errorCode = (Integer) errorCodeObj;
+        return errorCode >= Constants.ERROR_CODE_RANGES.AUTH_FAILURE_START
+                && errorCode < Constants.ERROR_CODE_RANGES.AUTH_FAILURE__END
+                && errorCode != Constants.RESOURCE_NOT_FOUND_APIM_ERROR_CODE;
     }
 
     /**

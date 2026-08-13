@@ -19,12 +19,15 @@ package org.wso2.carbon.apimgt.common.analytics.publishers.impl;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.am.analytics.publisher.exception.MetricReportingException;
 import org.wso2.am.analytics.publisher.reporter.CounterMetric;
 import org.wso2.am.analytics.publisher.reporter.MetricEventBuilder;
+import org.wso2.carbon.apimgt.common.analytics.Constants;
 import org.wso2.carbon.apimgt.common.analytics.publishers.RequestDataPublisher;
+import org.wso2.carbon.apimgt.common.analytics.publishers.dto.Application;
 import org.wso2.carbon.apimgt.common.analytics.publishers.dto.Event;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +45,13 @@ public abstract class AbstractRequestDataPublisher implements RequestDataPublish
 
     @Override
     public void publish(Event analyticsEvent) {
+
+        if (shouldSkipUnknownApplication(analyticsEvent)) {
+            if (log.isDebugEnabled()) {
+                log.debug("Skipping analytics event with missing/UNKNOWN applicationId");
+            }
+            return;
+        }
 
         Map<String, Object> dataMap = OBJECT_MAPPER.convertValue(analyticsEvent, MAP_TYPE_REFERENCE);
         List<CounterMetric> multipleCounterMetrics = this.getMultipleCounterMetrics();
@@ -77,5 +87,22 @@ public abstract class AbstractRequestDataPublisher implements RequestDataPublish
                 }
             }
         }
+    }
+
+    /**
+     * Drops events whose applicationId is missing or {@code UNKNOWN}.
+     * Auth / unclassified faults fill application via {@code getUnknownApp()} and are not useful for audit.
+     */
+    private boolean shouldSkipUnknownApplication(Event analyticsEvent) {
+        if (analyticsEvent == null) {
+            return true;
+        }
+        Application application = analyticsEvent.getApplication();
+        if (application == null) {
+            return true;
+        }
+        String applicationId = application.getApplicationId();
+        return StringUtils.isEmpty(applicationId)
+                || Constants.UNKNOWN_VALUE.equalsIgnoreCase(applicationId);
     }
 }
