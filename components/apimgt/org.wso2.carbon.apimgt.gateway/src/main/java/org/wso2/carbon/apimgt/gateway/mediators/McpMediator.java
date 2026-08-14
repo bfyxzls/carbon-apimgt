@@ -164,6 +164,7 @@ public class McpMediator extends AbstractMediator implements ManagedLifecycle {
                 || APIConstants.MCP.METHOD_TOOL_LIST.equals(mcpMethod)
                 || APIConstants.MCP.METHOD_PING.equals(mcpMethod)
                 || APIConstants.MCP.METHOD_RESOURCES_LIST.equals(mcpMethod)
+                || APIConstants.MCP.METHOD_RESOURCES_READ.equals(mcpMethod)
                 || APIConstants.MCP.METHOD_RESOURCE_TEMPLATE_LIST.equals(mcpMethod)
                 || APIConstants.MCP.METHOD_PROMPTS_LIST.equals(mcpMethod)
                 || (APIConstants.MCP.METHOD_TOOL_CALL.equals(mcpMethod) && mcpResponse != null)) {

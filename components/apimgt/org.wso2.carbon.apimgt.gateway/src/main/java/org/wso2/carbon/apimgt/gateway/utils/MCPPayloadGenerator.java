@@ -251,6 +251,27 @@ public class MCPPayloadGenerator {
         return generateEmptyResult(id);
     }
 
+    /**
+     * Generates a stub {@code resources/read} response. Resource content is not backed yet,
+     * so the result contains an empty {@code contents} array.
+     *
+     * @param id JSON-RPC request id
+     * @return JSON-RPC success payload
+     */
+    public static String generateResourceReadResponse(Object id) {
+        JsonObject response = new JsonObject();
+        response.addProperty("jsonrpc", "2.0");
+        if (id instanceof Number) {
+            response.addProperty("id", (Number) id);
+        } else {
+            response.addProperty("id", String.valueOf(id));
+        }
+        JsonObject result = new JsonObject();
+        result.add("contents", new JsonArray());
+        response.add("result", result);
+        return gson.toJson(response);
+    }
+
     public static String generateResourceTemplateListResponse(Object id) {
         // Resource templates are not supported at the moment
         return generateEmptyResult(id);

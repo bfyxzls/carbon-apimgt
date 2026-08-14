@@ -206,6 +206,8 @@ public class MCPUtils {
                     return handleMcpPing(id);
                 case APIConstants.MCP.METHOD_RESOURCES_LIST:
                     return new McpResponseDto(MCPPayloadGenerator.generateResourceListResponse(id), 200, null);
+                case APIConstants.MCP.METHOD_RESOURCES_READ:
+                    return new McpResponseDto(MCPPayloadGenerator.generateResourceReadResponse(id), 200, null);
                 case APIConstants.MCP.METHOD_RESOURCE_TEMPLATE_LIST:
                     return new McpResponseDto(MCPPayloadGenerator.generateResourceTemplateListResponse(id), 200, null);
                 case APIConstants.MCP.METHOD_PROMPTS_LIST:
@@ -218,7 +220,10 @@ public class MCPUtils {
                             APIConstants.MCP.RpcConstants.METHOD_NOT_FOUND_MESSAGE, "Method not found");
             }
         } catch (McpException e) {
-            return new McpResponseDto(e.toJsonRpcErrorPayload(), 200, null);
+            int httpStatus = e.getErrorCode() == APIConstants.MCP.RpcConstants.METHOD_NOT_FOUND_CODE
+                    ? HttpStatus.SC_METHOD_NOT_ALLOWED
+                    : HttpStatus.SC_OK;
+            return new McpResponseDto(e.toJsonRpcErrorPayload(), httpStatus, null);
         }
     }
 

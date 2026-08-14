@@ -70,6 +70,7 @@ import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.METHOD_NOTIFICATION_I
 import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.METHOD_PING;
 import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.METHOD_PROMPTS_LIST;
 import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.METHOD_RESOURCES_LIST;
+import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.METHOD_RESOURCES_READ;
 import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.METHOD_RESOURCE_TEMPLATE_LIST;
 import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.METHOD_TOOL_CALL;
 import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.METHOD_TOOL_LIST;
@@ -173,9 +174,11 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
                 }
             }
         } catch (McpException e) {
-            // Use HTTP 200 for JSON-RPC errors as per JSON-RPC 2.0 specification
-            // The error details are included in the JSON response body
-            MCPUtils.handleMCPFailure(messageContext, new McpResponseDto(e.toJsonRpcErrorPayload(), 401, null));
+            // Unsupported MCP JSON-RPC methods map to HTTP 405; other MCP init failures keep 401.
+            int httpStatus = e.getErrorCode() == METHOD_NOT_FOUND_CODE
+                    ? HttpStatus.SC_METHOD_NOT_ALLOWED
+                    : HttpStatus.SC_UNAUTHORIZED;
+            MCPUtils.handleMCPFailure(messageContext, new McpResponseDto(e.toJsonRpcErrorPayload(), httpStatus, null));
             return false;
         }
         return true;
@@ -408,6 +411,7 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
             case METHOD_PING:
             case METHOD_NOTIFICATION_INITIALIZED:
             case METHOD_RESOURCES_LIST:
+            case METHOD_RESOURCES_READ:
             case METHOD_RESOURCE_TEMPLATE_LIST:
             case METHOD_PROMPTS_LIST:
                 return true;
