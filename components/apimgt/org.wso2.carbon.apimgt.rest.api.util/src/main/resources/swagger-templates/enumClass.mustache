@@ -1,7 +1,8 @@
     @XmlType(name="{{datatypeWithEnum}}")
     @XmlEnum({{datatype}}.class)
     public enum {{datatypeWithEnum}} {
-        {{#allowableValues}}{{#enumVars}}{{name}}({{{value}}}){{^-last}},
+        {{#allowableValues}}{{#enumVars}}@JsonProperty({{{value}}})
+        {{name}}({{{value}}}){{^-last}},
         {{/-last}}{{#-last}};{{/-last}}{{/enumVars}}
 {{/allowableValues}}
         private {{datatype}} value;
@@ -10,6 +11,7 @@
             value = v;
         }
 
+        @JsonValue
         public String value() {
             return value;
         }
@@ -19,7 +21,7 @@
             return String.valueOf(value);
         }
 
-        @JsonCreator
+        @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
         public static {{datatypeWithEnum}} fromValue(String v) {
             for ({{#datatypeWithEnum}}{{{.}}}{{/datatypeWithEnum}}{{^datatypeWithEnum}}{{{classname}}}{{/datatypeWithEnum}} b : {{#datatypeWithEnum}}{{{.}}}{{/datatypeWithEnum}}{{^datatypeWithEnum}}{{{classname}}}{{/datatypeWithEnum}}.values()) {
                 if (String.valueOf(b.value).equals(v)) {

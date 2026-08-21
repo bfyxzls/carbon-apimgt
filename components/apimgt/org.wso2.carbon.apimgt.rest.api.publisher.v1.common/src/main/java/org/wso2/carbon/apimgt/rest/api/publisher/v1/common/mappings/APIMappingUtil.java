@@ -823,9 +823,8 @@ public class APIMappingUtil {
         if (dto.getSubtypeConfiguration() != null && dto.getSubtypeConfiguration().getSubtype() != null) {
             model.setSubtype(dto.getSubtypeConfiguration().getSubtype());
         }
-        MCPServerDTO.ProtocolVersionEnum protocolVersionEnum = dto.getProtocolVersion();
-        if (protocolVersionEnum != null) {
-            model.getMetadata().put(APIConstants.MCP.PROTOCOL_VERSION_KEY, protocolVersionEnum.value());
+        if (dto.getProtocolVersion() != null) {
+            model.getMetadata().put(APIConstants.MCP.PROTOCOL_VERSION_KEY, dto.getProtocolVersion());
         }
         String displayName = dto.getDisplayName();
         if (displayName != null && !displayName.trim().isEmpty()) {
@@ -2524,7 +2523,7 @@ public class APIMappingUtil {
         String protocolVersion = model.getMetadata() != null
                 ? model.getMetadata().get(APIConstants.MCP.PROTOCOL_VERSION_KEY) : null;
         if (protocolVersion != null) {
-            dto.setProtocolVersion(MCPServerDTO.ProtocolVersionEnum.fromValue(protocolVersion));
+            dto.setProtocolVersion(protocolVersion);
         }
         return dto;
     }

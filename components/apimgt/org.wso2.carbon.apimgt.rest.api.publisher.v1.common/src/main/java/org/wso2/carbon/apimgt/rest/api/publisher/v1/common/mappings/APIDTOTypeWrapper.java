@@ -574,8 +574,7 @@ public class APIDTOTypeWrapper {
         if (isAPIDTO()) {
             return null;
         } else {
-            MCPServerDTO.ProtocolVersionEnum protocolVersion = mcpServerDto.getProtocolVersion();
-            return protocolVersion != null ? protocolVersion.value() : null;
+            return mcpServerDto.getProtocolVersion();
         }
     }
 }

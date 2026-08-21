@@ -5227,8 +5227,7 @@ public class PublisherCommonUtils {
                 mcpServerApi.getMetadata().put(APIConstants.MCP.PROTOCOL_VERSION_KEY, fetcher.getProtocolVersion());
             }
             if (mcpServerDTO.getProtocolVersion() == null) {
-                mcpServerDTO.setProtocolVersion(
-                        MCPServerDTO.ProtocolVersionEnum.fromValue(fetcher.getProtocolVersion()));
+                mcpServerDTO.setProtocolVersion(fetcher.getProtocolVersion());
             }
         } catch (ParseException e) {
             throw new APIManagementException(
