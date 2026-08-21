@@ -2991,9 +2991,14 @@ public class PublisherCommonUtils {
         api.setInitiatedFromGateway(apiDtoTypeWrapper.getInitiatedFromGateway());
         if (apiDtoTypeWrapper.isMCPServerDTO()) {
             String protocolVersion = apiDtoTypeWrapper.getProtocolVersion();
-            api.getMetadata().put(APIConstants.MCP.PROTOCOL_VERSION_KEY,
-                    (protocolVersion != null && !protocolVersion.isEmpty()) ? protocolVersion
-                            : APIConstants.MCP.PROTOCOL_VERSION_2025_JUNE);
+            if (protocolVersion == null || protocolVersion.isEmpty()) {
+                protocolVersion = APIConstants.MCP.PROTOCOL_VERSION_2025_JUNE;
+            } else if (!APIConstants.MCP.isSupportedProtocolVersion(protocolVersion)) {
+                throw new APIManagementException(
+                        ExceptionCodes.from(ExceptionCodes.UNSUPPORTED_MCP_PROTOCOL_VERSION, protocolVersion,
+                                APIConstants.MCP.SUPPORTED_PROTOCOL_VERSIONS.toString()));
+            }
+            api.getMetadata().put(APIConstants.MCP.PROTOCOL_VERSION_KEY, protocolVersion);
         }
         return api;
     }
@@ -5039,18 +5044,27 @@ public class PublisherCommonUtils {
         }
     }
 
+    public static MCPServerValidationResponseDTO validateMCPServer(String serverUrl, SecurityInfoDTO securityInfo,
+                                                                   boolean returnTools, String organization)
+            throws APIManagementException {
+        return validateMCPServer(serverUrl, securityInfo, returnTools, organization,
+                APIConstants.MCP.PROTOCOL_VERSION_2025_JUNE);
+    }
+
     /**
      * Validate an MCP server by fetching the tools/list payload and (optionally) building tool info.
      *
-     * @param serverUrl    MCP server URL
-     * @param securityInfo Security info (HTTPS flag and optional auth header/value); may be null
-     * @param returnTools  If true, include parsed tool operations in the response DTO
-     * @param organization Organization identifier for logging
+     * @param serverUrl       MCP server URL
+     * @param securityInfo    Security info (HTTPS flag and optional auth header/value); may be null
+     * @param returnTools     If true, include parsed tool operations in the response DTO
+     * @param organization    Organization identifier for logging
+     * @param protocolVersion MCP protocol revision for the upstream server
      * @return Validation result with isValid/errorMessage and optional toolInfo
      * @throws APIManagementException On unexpected internal errors
      */
     public static MCPServerValidationResponseDTO validateMCPServer(String serverUrl, SecurityInfoDTO securityInfo,
-                                                                   boolean returnTools, String organization)
+                                                                   boolean returnTools, String organization,
+                                                                   String protocolVersion)
             throws APIManagementException {
 
         MCPServerValidationResponseDTO response =
@@ -5069,9 +5083,12 @@ public class PublisherCommonUtils {
         try {
             final String authHeader = securityInfo != null ? securityInfo.getHeader() : null;
             final String authValue = securityInfo != null ? securityInfo.getValue() : null;
+            String resolvedVersion = StringUtils.isNotBlank(protocolVersion)
+                    ? protocolVersion : APIConstants.MCP.PROTOCOL_VERSION_2025_JUNE;
 
             MCPInitializerAndToolFetcher fetcher =
-                    new MCPInitializerAndToolFetcher(serverUrl, authHeader, authValue, secureRequested);
+                    new MCPInitializerAndToolFetcher(serverUrl, authHeader, authValue, secureRequested,
+                            resolvedVersion);
 
             org.json.JSONObject toolsJson = fetcher.initializeAndFetchTools();
             response.setContent(toolsJson != null ? toolsJson.toString() : null);
@@ -5190,7 +5207,10 @@ public class PublisherCommonUtils {
                     + mcpServerApi.getUuid(), ExceptionCodes.INVALID_ENDPOINT_URL);
         }
         try {
-            MCPInitializerAndToolFetcher fetcher = buildMcpInitializerForProxyBackend(backend.getEndpointConfig());
+            String protocolVersion = mcpServerApi.getMetadata() != null
+                    ? mcpServerApi.getMetadata().get(APIConstants.MCP.PROTOCOL_VERSION_KEY) : null;
+            MCPInitializerAndToolFetcher fetcher =
+                    buildMcpInitializerForProxyBackend(backend.getEndpointConfig(), protocolVersion);
             org.json.JSONObject toolsEnvelope = fetcher.initializeAndFetchTools();
             org.json.JSONArray toolsArray = MCPInitializerAndToolFetcher.extractToolsArray(toolsEnvelope);
 
@@ -5202,6 +5222,14 @@ public class PublisherCommonUtils {
             backend.setDefinition(toolsEnvelope.toString());
             updateMCPServerBackend(mcpServerApi.getUuid(), oldSnap, backend, organization, apiProvider);
             mcpServerDTO.setOperations(merged);
+            // Persist the protocol version used for the successful refresh.
+            if (mcpServerApi.getMetadata() != null) {
+                mcpServerApi.getMetadata().put(APIConstants.MCP.PROTOCOL_VERSION_KEY, fetcher.getProtocolVersion());
+            }
+            if (mcpServerDTO.getProtocolVersion() == null) {
+                mcpServerDTO.setProtocolVersion(
+                        MCPServerDTO.ProtocolVersionEnum.fromValue(fetcher.getProtocolVersion()));
+            }
         } catch (ParseException e) {
             throw new APIManagementException(
                     "Invalid MCP backend endpoint configuration for server " + mcpServerApi.getUuid(), e);
@@ -5213,6 +5241,12 @@ public class PublisherCommonUtils {
 
     private static MCPInitializerAndToolFetcher buildMcpInitializerForProxyBackend(String endpointConfigJson)
             throws APIManagementException, ParseException, CryptoException {
+        return buildMcpInitializerForProxyBackend(endpointConfigJson, APIConstants.MCP.PROTOCOL_VERSION_2025_JUNE);
+    }
+
+    private static MCPInitializerAndToolFetcher buildMcpInitializerForProxyBackend(String endpointConfigJson,
+                                                                                   String protocolVersion)
+            throws APIManagementException, ParseException, CryptoException {
 
         JSONObject root = (JSONObject) new JSONParser().parse(endpointConfigJson);
         String url = resolveEndpointUrl(root);
@@ -5223,7 +5257,7 @@ public class PublisherCommonUtils {
 
         boolean sendAuthHeaders = authMaterial.hasAuthHeaderCredentials();
         return new MCPInitializerAndToolFetcher(url, authMaterial.headerName, authMaterial.headerValue,
-                sendAuthHeaders);
+                sendAuthHeaders, protocolVersion);
     }
 
     private static String resolveEndpointUrl(JSONObject endpointConfigRoot) {

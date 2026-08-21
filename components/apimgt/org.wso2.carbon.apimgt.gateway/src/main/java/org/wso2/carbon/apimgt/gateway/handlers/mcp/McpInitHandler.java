@@ -54,6 +54,7 @@ import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityConstants;
 import org.apache.http.HttpHeaders;
 import org.apache.http.HttpStatus;
 import org.wso2.carbon.apimgt.gateway.utils.GatewayUtils;
+import org.wso2.carbon.apimgt.gateway.utils.MCPProtocolNegotiator;
 import org.wso2.carbon.apimgt.gateway.utils.MCPUtils;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.keymgt.model.entity.API;
@@ -72,6 +73,7 @@ import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.METHOD_PROMPTS_LIST;
 import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.METHOD_RESOURCES_LIST;
 import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.METHOD_RESOURCES_READ;
 import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.METHOD_RESOURCE_TEMPLATE_LIST;
+import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.METHOD_SERVER_DISCOVER;
 import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.METHOD_TOOL_CALL;
 import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.METHOD_TOOL_LIST;
 import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.RpcConstants.INVALID_REQUEST_CODE;
@@ -208,14 +210,33 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
         }
 
         Object exposeHeadersList = headers.get(APIConstants.CORSHeaders.ACCESS_CONTROL_EXPOSE_HEADERS);
-        String exposeHeaders = HEADER_MCP_SESSION_ID;
+        String exposeHeaders = HEADER_MCP_SESSION_ID + "," + APIConstants.MCP.HEADER_MCP_METHOD
+                + "," + APIConstants.MCP.HEADER_MCP_NAME + "," + APIConstants.MCP.MCP_PROTOCOL_VERSION_HEADER;
         if (exposeHeadersList instanceof String) {
             exposeHeaders = (String) exposeHeadersList;
             if (!StringUtils.isEmpty(exposeHeaders) && !exposeHeaders.contains(HEADER_MCP_SESSION_ID)) {
                 exposeHeaders += "," + HEADER_MCP_SESSION_ID;
             }
+            if (!StringUtils.isEmpty(exposeHeaders)
+                    && !exposeHeaders.contains(APIConstants.MCP.HEADER_MCP_METHOD)) {
+                exposeHeaders += "," + APIConstants.MCP.HEADER_MCP_METHOD;
+            }
+            if (!StringUtils.isEmpty(exposeHeaders)
+                    && !exposeHeaders.contains(APIConstants.MCP.HEADER_MCP_NAME)) {
+                exposeHeaders += "," + APIConstants.MCP.HEADER_MCP_NAME;
+            }
+            if (!StringUtils.isEmpty(exposeHeaders)
+                    && !exposeHeaders.contains(APIConstants.MCP.MCP_PROTOCOL_VERSION_HEADER)) {
+                exposeHeaders += "," + APIConstants.MCP.MCP_PROTOCOL_VERSION_HEADER;
+            }
         }
         headers.put(APIConstants.CORSHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, exposeHeaders);
+
+        // Issue Mcp-Session-Id on successful legacy initialize responses.
+        Object sessionId = messageContext.getProperty(APIMgtGatewayConstants.MCP_SESSION_ID_KEY);
+        if (sessionId != null && MCPProtocolNegotiator.isLegacyNorthbound(messageContext)) {
+            headers.put(HEADER_MCP_SESSION_ID, String.valueOf(sessionId));
+        }
         if (messageContext.getProperty("isMcp") != null) {
             int responseStatusCode = MCPUtils.resolveResponseStatusCode(messageContext);
             if (responseStatusCode == HttpStatus.SC_UNAUTHORIZED) {
@@ -345,7 +366,9 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
                             INVALID_REQUEST_MESSAGE, "Invalid Request");
                 }
 
-                method = request.getMethod();
+                API api = GatewayUtils.getAPI(messageContext);
+                MCPProtocolNegotiator.negotiateAndStore(messageContext, request, api);
+                method = MCPProtocolNegotiator.resolveMethod(messageContext, request);
                 messageContext.setProperty(MCP_METHOD, method);
                 // Store the parsed McpRequest object (not the raw JSON string)
                 // McpMediator expects McpRequest type for this property
@@ -353,16 +376,15 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
 
                 if (StringUtils.equals(method, METHOD_TOOL_CALL)) {
                     Params params = request.getParams();
-                    String toolName = params.getToolName();
+                    String toolName = params != null ? params.getToolName() : null;
                     if (StringUtils.isNotBlank(toolName)) {
                         messageContext.setProperty(MCP_TOOL_NAME, toolName);
                     }
-                    API api = GatewayUtils.getAPI(messageContext);
-                    URLMapping extendedOperation = api.getUrlMappings()
+                    URLMapping extendedOperation = api != null ? api.getUrlMappings()
                             .stream()
                             .filter(operation -> operation.getUrlPattern().equals(toolName))
                             .findFirst()
-                            .orElse(null);
+                            .orElse(null) : null;
 
                     BackendOperation backendOperation = null;
                     if (extendedOperation != null) { //direct_endpoint
@@ -382,7 +404,9 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
                             messageContext.setProperty("MCP_API_ELECTED_RESOURCE", backendOperation.getTarget());
                         }
                     }
-                } else if (StringUtils.equals(method, METHOD_INITIALIZE) || StringUtils.equals(method, METHOD_TOOL_LIST)) {
+                } else if (StringUtils.equals(method, METHOD_INITIALIZE)
+                        || StringUtils.equals(method, METHOD_TOOL_LIST)
+                        || StringUtils.equals(method, METHOD_SERVER_DISCOVER)) {
                     // tools/list is served on POST /mcp; map auth/throttle to that resource, not /* or tool paths.
                     messageContext.setProperty("MCP_HTTP_METHOD", APIConstants.HTTP_POST);
                     messageContext.setProperty("MCP_API_ELECTED_RESOURCE", MCP_RESOURCE);
@@ -418,6 +442,7 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
             case METHOD_INITIALIZE:
             case METHOD_TOOL_LIST:
             case METHOD_TOOL_CALL:
+            case METHOD_SERVER_DISCOVER:
                 return false;
 
             default:

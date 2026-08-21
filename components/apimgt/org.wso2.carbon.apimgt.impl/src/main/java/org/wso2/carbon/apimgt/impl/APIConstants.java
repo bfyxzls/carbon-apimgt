@@ -3805,14 +3805,19 @@ public final class APIConstants {
         public static final String METHOD_RESOURCES_READ = "resources/read";
         public static final String METHOD_RESOURCE_TEMPLATE_LIST = "resources/templates/list";
         public static final String METHOD_PROMPTS_LIST = "prompts/list";
+        public static final String METHOD_SERVER_DISCOVER = "server/discover";
         public static final List<String> ALLOWED_METHODS = Arrays.asList(METHOD_INITIALIZE, METHOD_TOOL_LIST,
                 METHOD_TOOL_CALL, METHOD_PING, METHOD_NOTIFICATION_INITIALIZED, METHOD_RESOURCES_LIST,
-                METHOD_RESOURCES_READ, METHOD_PROMPTS_LIST, METHOD_RESOURCE_TEMPLATE_LIST);
+                METHOD_RESOURCES_READ, METHOD_PROMPTS_LIST, METHOD_RESOURCE_TEMPLATE_LIST, METHOD_SERVER_DISCOVER);
         public static final String PROTOCOL_VERSION_KEY = "protocolVersion";
         public static final String PROTOCOL_VERSION_2024_NOVEMBER = "2024-11-05";
         public static final String PROTOCOL_VERSION_2025_MARCH = "2025-03-26";
         public static final String PROTOCOL_VERSION_2025_JUNE = "2025-06-18";
-        public static final List<String> SUPPORTED_PROTOCOL_VERSIONS = Arrays.asList(PROTOCOL_VERSION_2025_JUNE);
+        public static final String PROTOCOL_VERSION_2026_JULY = "2026-07-28";
+        public static final List<String> SUPPORTED_PROTOCOL_VERSIONS = Arrays.asList(
+                PROTOCOL_VERSION_2025_JUNE, PROTOCOL_VERSION_2026_JULY);
+        public static final String PROTOCOL_ERA_LEGACY = "legacy";
+        public static final String PROTOCOL_ERA_MODERN = "modern";
         public static final String PROTOCOL_VERSION_REQUESTED = "requested";
         public static final String PROTOCOL_VERSION_SUPPORTED = "supported";
         public static final String PROTOCOL_MISMATCH_ERROR = "Unsupported protocol version";
@@ -3827,6 +3832,7 @@ public final class APIConstants {
         public static final String BODY_KEY = "body";
         public static final String TOOLS_KEY = "tools";
         public static final String SESSION_ID_KEY = "sessionId";
+        public static final String META_KEY = "_meta";
         public static final String VHOST_HEADER = "x-wso2-mcp-vhost";
         public static final String BASEPATH_HEADER = "x-wso2-mcp-basepath";
         public static final String VERSION_HEADER = "x-wso2-mcp-version";
@@ -3846,6 +3852,8 @@ public final class APIConstants {
         public static final String HEADER_CONTENT_TYPE = "Content-Type";
         public static final String HEADER_ACCEPT = "Accept";
         public static final String HEADER_MCP_SESSION_ID = "Mcp-Session-Id";
+        public static final String HEADER_MCP_METHOD = "Mcp-Method";
+        public static final String HEADER_MCP_NAME = "Mcp-Name";
         public static final String ACCEPT_JSON_AND_SSE = "application/json, text/event-stream";
         public static final String MCP_FAILURE_HANDLER = "_mcp_failure_handler_";
         public static final String RECEIVED_MCP_ID = "RECEIVED_MCP_ID";
@@ -3858,6 +3866,41 @@ public final class APIConstants {
         public static final String CLIENT_INFO_KEY = "clientInfo";
         public static final String CLIENT_NAME_KEY = "name";
         public static final String CLIENT_VERSION_KEY = "version";
+        public static final String SERVER_INFO_KEY = "serverInfo";
+        public static final String TTL_MS_KEY = "ttlMs";
+        public static final String CACHE_SCOPE_KEY = "cacheScope";
+
+        /**
+         * Returns whether the given protocol version is a supported MCP revision.
+         */
+        public static boolean isSupportedProtocolVersion(String protocolVersion) {
+            return protocolVersion != null && SUPPORTED_PROTOCOL_VERSIONS.contains(protocolVersion);
+        }
+
+        /**
+         * Maps a protocol version string to the legacy (1.0) or modern (2.0) era.
+         * Unknown or null versions default to legacy for backward compatibility.
+         */
+        public static String resolveProtocolEra(String protocolVersion) {
+            if (PROTOCOL_VERSION_2026_JULY.equals(protocolVersion)) {
+                return PROTOCOL_ERA_MODERN;
+            }
+            return PROTOCOL_ERA_LEGACY;
+        }
+
+        /**
+         * Returns true when the protocol version belongs to the modern (MCP 2.0 / 2026-07-28) era.
+         */
+        public static boolean isModernProtocol(String protocolVersion) {
+            return PROTOCOL_ERA_MODERN.equals(resolveProtocolEra(protocolVersion));
+        }
+
+        /**
+         * Returns true when the protocol version belongs to the legacy (MCP 1.0) era.
+         */
+        public static boolean isLegacyProtocol(String protocolVersion) {
+            return !isModernProtocol(protocolVersion);
+        }
 
         // Client identity
         public static final String CLIENT_NAME = "WSO2_API_Manager";

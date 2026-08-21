@@ -22,6 +22,8 @@ package org.wso2.carbon.apimgt.gateway.mcp.request;
 import com.google.gson.annotations.SerializedName;
 import org.wso2.carbon.apimgt.impl.APIConstants.MCP;
 
+import java.util.Map;
+
 /**
  * This class is used to represent the MCP request.
  */
@@ -34,6 +36,8 @@ public class McpRequest {
     private String method;
     @SerializedName("params")
     private Params params;
+    @SerializedName("_meta")
+    private Map<String, Object> meta;
 
     public Params getParams() {
         return params;
@@ -65,5 +69,24 @@ public class McpRequest {
 
     public void setId(Object id) {
         this.id = id;
+    }
+
+    public Map<String, Object> getMeta() {
+        return meta;
+    }
+
+    public void setMeta(Map<String, Object> meta) {
+        this.meta = meta;
+    }
+
+    /**
+     * Returns {@code _meta.protocolVersion} when present.
+     */
+    public String getMetaProtocolVersion() {
+        if (meta == null) {
+            return null;
+        }
+        Object value = meta.get(MCP.PROTOCOL_VERSION_KEY);
+        return value != null ? String.valueOf(value) : null;
     }
 }

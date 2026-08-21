@@ -227,6 +227,10 @@ public class APIMgtGatewayConstants {
     public static final String MCP_REQUESTED_PROTOCOL_VERSION_KEY = "MCP_REQUESTED_PROTOCOL_VERSION";
     public static final String MCP_CLIENT_INFO_KEY = "MCP_CLIENT_INFO";
     public static final String MCP_PROTOCOL_VERSION_KEY = "MCP_PROTOCOL_VERSION";
+    public static final String MCP_PROTOCOL_ERA_KEY = "MCP_PROTOCOL_ERA";
+    public static final String MCP_BACKEND_PROTOCOL_VERSION_KEY = "MCP_BACKEND_PROTOCOL_VERSION";
+    public static final String MCP_BACKEND_PROTOCOL_ERA_KEY = "MCP_BACKEND_PROTOCOL_ERA";
+    public static final String MCP_NEEDS_TRANSLATION_KEY = "MCP_NEEDS_TRANSLATION";
     public static final String MCP_SERVER_NAME_KEY = "MCP_SERVER_NAME";
     public static final String MCP_SERVER_VERSION_KEY = "MCP_SERVER_VERSION";
     public static final String MCP_REQUEST_SIZE_KEY = "MCP_REQUEST_SIZE";

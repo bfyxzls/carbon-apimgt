@@ -779,6 +779,12 @@ public class APIMappingUtil {
         if (updatedAllowHeaders.stream().noneMatch(APIConstants.MCP.HEADER_MCP_SESSION_ID::equalsIgnoreCase)) {
             updatedAllowHeaders.add(APIConstants.MCP.HEADER_MCP_SESSION_ID);
         }
+        if (updatedAllowHeaders.stream().noneMatch(APIConstants.MCP.HEADER_MCP_METHOD::equalsIgnoreCase)) {
+            updatedAllowHeaders.add(APIConstants.MCP.HEADER_MCP_METHOD);
+        }
+        if (updatedAllowHeaders.stream().noneMatch(APIConstants.MCP.HEADER_MCP_NAME::equalsIgnoreCase)) {
+            updatedAllowHeaders.add(APIConstants.MCP.HEADER_MCP_NAME);
+        }
         corsConfiguration.setAccessControlAllowHeaders(updatedAllowHeaders);
 
         //temporarily set the CORS enabled to true for MCP servers
@@ -817,9 +823,9 @@ public class APIMappingUtil {
         if (dto.getSubtypeConfiguration() != null && dto.getSubtypeConfiguration().getSubtype() != null) {
             model.setSubtype(dto.getSubtypeConfiguration().getSubtype());
         }
-        String protocolVersion = dto.getProtocolVersion();
-        if (protocolVersion != null && !protocolVersion.isEmpty()) {
-            model.getMetadata().put(APIConstants.MCP.PROTOCOL_VERSION_KEY, protocolVersion);
+        MCPServerDTO.ProtocolVersionEnum protocolVersionEnum = dto.getProtocolVersion();
+        if (protocolVersionEnum != null) {
+            model.getMetadata().put(APIConstants.MCP.PROTOCOL_VERSION_KEY, protocolVersionEnum.value());
         }
         String displayName = dto.getDisplayName();
         if (displayName != null && !displayName.trim().isEmpty()) {
@@ -2518,7 +2524,7 @@ public class APIMappingUtil {
         String protocolVersion = model.getMetadata() != null
                 ? model.getMetadata().get(APIConstants.MCP.PROTOCOL_VERSION_KEY) : null;
         if (protocolVersion != null) {
-            dto.setProtocolVersion(protocolVersion);
+            dto.setProtocolVersion(MCPServerDTO.ProtocolVersionEnum.fromValue(protocolVersion));
         }
         return dto;
     }

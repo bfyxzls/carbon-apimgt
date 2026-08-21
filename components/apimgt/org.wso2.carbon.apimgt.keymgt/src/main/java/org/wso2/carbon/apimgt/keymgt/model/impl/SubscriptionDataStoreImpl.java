@@ -1138,6 +1138,13 @@ public class SubscriptionDataStoreImpl implements SubscriptionDataStore {
             }
             if (subscriptionAPI != null) {
                 subscriptionAPI.setApiProperties(gatewayAPIDTO.getAdditionalProperties());
+                if (gatewayAPIDTO.getAdditionalProperties() != null) {
+                    String protocolVersion = gatewayAPIDTO.getAdditionalProperties()
+                            .get(org.wso2.carbon.apimgt.impl.APIConstants.MCP.PROTOCOL_VERSION_KEY);
+                    if (protocolVersion != null) {
+                        subscriptionAPI.setProtocolVersion(protocolVersion);
+                    }
+                }
                 if (log.isDebugEnabled()) {
                     log.debug("Updated API properties in SubscriptionDataStore for API: " + subscriptionAPI.getName() +
                             " (Context: " + subscriptionAPI.getContext() + ", Version: " +

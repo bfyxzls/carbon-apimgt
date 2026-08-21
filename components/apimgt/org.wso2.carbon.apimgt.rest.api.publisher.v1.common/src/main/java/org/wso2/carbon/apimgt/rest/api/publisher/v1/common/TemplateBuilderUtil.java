@@ -978,7 +978,19 @@ public class TemplateBuilderUtil {
         gatewayAPIDTO.setApiContext(api.getContext());
         gatewayAPIDTO.setTenantDomain(tenantDomain);
         gatewayAPIDTO.setKeyManagers(api.getKeyManagers());
-        gatewayAPIDTO.setAdditionalProperties(toStringMap(api.getAdditionalProperties()));
+        Map<String, String> additionalProps = toStringMap(api.getAdditionalProperties());
+        if (APIConstants.API_TYPE_MCP.equalsIgnoreCase(api.getType()) && api.getMetadata() != null) {
+            String protocolVersion = api.getMetadata().get(APIConstants.MCP.PROTOCOL_VERSION_KEY);
+            if (StringUtils.isNotEmpty(protocolVersion)) {
+                if (additionalProps == null) {
+                    additionalProps = new java.util.HashMap<>();
+                } else {
+                    additionalProps = new java.util.HashMap<>(additionalProps);
+                }
+                additionalProps.put(APIConstants.MCP.PROTOCOL_VERSION_KEY, protocolVersion);
+            }
+        }
+        gatewayAPIDTO.setAdditionalProperties(additionalProps);
         gatewayAPIDTO.setVhosts(environment.getVhosts());
 
         String definition;

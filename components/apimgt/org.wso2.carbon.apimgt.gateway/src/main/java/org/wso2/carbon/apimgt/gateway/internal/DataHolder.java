@@ -31,6 +31,7 @@ import org.wso2.carbon.apimgt.api.model.LLMProviderInfo;
 import org.wso2.carbon.apimgt.api.model.VHost;
 import org.wso2.carbon.apimgt.common.gateway.jwtgenerator.AbstractAPIMgtGatewayJWTGenerator;
 import org.wso2.carbon.apimgt.gateway.utils.GatewayUtils;
+import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.APIConstants.GatewayNotification.GatewayRegistrationResponse;
 import org.wso2.carbon.apimgt.impl.notifier.events.APIEvent;
 import org.wso2.carbon.apimgt.impl.notifier.events.DeployAPIInGatewayEvent;
@@ -573,6 +574,13 @@ public class DataHolder {
             API api = apiMap.get(gatewayAPIDTO.getApiContext());
             if (api != null) {
                 api.setApiProperties(gatewayAPIDTO.getAdditionalProperties());
+                if (gatewayAPIDTO.getAdditionalProperties() != null) {
+                    String protocolVersion = gatewayAPIDTO.getAdditionalProperties()
+                            .get(APIConstants.MCP.PROTOCOL_VERSION_KEY);
+                    if (protocolVersion != null) {
+                        api.setProtocolVersion(protocolVersion);
+                    }
+                }
                 if (log.isDebugEnabled()) {
                     log.debug("Updated API properties for API: " + api.getName() + " (Context: " + api.getContext() +
                             ")");

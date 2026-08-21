@@ -24,6 +24,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.apimgt.api.model.subscription.URLMapping;
@@ -62,11 +63,18 @@ public class MCPPayloadGenerator {
 
     public static String getInitializeResponse(Object id, String serverName, String serverVersion,
                                                String serverDescription, boolean toolListChangeNotified) {
-        // Create the response object as specified in
-        // https://modelcontextprotocol.io/specification/2025-03-26/basic/lifecycle#initialization
+        return getInitializeResponse(id, serverName, serverVersion, serverDescription, toolListChangeNotified,
+                APIConstants.MCP.PROTOCOL_VERSION_2025_JUNE);
+    }
+
+    public static String getInitializeResponse(Object id, String serverName, String serverVersion,
+                                               String serverDescription, boolean toolListChangeNotified,
+                                               String protocolVersion) {
         McpResponse<InitializeResult> initializeResponse = new McpResponse<>(id);
         InitializeResult result = new InitializeResult();
-        result.setProtocolVersion(APIConstants.MCP.PROTOCOL_VERSION_2025_JUNE);
+        String negotiatedVersion = APIConstants.MCP.isSupportedProtocolVersion(protocolVersion)
+                ? protocolVersion : APIConstants.MCP.PROTOCOL_VERSION_2025_JUNE;
+        result.setProtocolVersion(negotiatedVersion);
 
         InitializeResult.ServerInfo serverInfo = new InitializeResult.ServerInfo();
         serverInfo.setName(serverName);
@@ -80,6 +88,30 @@ public class MCPPayloadGenerator {
         initializeResponse.setResult(result);
 
         return gson.toJson(initializeResponse);
+    }
+
+    /**
+     * Generates a {@code server/discover} response for MCP 2.0 clients.
+     */
+    public static String getServerDiscoverResponse(Object id, String serverName, String serverVersion,
+                                                   String serverDescription, boolean toolListChangeNotified) {
+        JsonObject result = new JsonObject();
+        result.addProperty(APIConstants.MCP.PROTOCOL_VERSION_KEY, APIConstants.MCP.PROTOCOL_VERSION_2026_JULY);
+
+        JsonObject serverInfo = new JsonObject();
+        serverInfo.addProperty(APIConstants.MCP.CLIENT_NAME_KEY, serverName);
+        serverInfo.addProperty(APIConstants.MCP.CLIENT_VERSION_KEY, serverVersion);
+        if (StringUtils.isNotEmpty(serverDescription)) {
+            serverInfo.addProperty("description", serverDescription);
+        }
+        result.add(APIConstants.MCP.SERVER_INFO_KEY, serverInfo);
+
+        InitializeResult.Capabilities capabilities = getCapabilities(toolListChangeNotified);
+        result.add(APIConstants.MCP.CAPABILITIES_KEY, gson.toJsonTree(capabilities));
+
+        McpResponse<JsonObject> response = new McpResponse<>(id);
+        response.setResult(result);
+        return gson.toJson(response);
     }
 
     private static InitializeResult.Capabilities getCapabilities(boolean toolListChangeNotified) {

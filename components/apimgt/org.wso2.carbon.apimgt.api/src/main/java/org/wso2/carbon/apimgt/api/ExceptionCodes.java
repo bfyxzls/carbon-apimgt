@@ -921,6 +921,8 @@ public enum ExceptionCodes implements ErrorHandler {
             "Referenced API is not supported for MCP Server."),
     DUPLICATE_MCP_TOOLS(904013, "Duplicate MCP tools", 400,
             "One or more MCP tools are duplicated."),
+    UNSUPPORTED_MCP_PROTOCOL_VERSION(904014, "Unsupported MCP protocol version", 400,
+            "Unsupported MCP protocol version '%s'. Supported versions: %s"),
 
     // gateway notification related codes
     GATEWAY_NOTIFICATION_BAD_REQUEST(902052, "Invalid request for gateway notification", 400,

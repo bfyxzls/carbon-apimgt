@@ -2732,6 +2732,14 @@ public class McpServersApiServiceImpl implements McpServersApiService {
 
         MCPServerValidationResponseDTO result =
                 PublisherCommonUtils.validateMCPServer(serverUrl, securityInfo, true, organization);
+        if (!Boolean.TRUE.equals(result.isIsValid())) {
+            // Retry with MCP 2.0 when legacy discovery fails (mixed backend estate).
+            MCPServerValidationResponseDTO modernResult = PublisherCommonUtils.validateMCPServer(
+                    serverUrl, securityInfo, true, organization, APIConstants.MCP.PROTOCOL_VERSION_2026_JULY);
+            if (Boolean.TRUE.equals(modernResult.isIsValid())) {
+                result = modernResult;
+            }
+        }
 
         return Response.ok(result).build();
     }

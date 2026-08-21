@@ -14776,6 +14776,14 @@ components:
           example: APPROVED
         protocolVersion:
           type: string
+          description: >
+            MCP protocol revision spoken by the southbound backend.
+            Supported values: 2025-06-18 (MCP 1.0 / legacy) and 2026-07-28 (MCP 2.0 / modern).
+            Defaults to 2025-06-18 when omitted.
+          enum:
+            - "2025-06-18"
+            - "2026-07-28"
+          example: "2025-06-18"
         createdTime:
           type: string
         lastUpdatedTimestamp:

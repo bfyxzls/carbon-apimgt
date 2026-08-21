@@ -88,6 +88,7 @@ public interface McpServersApiService {
       public Response getMCPServerThumbnail(String mcpServerId, String ifNoneMatch, MessageContext messageContext) throws APIManagementException;
       public Response getRepliesOfCommentOfMCPServer(String commentId, String mcpServerId, String xWSO2Tenant, Integer limit, Integer offset, String ifNoneMatch, Boolean includeCommenterInfo, MessageContext messageContext) throws APIManagementException;
       public Response importMCPServer(InputStream fileInputStream, Attachment fileDetail, Boolean preserveProvider, Boolean rotateRevision, Boolean overwrite, Boolean preservePortalConfigurations, Boolean dryRun, String accept, MessageContext messageContext) throws APIManagementException;
+      public Response refreshMCPServerTools(String mcpServerId, MessageContext messageContext) throws APIManagementException;
       public Response restoreMCPServerRevision(String mcpServerId, String revisionId, MessageContext messageContext) throws APIManagementException;
       public Response undeployMCPServerRevision(String mcpServerId, String revisionId, String revisionNumber, Boolean allEnvironments, List<APIRevisionDeploymentDTO> apIRevisionDeploymentDTO, MessageContext messageContext) throws APIManagementException;
       public Response updateMCPServer(String mcpServerId, MCPServerDTO mcPServerDTO, String ifMatch, MessageContext messageContext) throws APIManagementException;

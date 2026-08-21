@@ -464,6 +464,22 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         if (messageContext.getPropertyKeySet().contains(MCP_METHOD)) {
             customProperties.put("mcpMethod", messageContext.getProperty(MCP_METHOD));
         }
+        if (messageContext.getPropertyKeySet().contains(APIMgtGatewayConstants.MCP_PROTOCOL_VERSION_KEY)) {
+            customProperties.put(APIMgtGatewayConstants.MCP_PROTOCOL_VERSION,
+                    messageContext.getProperty(APIMgtGatewayConstants.MCP_PROTOCOL_VERSION_KEY));
+        }
+        if (messageContext.getPropertyKeySet().contains(APIMgtGatewayConstants.MCP_PROTOCOL_ERA_KEY)) {
+            customProperties.put("mcpProtocolEra",
+                    messageContext.getProperty(APIMgtGatewayConstants.MCP_PROTOCOL_ERA_KEY));
+        }
+        if (messageContext.getPropertyKeySet().contains(APIMgtGatewayConstants.MCP_BACKEND_PROTOCOL_VERSION_KEY)) {
+            customProperties.put("mcpBackendProtocolVersion",
+                    messageContext.getProperty(APIMgtGatewayConstants.MCP_BACKEND_PROTOCOL_VERSION_KEY));
+        }
+        if (messageContext.getPropertyKeySet().contains(APIMgtGatewayConstants.MCP_SESSION_ID_KEY)) {
+            customProperties.put(APIMgtGatewayConstants.MCP_SESSION_ID,
+                    messageContext.getProperty(APIMgtGatewayConstants.MCP_SESSION_ID_KEY));
+        }
         if (messageContext.getPropertyKeySet().contains(MCP_TOOL_NAME)) {
             customProperties.put("mcpToolName", messageContext.getProperty(MCP_TOOL_NAME));
         }

@@ -856,6 +856,27 @@ McpServersApiService delegate = new McpServersApiServiceImpl();
     }
 
     @POST
+    @Path("/{mcpServerId}/refresh-tools")
+    
+    @Produces({ "application/json" })
+    @ApiOperation(value = "Refresh MCP tools from the backend", notes = "Re-synchronizes tool definitions from the upstream MCP endpoint for MCP servers of subtype **SERVER_PROXY**, or reapplies MCP tool mappings from the current stored OpenAPI / backend definition for other MCP server subtypes. The MCP server metadata is persisted the same way as a regular update, and matching per-tool policies and scopes are preserved when tool names are unchanged (proxy subtype). ", response = MCPServerDTO.class, authorizations = {
+        @Authorization(value = "OAuth2Security", scopes = {
+            @AuthorizationScope(scope = "apim:mcp_server_create", description = "Create MCP Server"),
+            @AuthorizationScope(scope = "apim:mcp_server_manage", description = "Manage all MCP Server related operations"),
+            @AuthorizationScope(scope = "apim:mcp_server_publish", description = "Publish MCP Server")
+        })
+    }, tags={ "MCP Servers",  })
+    @ApiResponses(value = { 
+        @ApiResponse(code = 200, message = "OK. MCP server tools refreshed; response body is the updated MCP server. ", response = MCPServerDTO.class),
+        @ApiResponse(code = 400, message = "Bad Request. Invalid request or validation error.", response = ErrorDTO.class),
+        @ApiResponse(code = 403, message = "Forbidden. The request must be conditional but no condition has been specified.", response = ErrorDTO.class),
+        @ApiResponse(code = 404, message = "Not Found. The specified resource does not exist.", response = ErrorDTO.class),
+        @ApiResponse(code = 500, message = "Internal Server Error.", response = ErrorDTO.class) })
+    public Response refreshMCPServerTools(@ApiParam(value = "**MCP Server ID** consisting of the **UUID** of the MCP Server. ",required=true) @PathParam("mcpServerId") String mcpServerId) throws APIManagementException{
+        return delegate.refreshMCPServerTools(mcpServerId, securityContext);
+    }
+
+    @POST
     @Path("/{mcpServerId}/restore-revision")
     
     @Produces({ "application/json" })

@@ -56,13 +56,25 @@ public class MCPInitializerAndToolFetcher {
     private final String authHeaderName;
     private final String authHeaderValue;
     private final boolean secure;
+    private final String protocolVersion;
 
     public MCPInitializerAndToolFetcher(String mcpServerURL, String header, String value, boolean isSecure) {
+        this(mcpServerURL, header, value, isSecure, APIConstants.MCP.PROTOCOL_VERSION_2025_JUNE);
+    }
+
+    public MCPInitializerAndToolFetcher(String mcpServerURL, String header, String value, boolean isSecure,
+                                        String protocolVersion) {
 
         this.mcpServerUrl = mcpServerURL;
         this.authHeaderName = header;
         this.authHeaderValue = value;
         this.secure = isSecure;
+        this.protocolVersion = APIConstants.MCP.isSupportedProtocolVersion(protocolVersion)
+                ? protocolVersion : APIConstants.MCP.PROTOCOL_VERSION_2025_JUNE;
+    }
+
+    public String getProtocolVersion() {
+        return protocolVersion;
     }
 
     /**
@@ -85,39 +97,74 @@ public class MCPInitializerAndToolFetcher {
 
             String resolvedEndpoint = resolveMcpEndpoint(mcpServerUrl);
             if (log.isDebugEnabled()) {
-                log.debug("Resolved MCP endpoint: " + resolvedEndpoint + " (from: " + mcpServerUrl + ")");
+                log.debug("Resolved MCP endpoint: " + resolvedEndpoint + " (from: " + mcpServerUrl
+                        + "), protocolVersion=" + protocolVersion);
             }
 
-            // 1) initialize
-            JSONObject initializePayload = buildInitializePayload();
-            JSONObject initializeResponse =
-                    sendJsonRpcRequest(httpClient, resolvedEndpoint, initializePayload, null, false);
-            JSONObject initializeResult =
-                    parseJsonRpcResult(initializeResponse.getString(APIConstants.MCP.BODY_KEY));
-
-            if (initializeResult == null) {
-                throw new APIManagementException("Failed to initialize MCP server: result is null");
+            if (APIConstants.MCP.isModernProtocol(protocolVersion)) {
+                return fetchToolsModern(httpClient, resolvedEndpoint);
             }
-
-            String sessionId = initializeResponse.optString(APIConstants.MCP.SESSION_ID_KEY, null);
-            if (log.isDebugEnabled()) {
-                log.debug("MCP initialization succeeded; sessionId=" + sessionId);
-            }
-
-            // 2) notifications/initialized (required by MCP lifecycle before normal operations)
-            JSONObject initializedNotification = buildInitializedNotificationPayload();
-            sendJsonRpcRequest(httpClient, resolvedEndpoint, initializedNotification, sessionId, true);
-
-            // 3) tools/list
-            JSONObject toolsPayload = buildToolsListPayload();
-            JSONObject toolsResponse =
-                    sendJsonRpcRequest(httpClient, resolvedEndpoint, toolsPayload, sessionId, false);
-
-            return parseJsonRpcResult(toolsResponse.getString(APIConstants.MCP.BODY_KEY));
+            return fetchToolsLegacy(httpClient, resolvedEndpoint);
         } catch (APIManagementException e) {
             throw e;
         } catch (Exception e) {
             throw new APIManagementException("Error during MCP interaction: " + e.getMessage(), e);
+        }
+    }
+
+    private JSONObject fetchToolsLegacy(CloseableHttpClient httpClient, String resolvedEndpoint) throws Exception {
+        // 1) initialize
+        JSONObject initializePayload = buildInitializePayload();
+        JSONObject initializeResponse =
+                sendJsonRpcRequest(httpClient, resolvedEndpoint, initializePayload, null, false,
+                        APIConstants.MCP.METHOD_INITIALIZE);
+        JSONObject initializeResult =
+                parseJsonRpcResult(initializeResponse.getString(APIConstants.MCP.BODY_KEY));
+
+        if (initializeResult == null) {
+            throw new APIManagementException("Failed to initialize MCP server: result is null");
+        }
+
+        String sessionId = initializeResponse.optString(APIConstants.MCP.SESSION_ID_KEY, null);
+        if (log.isDebugEnabled()) {
+            log.debug("MCP initialization succeeded; sessionId=" + sessionId);
+        }
+
+        // 2) notifications/initialized (required by MCP lifecycle before normal operations)
+        JSONObject initializedNotification = buildInitializedNotificationPayload();
+        sendJsonRpcRequest(httpClient, resolvedEndpoint, initializedNotification, sessionId, true,
+                APIConstants.MCP.METHOD_NOTIFICATION_INITIALIZED);
+
+        // 3) tools/list
+        JSONObject toolsPayload = buildToolsListPayload();
+        JSONObject toolsResponse =
+                sendJsonRpcRequest(httpClient, resolvedEndpoint, toolsPayload, sessionId, false,
+                        APIConstants.MCP.METHOD_TOOL_LIST);
+
+        return parseJsonRpcResult(toolsResponse.getString(APIConstants.MCP.BODY_KEY));
+    }
+
+    private JSONObject fetchToolsModern(CloseableHttpClient httpClient, String resolvedEndpoint) throws Exception {
+        // Prefer tools/list with modern headers/_meta; fall back from discover if needed.
+        try {
+            JSONObject toolsPayload = buildModernToolsListPayload();
+            JSONObject toolsResponse =
+                    sendJsonRpcRequest(httpClient, resolvedEndpoint, toolsPayload, null, false,
+                            APIConstants.MCP.METHOD_TOOL_LIST);
+            return parseJsonRpcResult(toolsResponse.getString(APIConstants.MCP.BODY_KEY));
+        } catch (APIManagementException toolsListFailure) {
+            if (log.isDebugEnabled()) {
+                log.debug("Modern tools/list failed, trying server/discover then tools/list: "
+                        + toolsListFailure.getMessage());
+            }
+            JSONObject discoverPayload = buildServerDiscoverPayload();
+            sendJsonRpcRequest(httpClient, resolvedEndpoint, discoverPayload, null, false,
+                    APIConstants.MCP.METHOD_SERVER_DISCOVER);
+            JSONObject toolsPayload = buildModernToolsListPayload();
+            JSONObject toolsResponse =
+                    sendJsonRpcRequest(httpClient, resolvedEndpoint, toolsPayload, null, false,
+                            APIConstants.MCP.METHOD_TOOL_LIST);
+            return parseJsonRpcResult(toolsResponse.getString(APIConstants.MCP.BODY_KEY));
         }
     }
 
@@ -146,7 +193,7 @@ public class MCPInitializerAndToolFetcher {
         payload.put(APIConstants.MCP.RpcConstants.METHOD, APIConstants.MCP.METHOD_INITIALIZE);
 
         JSONObject params = new JSONObject();
-        params.put(APIConstants.MCP.PROTOCOL_VERSION_KEY, APIConstants.MCP.PROTOCOL_VERSION_2025_JUNE);
+        params.put(APIConstants.MCP.PROTOCOL_VERSION_KEY, protocolVersion);
 
         JSONObject capabilities = new JSONObject();
         JSONObject roots = new JSONObject().put(APIConstants.MCP.LIST_CHANGED_KEY, true);
@@ -187,25 +234,47 @@ public class MCPInitializerAndToolFetcher {
         return payload;
     }
 
+    private JSONObject buildModernToolsListPayload() {
+        JSONObject payload = buildToolsListPayload();
+        JSONObject meta = new JSONObject();
+        meta.put(APIConstants.MCP.PROTOCOL_VERSION_KEY, protocolVersion);
+        payload.put(APIConstants.MCP.META_KEY, meta);
+        return payload;
+    }
+
+    private JSONObject buildServerDiscoverPayload() {
+        JSONObject payload = new JSONObject();
+        payload.put(APIConstants.MCP.RpcConstants.JSON_RPC, APIConstants.MCP.RpcConstants.JSON_RPC_VERSION);
+        payload.put(APIConstants.MCP.RpcConstants.ID, 1);
+        payload.put(APIConstants.MCP.RpcConstants.METHOD, APIConstants.MCP.METHOD_SERVER_DISCOVER);
+        JSONObject meta = new JSONObject();
+        meta.put(APIConstants.MCP.PROTOCOL_VERSION_KEY, protocolVersion);
+        payload.put(APIConstants.MCP.META_KEY, meta);
+        payload.put(APIConstants.MCP.PARAMS_KEY, new JSONObject());
+        return payload;
+    }
+
     /**
      * Sends a JSON-RPC request/notification; returns wrapper with raw body and optional session id.
      *
      * @param notification if true, empty/202 responses are accepted without requiring a JSON-RPC result
      */
     private JSONObject sendJsonRpcRequest(CloseableHttpClient httpClient, String targetUrl, JSONObject jsonBody,
-                                          String sessionId, boolean notification) throws Exception {
+                                          String sessionId, boolean notification, String mcpMethod) throws Exception {
 
         HttpPost request = new HttpPost(targetUrl);
         request.setHeader(APIConstants.MCP.HEADER_CONTENT_TYPE,
                 ContentType.APPLICATION_JSON.withCharset(StandardCharsets.UTF_8).toString());
         request.setHeader(APIConstants.MCP.HEADER_ACCEPT, APIConstants.MCP.ACCEPT_JSON_AND_SSE);
-        // Required on all HTTP requests after initialize (also harmless on the initialize call itself).
-        request.setHeader(APIConstants.MCP.MCP_PROTOCOL_VERSION_HEADER, APIConstants.MCP.PROTOCOL_VERSION_2025_JUNE);
+        request.setHeader(APIConstants.MCP.MCP_PROTOCOL_VERSION_HEADER, protocolVersion);
+        if (APIConstants.MCP.isModernProtocol(protocolVersion) && StringUtils.isNotEmpty(mcpMethod)) {
+            request.setHeader(APIConstants.MCP.HEADER_MCP_METHOD, mcpMethod);
+        }
 
         if (secure && authHeaderName != null && !authHeaderName.isEmpty()) {
             request.setHeader(authHeaderName, authHeaderValue == null ? StringUtils.EMPTY : authHeaderValue);
         }
-        if (sessionId != null && !sessionId.isEmpty()) {
+        if (sessionId != null && !sessionId.isEmpty() && APIConstants.MCP.isLegacyProtocol(protocolVersion)) {
             request.setHeader(APIConstants.MCP.HEADER_MCP_SESSION_ID, sessionId);
         }
 

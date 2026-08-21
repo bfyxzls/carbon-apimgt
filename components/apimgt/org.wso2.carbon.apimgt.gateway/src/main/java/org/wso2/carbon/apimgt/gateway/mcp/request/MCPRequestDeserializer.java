@@ -83,6 +83,10 @@ public class MCPRequestDeserializer implements JsonDeserializer<McpRequest> {
         // Let Gson handle the rest
         mcpRequest.setMethod(context.deserialize(obj.get("method"), String.class));
         mcpRequest.setParams(context.deserialize(obj.get("params"), Params.class));
+        if (obj.has("_meta") && obj.get("_meta").isJsonObject()) {
+            mcpRequest.setMeta(context.deserialize(obj.get("_meta"),
+                    new com.google.gson.reflect.TypeToken<java.util.Map<String, Object>>(){}.getType()));
+        }
 
         if (log.isDebugEnabled()) {
             log.debug("Successfully deserialized McpRequest with method: " + mcpRequest.getMethod());

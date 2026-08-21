@@ -193,7 +193,38 @@ return null;
     private APIBusinessInformationDTO businessInformation = null;
     private APICorsConfigurationDTO corsConfiguration = null;
     private String workflowStatus = null;
-    private String protocolVersion = null;
+
+    @XmlType(name="ProtocolVersionEnum")
+    @XmlEnum(String.class)
+    public enum ProtocolVersionEnum {
+        _2025_06_18("2025-06-18"),
+        _2026_07_28("2026-07-28");
+        private String value;
+
+        ProtocolVersionEnum (String v) {
+            value = v;
+        }
+
+        public String value() {
+            return value;
+        }
+
+        @Override
+        public String toString() {
+            return String.valueOf(value);
+        }
+
+        @JsonCreator
+        public static ProtocolVersionEnum fromValue(String v) {
+            for (ProtocolVersionEnum b : ProtocolVersionEnum.values()) {
+                if (String.valueOf(b.value).equals(v)) {
+                    return b;
+                }
+            }
+return null;
+        }
+    }
+    private ProtocolVersionEnum protocolVersion = null;
     private String createdTime = null;
     private String lastUpdatedTimestamp = null;
     @Scope(name = "apim:mcp_server_publish", description="", value ="")
@@ -901,19 +932,20 @@ return null;
   }
 
   /**
+   * MCP protocol revision spoken by the southbound backend. Supported values: 2025-06-18 (MCP 1.0 / legacy) and 2026-07-28 (MCP 2.0 / modern). Defaults to 2025-06-18 when omitted. 
    **/
-  public MCPServerDTO protocolVersion(String protocolVersion) {
+  public MCPServerDTO protocolVersion(ProtocolVersionEnum protocolVersion) {
     this.protocolVersion = protocolVersion;
     return this;
   }
 
   
-  @ApiModelProperty(value = "")
+  @ApiModelProperty(example = "2025-06-18", value = "MCP protocol revision spoken by the southbound backend. Supported values: 2025-06-18 (MCP 1.0 / legacy) and 2026-07-28 (MCP 2.0 / modern). Defaults to 2025-06-18 when omitted. ")
   @JsonProperty("protocolVersion")
-  public String getProtocolVersion() {
+  public ProtocolVersionEnum getProtocolVersion() {
     return protocolVersion;
   }
-  public void setProtocolVersion(String protocolVersion) {
+  public void setProtocolVersion(ProtocolVersionEnum protocolVersion) {
     this.protocolVersion = protocolVersion;
   }
 

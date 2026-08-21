@@ -53,6 +53,7 @@ public class API implements CacheableEntity<String> {
     private boolean isSubscriptionValidationDisabled = false;
     private Boolean isEgress = null;
     private String subtype = null;
+    private String protocolVersion = null;
     private List<VHost> vhosts = new ArrayList<>();
     private String lastUpdatedEventId = null;
 
@@ -381,6 +382,14 @@ public class API implements CacheableEntity<String> {
 
     public void setSubtype(String subtype) {
         this.subtype = subtype;
+    }
+
+    public String getProtocolVersion() {
+        return protocolVersion;
+    }
+
+    public void setProtocolVersion(String protocolVersion) {
+        this.protocolVersion = protocolVersion;
     }
 
     public Map<String, String> getApiProperties() {

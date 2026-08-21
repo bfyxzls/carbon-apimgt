@@ -196,7 +196,9 @@ public class MCPUtils {
             switch (method) {
                 case APIConstants.MCP.METHOD_INITIALIZE:
                     validateInitializeRequest(id, requestObject);
-                    return handleMcpInitialize(id, matchedMcpApi);
+                    return handleMcpInitialize(messageContext, id, matchedMcpApi);
+                case APIConstants.MCP.METHOD_SERVER_DISCOVER:
+                    return handleMcpServerDiscover(id, matchedMcpApi);
                 case APIConstants.MCP.METHOD_TOOL_LIST:
                     return handleMcpToolList(id, matchedMcpApi, false);
                 case APIConstants.MCP.METHOD_TOOL_CALL:
@@ -290,16 +292,47 @@ public class MCPUtils {
     /**
      * Handles the MCP initialize request.
      *
-     * @param id         id of the request
-     * @param matchedApi matched API in the gateway
+     * @param messageContext message context (for negotiated protocol version / session)
+     * @param id             id of the request
+     * @param matchedApi     matched API in the gateway
      * @return the response payload as a String
      */
-    public static McpResponseDto handleMcpInitialize(Object id, API matchedApi) {
+    public static McpResponseDto handleMcpInitialize(MessageContext messageContext, Object id, API matchedApi) {
         String name = matchedApi.getName();
         String version = matchedApi.getVersion();
         String description = "This is an MCP Server";
+        Object negotiated = messageContext != null
+                ? messageContext.getProperty(APIMgtGatewayConstants.MCP_PROTOCOL_VERSION_KEY) : null;
+        String protocolVersion = negotiated != null ? String.valueOf(negotiated)
+                : APIConstants.MCP.PROTOCOL_VERSION_2025_JUNE;
+        String sessionId = null;
+        if (APIConstants.MCP.isLegacyProtocol(protocolVersion)) {
+            sessionId = MCPProtocolTranslator.issueNorthboundSessionId();
+            if (messageContext != null) {
+                messageContext.setProperty(APIMgtGatewayConstants.MCP_SESSION_ID_KEY, sessionId);
+            }
+        }
         return new McpResponseDto(MCPPayloadGenerator
-                .getInitializeResponse(id, name, version, description, false),
+                .getInitializeResponse(id, name, version, description, false, protocolVersion),
+                200, sessionId);
+    }
+
+    /**
+     * Backward-compatible initialize handler without message context.
+     */
+    public static McpResponseDto handleMcpInitialize(Object id, API matchedApi) {
+        return handleMcpInitialize(null, id, matchedApi);
+    }
+
+    /**
+     * Handles MCP 2.0 {@code server/discover}.
+     */
+    public static McpResponseDto handleMcpServerDiscover(Object id, API matchedApi) {
+        String name = matchedApi.getName();
+        String version = matchedApi.getVersion();
+        String description = "This is an MCP Server";
+        return new McpResponseDto(
+                MCPPayloadGenerator.getServerDiscoverResponse(id, name, version, description, false),
                 200, null);
     }
 
@@ -1887,11 +1920,30 @@ public class MCPUtils {
     private static final String STREAMABLE_HTTP_SSE_PREAMBLE = ": stream open\n\n";
 
     /**
-     * Answers Streamable HTTP {@code GET /mcp} with {@code text/event-stream} (MCP 2025-03-26 transport).
+     * Answers Streamable HTTP {@code GET /mcp} with {@code text/event-stream} (MCP 1.0 / legacy transport).
+     * Modern (MCP 2.0) clients receive HTTP 405 because they do not rely on a server-push SSE channel.
      */
     public static boolean writeStreamableHttpGetResponse(MessageContext messageContext) {
         org.apache.axis2.context.MessageContext axis2MessageContext =
                 ((Axis2MessageContext) messageContext).getAxis2MessageContext();
+        String headerVersion = MCPProtocolNegotiator.getTransportHeader(messageContext,
+                APIConstants.MCP.MCP_PROTOCOL_VERSION_HEADER);
+        if (APIConstants.MCP.isModernProtocol(headerVersion)) {
+            try {
+                JsonUtil.removeJsonPayload(axis2MessageContext);
+                axis2MessageContext.setProperty(APIConstants.NO_ENTITY_BODY, true);
+                axis2MessageContext.setProperty(APIMgtGatewayConstants.HTTP_SC, HttpStatus.SC_METHOD_NOT_ALLOWED);
+                axis2MessageContext.setProperty(NhttpConstants.HTTP_SC, HttpStatus.SC_METHOD_NOT_ALLOWED);
+                messageContext.setProperty("MCP_PROCESSED", "true");
+                if (log.isDebugEnabled()) {
+                    log.debug("Rejected Streamable HTTP GET /mcp for modern MCP protocol version: " + headerVersion);
+                }
+                return true;
+            } catch (Exception e) {
+                log.error("Error while rejecting Streamable HTTP GET /mcp for modern protocol", e);
+                return false;
+            }
+        }
         try {
             JsonUtil.removeJsonPayload(axis2MessageContext);
             JsonUtil.getNewJsonPayload(axis2MessageContext, STREAMABLE_HTTP_SSE_PREAMBLE, true, true);
