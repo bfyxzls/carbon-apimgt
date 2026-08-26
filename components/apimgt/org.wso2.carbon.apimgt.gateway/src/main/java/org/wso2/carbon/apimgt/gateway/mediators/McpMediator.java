@@ -122,7 +122,8 @@ public class McpMediator extends AbstractMediator implements ManagedLifecycle {
                 if (StringUtils.equals(subType, APIConstants.API_SUBTYPE_SERVER_PROXY)) {
                     return true;
                 }
-                return MCPUtils.writeStreamableHttpGetResponse(messageContext);
+                MCPUtils.rejectStreamableHttpGetRequest(messageContext);
+                return false;
             }
             if (StringUtils.equals(subType, APIConstants.API_SUBTYPE_SERVER_PROXY)) {
                 McpRequest requestBody =

@@ -9,4 +9,7 @@ jdk21
 .\build-jdk21.ps1 clean install "-Dmaven.test.skip=true" "-Dcheckstyle.skip=true" "-Dspotbugs.skip=true" -pl components/apimgt/org.wso2.carbon.apimgt.rest.api.publisher.v1.common -am
 .\build-jdk21.ps1 clean install "-Dmaven.test.skip=true" "-Dcheckstyle.skip=true" "-Dspotbugs.skip=true" -pl components/apimgt/org.wso2.carbon.apimgt.rest.api.util -am
 ```
-
+进入子项目目录，如cd org.wso2.carbon.apimgt.gateway，然后执行下面代码构建项目
+```
+../../../build-jdk21.ps1 clean install "-Dmaven.test.skip=true" "-Dcheckstyle.skip=true" "-Dspotbugs.skip=true"  
+```

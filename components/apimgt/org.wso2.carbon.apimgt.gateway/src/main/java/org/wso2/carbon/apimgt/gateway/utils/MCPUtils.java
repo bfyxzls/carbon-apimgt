@@ -1914,6 +1914,31 @@ public class MCPUtils {
     }
 
     /**
+     * Rejects Streamable HTTP {@code GET /mcp} with {@code 405 Method Not Allowed}.
+     * Applies to legacy HTTP APIs tagged with the MCP category (no McpMediator) and disables SSE worker use.
+     */
+    public static void rejectStreamableHttpGetRequest(MessageContext messageContext) {
+        org.apache.axis2.context.MessageContext axis2MessageContext =
+                ((Axis2MessageContext) messageContext).getAxis2MessageContext();
+        try {
+            JsonUtil.removeJsonPayload(axis2MessageContext);
+        } catch (Exception e) {
+            log.debug("Could not remove JSON payload while rejecting GET /mcp", e);
+        }
+        setHttpResponseStatus(messageContext, HttpStatus.SC_METHOD_NOT_ALLOWED, true);
+        Map headers = (Map) axis2MessageContext.getProperty(
+                org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS);
+        if (headers == null) {
+            headers = new HashMap<>();
+            axis2MessageContext.setProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS, headers);
+        }
+        headers.put(HttpHeaders.ALLOW, APIConstants.HTTP_POST);
+        messageContext.setProperty("MCP_PROCESSED", "true");
+        discardPassthroughMessage(messageContext);
+        Utils.sendFault(messageContext, HttpStatus.SC_METHOD_NOT_ALLOWED);
+    }
+
+    /**
      * Minimal SSE preamble for Streamable HTTP {@code GET /mcp}. Clients use this channel for server-initiated
      * JSON-RPC messages after {@code initialize} on POST; the gateway answers POST synchronously today.
      */
