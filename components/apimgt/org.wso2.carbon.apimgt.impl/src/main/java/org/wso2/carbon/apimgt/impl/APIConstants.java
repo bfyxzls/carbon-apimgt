@@ -3833,6 +3833,12 @@ public final class APIConstants {
         public static final String TOOLS_KEY = "tools";
         public static final String SESSION_ID_KEY = "sessionId";
         public static final String META_KEY = "_meta";
+        /**
+         * MCP 2.0 (2026-07-28) per-request {@code params._meta} envelope keys (SEP-2575).
+         */
+        public static final String META_PROTOCOL_VERSION_KEY = "io.modelcontextprotocol/protocolVersion";
+        public static final String META_CLIENT_CAPABILITIES_KEY = "io.modelcontextprotocol/clientCapabilities";
+        public static final String META_CLIENT_INFO_KEY = "io.modelcontextprotocol/clientInfo";
         public static final String VHOST_HEADER = "x-wso2-mcp-vhost";
         public static final String BASEPATH_HEADER = "x-wso2-mcp-basepath";
         public static final String VERSION_HEADER = "x-wso2-mcp-version";

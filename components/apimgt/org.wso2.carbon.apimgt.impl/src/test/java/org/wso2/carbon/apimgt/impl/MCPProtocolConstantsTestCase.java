@@ -58,5 +58,11 @@ public class MCPProtocolConstantsTestCase {
         Assert.assertEquals("Mcp-Method", APIConstants.MCP.HEADER_MCP_METHOD);
         Assert.assertEquals("Mcp-Name", APIConstants.MCP.HEADER_MCP_NAME);
         Assert.assertEquals("_meta", APIConstants.MCP.META_KEY);
+        Assert.assertEquals("io.modelcontextprotocol/protocolVersion",
+                APIConstants.MCP.META_PROTOCOL_VERSION_KEY);
+        Assert.assertEquals("io.modelcontextprotocol/clientCapabilities",
+                APIConstants.MCP.META_CLIENT_CAPABILITIES_KEY);
+        Assert.assertEquals("io.modelcontextprotocol/clientInfo",
+                APIConstants.MCP.META_CLIENT_INFO_KEY);
     }
 }

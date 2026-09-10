@@ -234,24 +234,45 @@ public class MCPInitializerAndToolFetcher {
         return payload;
     }
 
-    private JSONObject buildModernToolsListPayload() {
-        JSONObject payload = buildToolsListPayload();
-        JSONObject meta = new JSONObject();
-        meta.put(APIConstants.MCP.PROTOCOL_VERSION_KEY, protocolVersion);
-        payload.put(APIConstants.MCP.META_KEY, meta);
+    /**
+     * Builds modern (MCP 2.0 / 2026-07-28) {@code tools/list} with required {@code params._meta}
+     * envelope ({@code io.modelcontextprotocol/protocolVersion} + {@code clientCapabilities}).
+     */
+    JSONObject buildModernToolsListPayload() {
+        JSONObject payload = new JSONObject();
+        payload.put(APIConstants.MCP.RpcConstants.JSON_RPC, APIConstants.MCP.RpcConstants.JSON_RPC_VERSION);
+        payload.put(APIConstants.MCP.RpcConstants.ID, 2);
+        payload.put(APIConstants.MCP.RpcConstants.METHOD, APIConstants.MCP.METHOD_TOOL_LIST);
+        JSONObject params = new JSONObject();
+        params.put(APIConstants.MCP.META_KEY, buildModernRequestMeta());
+        payload.put(APIConstants.MCP.PARAMS_KEY, params);
         return payload;
     }
 
-    private JSONObject buildServerDiscoverPayload() {
+    JSONObject buildServerDiscoverPayload() {
         JSONObject payload = new JSONObject();
         payload.put(APIConstants.MCP.RpcConstants.JSON_RPC, APIConstants.MCP.RpcConstants.JSON_RPC_VERSION);
         payload.put(APIConstants.MCP.RpcConstants.ID, 1);
         payload.put(APIConstants.MCP.RpcConstants.METHOD, APIConstants.MCP.METHOD_SERVER_DISCOVER);
-        JSONObject meta = new JSONObject();
-        meta.put(APIConstants.MCP.PROTOCOL_VERSION_KEY, protocolVersion);
-        payload.put(APIConstants.MCP.META_KEY, meta);
-        payload.put(APIConstants.MCP.PARAMS_KEY, new JSONObject());
+        JSONObject params = new JSONObject();
+        params.put(APIConstants.MCP.META_KEY, buildModernRequestMeta());
+        payload.put(APIConstants.MCP.PARAMS_KEY, params);
         return payload;
+    }
+
+    /**
+     * MCP 2.0 requires every request's {@code params._meta} to carry namespaced protocol fields.
+     * An empty {@code clientCapabilities} object is valid (no optional capabilities declared).
+     */
+    JSONObject buildModernRequestMeta() {
+        JSONObject meta = new JSONObject();
+        meta.put(APIConstants.MCP.META_PROTOCOL_VERSION_KEY, protocolVersion);
+        meta.put(APIConstants.MCP.META_CLIENT_CAPABILITIES_KEY, new JSONObject());
+        JSONObject clientInfo = new JSONObject();
+        clientInfo.put(APIConstants.MCP.CLIENT_NAME_KEY, APIConstants.MCP.CLIENT_NAME);
+        clientInfo.put(APIConstants.MCP.CLIENT_VERSION_KEY, APIConstants.MCP.CLIENT_VERSION);
+        meta.put(APIConstants.MCP.META_CLIENT_INFO_KEY, clientInfo);
+        return meta;
     }
 
     /**

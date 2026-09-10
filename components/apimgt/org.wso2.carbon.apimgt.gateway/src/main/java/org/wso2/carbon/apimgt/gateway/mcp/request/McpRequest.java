@@ -80,11 +80,16 @@ public class McpRequest {
     }
 
     /**
-     * Returns {@code _meta.protocolVersion} when present.
+     * Returns protocol version from {@code _meta}, preferring the MCP 2.0 namespaced key
+     * {@code io.modelcontextprotocol/protocolVersion}, then the legacy plain {@code protocolVersion}.
      */
     public String getMetaProtocolVersion() {
         if (meta == null) {
             return null;
+        }
+        Object namespaced = meta.get(MCP.META_PROTOCOL_VERSION_KEY);
+        if (namespaced != null) {
+            return String.valueOf(namespaced);
         }
         Object value = meta.get(MCP.PROTOCOL_VERSION_KEY);
         return value != null ? String.valueOf(value) : null;

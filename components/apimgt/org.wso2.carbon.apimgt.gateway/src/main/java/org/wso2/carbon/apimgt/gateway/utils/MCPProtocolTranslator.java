@@ -166,6 +166,11 @@ public final class MCPProtocolTranslator {
         return true;
     }
 
+    /**
+     * Ensures MCP 2.0 {@code params._meta} carries the required namespaced envelope keys
+     * ({@code io.modelcontextprotocol/protocolVersion}, {@code clientCapabilities}).
+     * Root-level {@code _meta} (pre-spec mistake) is migrated into {@code params} when present.
+     */
     private static void ensureMetaOnRequestBody(org.apache.axis2.context.MessageContext axis2MC,
                                                 McpRequest request, String protocolVersion) {
         try {
@@ -174,21 +179,52 @@ public final class MCPProtocolTranslator {
             }
             String body = org.apache.synapse.commons.json.JsonUtil.jsonPayloadToString(axis2MC);
             JsonObject root = JsonParser.parseString(body).getAsJsonObject();
+            JsonObject params;
+            if (root.has(APIConstants.MCP.PARAMS_KEY) && root.get(APIConstants.MCP.PARAMS_KEY).isJsonObject()) {
+                params = root.getAsJsonObject(APIConstants.MCP.PARAMS_KEY);
+            } else {
+                params = new JsonObject();
+                root.add(APIConstants.MCP.PARAMS_KEY, params);
+            }
+
             JsonObject meta;
-            if (root.has(APIConstants.MCP.META_KEY) && root.get(APIConstants.MCP.META_KEY).isJsonObject()) {
-                meta = root.getAsJsonObject(APIConstants.MCP.META_KEY);
+            if (params.has(APIConstants.MCP.META_KEY) && params.get(APIConstants.MCP.META_KEY).isJsonObject()) {
+                meta = params.getAsJsonObject(APIConstants.MCP.META_KEY);
+            } else if (root.has(APIConstants.MCP.META_KEY) && root.get(APIConstants.MCP.META_KEY).isJsonObject()) {
+                // Migrate incorrectly placed root _meta into params._meta.
+                meta = root.getAsJsonObject(APIConstants.MCP.META_KEY).deepCopy();
+                params.add(APIConstants.MCP.META_KEY, meta);
             } else {
                 meta = new JsonObject();
-                root.add(APIConstants.MCP.META_KEY, meta);
+                params.add(APIConstants.MCP.META_KEY, meta);
             }
-            if (!meta.has(APIConstants.MCP.PROTOCOL_VERSION_KEY)) {
-                meta.addProperty(APIConstants.MCP.PROTOCOL_VERSION_KEY, protocolVersion);
+            root.remove(APIConstants.MCP.META_KEY);
+
+            if (!meta.has(APIConstants.MCP.META_PROTOCOL_VERSION_KEY)) {
+                // Prefer namespaced key; fall back from legacy plain key if a client already sent it.
+                if (meta.has(APIConstants.MCP.PROTOCOL_VERSION_KEY)) {
+                    meta.addProperty(APIConstants.MCP.META_PROTOCOL_VERSION_KEY,
+                            meta.get(APIConstants.MCP.PROTOCOL_VERSION_KEY).getAsString());
+                    meta.remove(APIConstants.MCP.PROTOCOL_VERSION_KEY);
+                } else {
+                    meta.addProperty(APIConstants.MCP.META_PROTOCOL_VERSION_KEY, protocolVersion);
+                }
             }
-            if (request.getMeta() == null) {
-                Map<String, Object> metaMap = new HashMap<>();
-                metaMap.put(APIConstants.MCP.PROTOCOL_VERSION_KEY, protocolVersion);
-                request.setMeta(metaMap);
+            if (!meta.has(APIConstants.MCP.META_CLIENT_CAPABILITIES_KEY)) {
+                meta.add(APIConstants.MCP.META_CLIENT_CAPABILITIES_KEY, new JsonObject());
             }
+            if (!meta.has(APIConstants.MCP.META_CLIENT_INFO_KEY)) {
+                JsonObject clientInfo = new JsonObject();
+                clientInfo.addProperty(APIConstants.MCP.CLIENT_NAME_KEY, APIConstants.MCP.CLIENT_NAME);
+                clientInfo.addProperty(APIConstants.MCP.CLIENT_VERSION_KEY, APIConstants.MCP.CLIENT_VERSION);
+                meta.add(APIConstants.MCP.META_CLIENT_INFO_KEY, clientInfo);
+            }
+
+            Map<String, Object> metaMap = new HashMap<>();
+            metaMap.put(APIConstants.MCP.META_PROTOCOL_VERSION_KEY, protocolVersion);
+            metaMap.put(APIConstants.MCP.META_CLIENT_CAPABILITIES_KEY, new HashMap<>());
+            request.setMeta(metaMap);
+
             org.apache.synapse.commons.json.JsonUtil.removeJsonPayload(axis2MC);
             org.apache.synapse.commons.json.JsonUtil.getNewJsonPayload(axis2MC, root.toString(), true, true);
         } catch (Exception e) {
