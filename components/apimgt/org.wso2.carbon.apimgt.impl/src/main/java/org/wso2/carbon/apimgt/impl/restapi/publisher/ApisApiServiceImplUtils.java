@@ -970,12 +970,14 @@ public class ApisApiServiceImplUtils {
             if (uriTemplate.getUriTemplate() == null || uriTemplate.getUriTemplate().isEmpty()) {
                 uriTemplate.setUriTemplate(operationTarget);
             }
-            if (uriTemplate.getDescription() == null || uriTemplate.getDescription().isEmpty()) {
-                uriTemplate.setDescription(descriptionByToolName.get(operationTarget));
+            // Always sync description/schema from the upstream MCP tools/list (source of truth for
+            // SERVER_PROXY). Filling only when empty left stale schemas after tool refresh when the
+            // tool name stayed the same.
+            String toolDescription = descriptionByToolName.get(operationTarget);
+            if (StringUtils.isNotBlank(toolDescription)) {
+                uriTemplate.setDescription(toolDescription);
             }
-            if (uriTemplate.getSchemaDefinition() == null || uriTemplate.getSchemaDefinition().isEmpty()) {
-                uriTemplate.setSchemaDefinition(toolSchema);
-            }
+            uriTemplate.setSchemaDefinition(toolSchema);
             backendMapping.setBackendId(backendId);
             if (!tools.add(uriTemplate.getUriTemplate())) {
                 log.error("Duplicate MCP tool detected: " + uriTemplate.getUriTemplate());

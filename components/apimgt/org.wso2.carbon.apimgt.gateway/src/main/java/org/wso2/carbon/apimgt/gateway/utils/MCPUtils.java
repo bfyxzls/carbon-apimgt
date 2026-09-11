@@ -1915,17 +1915,21 @@ public class MCPUtils {
 
     /**
      * Rejects Streamable HTTP {@code GET /mcp} with {@code 405 Method Not Allowed}.
-     * Applies to legacy HTTP APIs tagged with the MCP category (no McpMediator) and disables SSE worker use.
+     * Uses the gateway {@code _resource_mismatch_handler_} sequence (same as CORS 405) instead of
+     * {@code Axis2Sender.sendBack}, which fails with {@code MalformedURLException: no protocol}
+     * when the API is still in the inbound handler chain (relative path as EPR).
      */
     public static void rejectStreamableHttpGetRequest(MessageContext messageContext) {
         org.apache.axis2.context.MessageContext axis2MessageContext =
                 ((Axis2MessageContext) messageContext).getAxis2MessageContext();
-        try {
-            JsonUtil.removeJsonPayload(axis2MessageContext);
-        } catch (Exception e) {
-            log.debug("Could not remove JSON payload while rejecting GET /mcp", e);
-        }
-        setHttpResponseStatus(messageContext, HttpStatus.SC_METHOD_NOT_ALLOWED, true);
+        messageContext.setProperty(APIConstants.CUSTOM_HTTP_STATUS_CODE, HttpStatus.SC_METHOD_NOT_ALLOWED);
+        messageContext.setProperty(APIConstants.CUSTOM_ERROR_CODE, HttpStatus.SC_METHOD_NOT_ALLOWED);
+        messageContext.setProperty(APIConstants.CUSTOM_ERROR_MESSAGE,
+                APIMgtGatewayConstants.METHOD_NOT_FOUND_ERROR_MSG);
+        axis2MessageContext.setProperty(APIMgtGatewayConstants.HTTP_SC, HttpStatus.SC_METHOD_NOT_ALLOWED);
+        axis2MessageContext.setProperty(NhttpConstants.HTTP_SC, HttpStatus.SC_METHOD_NOT_ALLOWED);
+        axis2MessageContext.setProperty(APIConstants.NO_ENTITY_BODY, true);
+
         Map headers = (Map) axis2MessageContext.getProperty(
                 org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS);
         if (headers == null) {
@@ -1934,8 +1938,14 @@ public class MCPUtils {
         }
         headers.put(HttpHeaders.ALLOW, APIConstants.HTTP_POST);
         messageContext.setProperty("MCP_PROCESSED", "true");
-        discardPassthroughMessage(messageContext);
-        Utils.sendFault(messageContext, HttpStatus.SC_METHOD_NOT_ALLOWED);
+
+        Mediator resourceMismatchSequence =
+                messageContext.getSequence(RESTConstants.NO_MATCHING_RESOURCE_HANDLER);
+        if (resourceMismatchSequence != null) {
+            resourceMismatchSequence.mediate(messageContext);
+        } else if (log.isDebugEnabled()) {
+            log.debug("Resource mismatch handler sequence not found while rejecting GET /mcp");
+        }
     }
 
     /**

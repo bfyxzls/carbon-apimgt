@@ -437,7 +437,11 @@ public class PublisherCommonUtils {
     private static void handleBackendSubtypes(API apiToUpdate, API originalAPI, APIProvider apiProvider)
             throws APIManagementException {
 
-        populateExistingSchemaDefinitions(apiToUpdate, originalAPI.getUriTemplates());
+        // SERVER_PROXY schemas come from the upstream tools/list persisted on the backend definition.
+        // Do not copy old schemas onto the update payload — that blocks tool refresh when names match.
+        if (!APIConstants.API_SUBTYPE_SERVER_PROXY.equals(originalAPI.getSubtype())) {
+            populateExistingSchemaDefinitions(apiToUpdate, originalAPI.getUriTemplates());
+        }
 
         List<Backend> backends =
                 apiProvider.getMCPServerBackends(apiToUpdate.getUuid(), originalAPI.getOrganization());

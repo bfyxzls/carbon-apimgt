@@ -39,6 +39,7 @@ public class MCPProtocolConstantsTestCase {
     public void testAllowedMethodsIncludeServerDiscover() {
         Assert.assertTrue(APIConstants.MCP.ALLOWED_METHODS.contains(APIConstants.MCP.METHOD_SERVER_DISCOVER));
         Assert.assertTrue(APIConstants.MCP.ALLOWED_METHODS.contains(APIConstants.MCP.METHOD_INITIALIZE));
+        Assert.assertTrue(APIConstants.MCP.ALLOWED_METHODS.contains(APIConstants.MCP.METHOD_PROMPTS_GET));
     }
 
     @Test

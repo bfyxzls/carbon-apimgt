@@ -26,6 +26,7 @@ import org.apache.synapse.MessageContext;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
 import org.wso2.carbon.apimgt.gateway.mcp.request.McpRequest;
+import org.wso2.carbon.apimgt.gateway.mcp.request.Params;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.keymgt.model.entity.API;
 
@@ -85,11 +86,9 @@ public final class MCPProtocolTranslator {
             return prepareModernClientToLegacyBackend(messageContext, matchedApi, request, method, headers);
         }
 
-        // Same-era enrichment for modern: ensure Mcp-Method / _meta are present.
+        // Same-era enrichment for modern: ensure Mcp-Method / Mcp-Name / _meta are present and aligned.
         if (APIConstants.MCP.PROTOCOL_ERA_MODERN.equals(southEra)) {
-            if (StringUtils.isNotEmpty(method) && !headers.containsKey(APIConstants.MCP.HEADER_MCP_METHOD)) {
-                headers.put(APIConstants.MCP.HEADER_MCP_METHOD, method);
-            }
+            ensureModernRoutingHeaders(headers, method, request);
             ensureMetaOnRequestBody(axis2MC, request, southVersion);
             // Modern backends do not use sessions.
             headers.remove(APIConstants.MCP.HEADER_MCP_SESSION_ID);
@@ -131,8 +130,8 @@ public final class MCPProtocolTranslator {
             return false;
         }
         headers.remove(APIConstants.MCP.HEADER_MCP_SESSION_ID);
-        headers.put(APIConstants.MCP.HEADER_MCP_METHOD, method);
         headers.put(APIConstants.MCP.MCP_PROTOCOL_VERSION_HEADER, APIConstants.MCP.PROTOCOL_VERSION_2026_JULY);
+        ensureModernRoutingHeaders(headers, method, request);
 
         org.apache.axis2.context.MessageContext axis2MC =
                 ((Axis2MessageContext) messageContext).getAxis2MessageContext();
@@ -164,6 +163,57 @@ public final class MCPProtocolTranslator {
             messageContext.setProperty(APIMgtGatewayConstants.MCP_SESSION_ID_KEY, null);
         }
         return true;
+    }
+
+    /**
+     * Stamps MCP 2.0 routing headers so they match the JSON-RPC body (SEP-2243).
+     * Upstream servers reject mismatches with HTTP 400 / {@code -32020} (e.g. {@code Mcp-Name}
+     * must equal {@code params.name} on {@code tools/call}).
+     */
+    private static void ensureModernRoutingHeaders(Map<String, Object> headers, String method, McpRequest request) {
+        if (StringUtils.isNotEmpty(method)) {
+            putHeaderIgnoreCase(headers, APIConstants.MCP.HEADER_MCP_METHOD, method);
+        }
+        String mcpName = resolveMcpNameFromRequest(method, request);
+        if (StringUtils.isNotEmpty(mcpName)) {
+            putHeaderIgnoreCase(headers, APIConstants.MCP.HEADER_MCP_NAME, mcpName);
+        } else {
+            // Orphan Mcp-Name with no matching body field is also a mismatch — drop it.
+            removeHeaderIgnoreCase(headers, APIConstants.MCP.HEADER_MCP_NAME);
+        }
+    }
+
+    /**
+     * Resolves {@code Mcp-Name} from the request body per SEP-2243:
+     * {@code params.name} for {@code tools/call} / {@code prompts/get}, {@code params.uri} for
+     * {@code resources/read}.
+     */
+    private static String resolveMcpNameFromRequest(String method, McpRequest request) {
+        if (request == null || request.getParams() == null || StringUtils.isEmpty(method)) {
+            return null;
+        }
+        Params params = request.getParams();
+        // Use literal for prompts/get so gateway still compiles if local m2 has an older impl jar.
+        if (APIConstants.MCP.METHOD_TOOL_CALL.equals(method)
+                || "prompts/get".equals(method)) {
+            return StringUtils.trimToNull(params.getToolName());
+        }
+        if (APIConstants.MCP.METHOD_RESOURCES_READ.equals(method)) {
+            return StringUtils.trimToNull(params.getUri());
+        }
+        return null;
+    }
+
+    private static void putHeaderIgnoreCase(Map<String, Object> headers, String headerName, String value) {
+        removeHeaderIgnoreCase(headers, headerName);
+        headers.put(headerName, value);
+    }
+
+    private static void removeHeaderIgnoreCase(Map<String, Object> headers, String headerName) {
+        if (headers == null || headerName == null) {
+            return;
+        }
+        headers.keySet().removeIf(key -> key != null && headerName.equalsIgnoreCase(String.valueOf(key)));
     }
 
     /**

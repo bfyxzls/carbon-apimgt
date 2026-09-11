@@ -44,6 +44,10 @@ public class Params {
     @SerializedName("arguments")
     private Map<String, Object> arguments = Collections.emptyMap();
 
+    //available in resources/read (and related) method request — mirrored to Mcp-Name in MCP 2.0
+    @SerializedName("uri")
+    private String uri;
+
     //available in tools/list method request
     @SerializedName("cursor")
     private String cursor;
@@ -78,6 +82,14 @@ public class Params {
 
     public void setToolName(String toolName) {
         this.toolName = toolName;
+    }
+
+    public String getUri() {
+        return uri;
+    }
+
+    public void setUri(String uri) {
+        this.uri = uri;
     }
 
     public Map<String, Object> getArguments() {

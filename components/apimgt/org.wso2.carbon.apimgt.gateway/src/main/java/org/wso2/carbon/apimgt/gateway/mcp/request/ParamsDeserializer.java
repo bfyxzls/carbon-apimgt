@@ -64,6 +64,7 @@ public class ParamsDeserializer implements JsonDeserializer<Params> {
             params.setCapabilities(context.deserialize(obj.get("capabilities"), Params.Capabilities.class));
             params.setClientInfo(context.deserialize(obj.get("clientInfo"), Params.ClientInfo.class));
             params.setToolName(context.deserialize(obj.get("name"), String.class));
+            params.setUri(context.deserialize(obj.get("uri"), String.class));
             params.setCursor(context.deserialize(obj.get("cursor"), String.class));
         }
         return params;

@@ -3805,10 +3805,12 @@ public final class APIConstants {
         public static final String METHOD_RESOURCES_READ = "resources/read";
         public static final String METHOD_RESOURCE_TEMPLATE_LIST = "resources/templates/list";
         public static final String METHOD_PROMPTS_LIST = "prompts/list";
+        public static final String METHOD_PROMPTS_GET = "prompts/get";
         public static final String METHOD_SERVER_DISCOVER = "server/discover";
         public static final List<String> ALLOWED_METHODS = Arrays.asList(METHOD_INITIALIZE, METHOD_TOOL_LIST,
                 METHOD_TOOL_CALL, METHOD_PING, METHOD_NOTIFICATION_INITIALIZED, METHOD_RESOURCES_LIST,
-                METHOD_RESOURCES_READ, METHOD_PROMPTS_LIST, METHOD_RESOURCE_TEMPLATE_LIST, METHOD_SERVER_DISCOVER);
+                METHOD_RESOURCES_READ, METHOD_PROMPTS_LIST, METHOD_PROMPTS_GET, METHOD_RESOURCE_TEMPLATE_LIST,
+                METHOD_SERVER_DISCOVER);
         public static final String PROTOCOL_VERSION_KEY = "protocolVersion";
         public static final String PROTOCOL_VERSION_2024_NOVEMBER = "2024-11-05";
         public static final String PROTOCOL_VERSION_2025_MARCH = "2025-03-26";

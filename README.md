@@ -14,6 +14,18 @@ If you want to build carbon-apimgt from the source code:
 1. Install Apache Maven 3.x.x (https://maven.apache.org/download.cgi#)
 1. Get a clone or download the source from this repository (https://github.com/wso2/carbon-apimgt.git).
 1. Check out branch master as follows:\
-``git checkout master``
+```
+git checkout master
+```
+
 1. Navigate to the ``carbon-apimgt`` directory and run the following Maven command.\
- ``mvn clean install``
+```
+mvn clean install
+```
+
+1. build package for a project
+```
+../../../build-jdk21.ps1 clean install "-Dmaven.test.skip=true" "-Dcheckstyle.skip=true" "-Dspotbugs.skip=true"
+
+mvn clean install -pl components/apimgt/org.wso2.carbon.apimgt.gateway -am -DskipTests
+```
