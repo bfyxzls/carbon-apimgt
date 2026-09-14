@@ -18,6 +18,7 @@
 
 package org.wso2.carbon.apimgt.gateway.mcp.response;
 
+import com.google.gson.JsonElement;
 import com.google.gson.annotations.SerializedName;
 import java.util.List;
 import java.util.Map;
@@ -43,7 +44,7 @@ public class ToolListResult {
         public String description;
 
         @SerializedName("inputSchema")
-        public JsonSchema inputSchema;
+        public JsonElement inputSchema;
 
         public String getName() {
             return name;
@@ -61,11 +62,11 @@ public class ToolListResult {
             this.description = description;
         }
 
-        public JsonSchema getInputSchema() {
+        public JsonElement getInputSchema() {
             return inputSchema;
         }
 
-        public void setInputSchema(JsonSchema inputSchema) {
+        public void setInputSchema(JsonElement inputSchema) {
             this.inputSchema = inputSchema;
         }
     }

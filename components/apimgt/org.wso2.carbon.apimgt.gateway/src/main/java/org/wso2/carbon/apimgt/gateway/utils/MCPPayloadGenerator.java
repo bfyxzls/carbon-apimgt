@@ -22,8 +22,10 @@ package org.wso2.carbon.apimgt.gateway.utils;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -37,7 +39,6 @@ import org.wso2.carbon.apimgt.gateway.mcp.response.ToolListResult;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -172,18 +173,19 @@ public class MCPPayloadGenerator {
                 String schema = extendedOperation.getSchemaDefinition();
                 if (schema != null) {
                     try {
-                        ToolListResult.JsonSchema schemaObject =
-                                gson.fromJson(schema, ToolListResult.JsonSchema.class);
-                        if (schemaObject == null) {
-                            log.warn("MCP tools/list serialize: Gson.fromJson returned null for tool=" + toolName
+                        JsonElement parsed = JsonParser.parseString(schema);
+                        if (parsed == null || !parsed.isJsonObject()) {
+                            log.warn("MCP tools/list serialize: schema is not a JSON object for tool=" + toolName
                                     + ", rawSchema=" + schema);
-                        } else if (!isThirdParty) {
-                            ToolListResult.JsonSchema sanitized = sanitizeInputSchema(schemaObject);
-                            String afterSanitize = gson.toJson(sanitized);
-                            tool.setInputSchema(sanitized);
                         } else {
-                            // For third-party tools, we do not sanitize the input schema
-                            tool.setInputSchema(schemaObject);
+                            JsonObject schemaObject = parsed.getAsJsonObject();
+                            // Preserve $defs / $ref / title / additionalProperties. The old JsonSchema
+                            // POJO only kept type/properties/required, which dropped $defs and left
+                            // dangling refs such as {"caseInput":{"$ref":"#/$defs/CaseInputModel"}}.
+                            if (!isThirdParty) {
+                                schemaObject = sanitizeInputSchema(schemaObject);
+                            }
+                            tool.setInputSchema(inlineSingleDefsRef(schemaObject));
                         }
                     } catch (JsonParseException e) {
                         log.error("MCP tools/list serialize FAILED (JSON parse) for tool=" + toolName
@@ -212,46 +214,87 @@ public class MCPPayloadGenerator {
         }
     }
 
-    private static ToolListResult.JsonSchema sanitizeInputSchema(ToolListResult.JsonSchema inputSchema) {
+    private static JsonObject sanitizeInputSchema(JsonObject inputSchema) {
         if (inputSchema == null) {
-            // Return an empty object schema if the input schema is null
-            ToolListResult.JsonSchema emptySchema = new ToolListResult.JsonSchema();
-            emptySchema.setType("object");
-            emptySchema.setProperties(new HashMap<>());
+            JsonObject emptySchema = new JsonObject();
+            emptySchema.addProperty("type", "object");
+            emptySchema.add("properties", new JsonObject());
             return emptySchema;
         }
-        inputSchema.removeProperty("contentType");
-
-        // Only strip OpenAPI-derived location prefixes (query_/header_/path_).
-        // Do NOT split on the first '_' — that corrupts legitimate MCP param names
-        // like decision_date_start / case_type / courthouse_name.
-        List<String> requiredProperties = inputSchema.getRequired();
-        List<String> sanitizedRequiredProperties = new ArrayList<>();
-        if (requiredProperties != null && !requiredProperties.isEmpty()) {
-            for (String requiredProperty : requiredProperties) {
-                if ("requestBody".equalsIgnoreCase(requiredProperty)) {
-                    sanitizedRequiredProperties.add(requiredProperty);
-                } else {
-                    sanitizedRequiredProperties.add(stripSchemaParamPrefix(requiredProperty));
-                }
-            }
-        }
-        inputSchema.setRequired(sanitizedRequiredProperties);
-
-        Map<String, Object> properties = inputSchema.getProperties();
-        Map<String, Object> sanitizedProperties = new HashMap<>();
-        if (properties != null && !properties.isEmpty()) {
-            for (Map.Entry<String, Object> entry : properties.entrySet()) {
+        if (inputSchema.has("properties") && inputSchema.get("properties").isJsonObject()) {
+            JsonObject properties = inputSchema.getAsJsonObject("properties");
+            properties.remove("contentType");
+            JsonObject sanitizedProperties = new JsonObject();
+            for (Map.Entry<String, JsonElement> entry : properties.entrySet()) {
                 String key = entry.getKey();
                 if ("requestBody".equalsIgnoreCase(key)) {
-                    sanitizedProperties.put("requestBody", entry.getValue());
+                    sanitizedProperties.add(key, entry.getValue());
+                } else {
+                    sanitizedProperties.add(stripSchemaParamPrefix(key), entry.getValue());
+                }
+            }
+            inputSchema.add("properties", sanitizedProperties);
+        }
+        if (inputSchema.has("required") && inputSchema.get("required").isJsonArray()) {
+            JsonArray required = inputSchema.getAsJsonArray("required");
+            JsonArray sanitizedRequired = new JsonArray();
+            for (JsonElement requiredEl : required) {
+                if (!requiredEl.isJsonPrimitive() || !requiredEl.getAsJsonPrimitive().isString()) {
+                    sanitizedRequired.add(requiredEl);
                     continue;
                 }
-                sanitizedProperties.put(stripSchemaParamPrefix(key), entry.getValue());
+                String requiredProperty = requiredEl.getAsString();
+                if ("requestBody".equalsIgnoreCase(requiredProperty)) {
+                    sanitizedRequired.add(requiredProperty);
+                } else {
+                    sanitizedRequired.add(stripSchemaParamPrefix(requiredProperty));
+                }
             }
+            inputSchema.add("required", sanitizedRequired);
         }
-        inputSchema.setProperties(sanitizedProperties);
         return inputSchema;
+    }
+
+    /**
+     * If the only property is a {@code $ref} into {@code $defs}, inline that definition so clients
+     * see real fields (title, caseGrade, ...) instead of a dangling nested wrapper.
+     */
+    private static JsonObject inlineSingleDefsRef(JsonObject inputSchema) {
+        if (inputSchema == null || !inputSchema.has("properties") || !inputSchema.get("properties").isJsonObject()) {
+            return inputSchema;
+        }
+        JsonObject properties = inputSchema.getAsJsonObject("properties");
+        if (properties.size() != 1 || !inputSchema.has("$defs") || !inputSchema.get("$defs").isJsonObject()) {
+            return inputSchema;
+        }
+        Map.Entry<String, JsonElement> onlyProp = properties.entrySet().iterator().next();
+        if (onlyProp.getValue() == null || !onlyProp.getValue().isJsonObject()) {
+            return inputSchema;
+        }
+        JsonObject propSchema = onlyProp.getValue().getAsJsonObject();
+        if (!propSchema.has("$ref") || !propSchema.get("$ref").isJsonPrimitive()) {
+            return inputSchema;
+        }
+        String ref = propSchema.get("$ref").getAsString();
+        String defsPrefix = "#/$defs/";
+        if (ref == null || !ref.startsWith(defsPrefix)) {
+            return inputSchema;
+        }
+        String defName = ref.substring(defsPrefix.length());
+        JsonObject defs = inputSchema.getAsJsonObject("$defs");
+        if (!defs.has(defName) || !defs.get(defName).isJsonObject()) {
+            return inputSchema;
+        }
+        JsonObject inlined = defs.getAsJsonObject(defName).deepCopy();
+        if (!inlined.has("title") && inputSchema.has("title")) {
+            inlined.add("title", inputSchema.get("title"));
+        }
+        JsonObject remainingDefs = defs.deepCopy();
+        remainingDefs.remove(defName);
+        if (remainingDefs.size() > 0) {
+            inlined.add("$defs", remainingDefs);
+        }
+        return inlined;
     }
 
     /**

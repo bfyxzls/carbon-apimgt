@@ -199,7 +199,9 @@ public class MCPUtils {
                 case APIConstants.MCP.METHOD_SERVER_DISCOVER:
                     return handleMcpServerDiscover(messageContext, id, matchedMcpApi);
                 case APIConstants.MCP.METHOD_TOOL_LIST:
-                    return handleMcpToolList(id, matchedMcpApi, false);
+                    boolean thirdPartyCatalog = matchedMcpApi != null
+                            && APIConstants.API_SUBTYPE_SERVER_PROXY.equals(matchedMcpApi.getSubtype());
+                    return handleMcpToolList(id, matchedMcpApi, thirdPartyCatalog);
                 case APIConstants.MCP.METHOD_TOOL_CALL:
                     validateToolsCallRequest(requestObject, matchedMcpApi);
                     return handleMcpToolsCall(messageContext, id, matchedMcpApi, requestObject);

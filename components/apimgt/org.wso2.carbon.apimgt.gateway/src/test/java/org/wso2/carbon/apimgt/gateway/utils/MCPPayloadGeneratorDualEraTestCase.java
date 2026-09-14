@@ -71,4 +71,30 @@ public class MCPPayloadGeneratorDualEraTestCase {
         Assert.assertTrue(data.getAsJsonArray("supported").toString()
                 .contains(APIConstants.MCP.PROTOCOL_VERSION_2026_JULY));
     }
+
+    @Test
+    public void testToolListPreservesDefsAndInlinesSingleRef() {
+        org.wso2.carbon.apimgt.api.model.subscription.URLMapping mapping =
+                new org.wso2.carbon.apimgt.api.model.subscription.URLMapping();
+        mapping.setUrlPattern("mcp-case.get_case_list");
+        mapping.setDescription("查询案例列表");
+        mapping.setSchemaDefinition("{"
+                + "\"type\":\"object\","
+                + "\"properties\":{\"caseInput\":{\"$ref\":\"#/$defs/CaseInputModel\"}},"
+                + "\"required\":[\"caseInput\"],"
+                + "\"$defs\":{\"CaseInputModel\":{"
+                + "\"type\":\"object\","
+                + "\"properties\":{"
+                + "\"title\":{\"type\":\"string\"},"
+                + "\"caseGrade\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}"
+                + "}}}}");
+        String payload = MCPPayloadGenerator.generateToolListPayload(1,
+                java.util.Collections.singletonList(mapping), true);
+        JsonObject inputSchema = JsonParser.parseString(payload).getAsJsonObject()
+                .getAsJsonObject("result").getAsJsonArray("tools").get(0).getAsJsonObject()
+                .getAsJsonObject("inputSchema");
+        Assert.assertTrue(inputSchema.getAsJsonObject("properties").has("title"));
+        Assert.assertTrue(inputSchema.getAsJsonObject("properties").has("caseGrade"));
+        Assert.assertFalse(inputSchema.getAsJsonObject("properties").has("caseInput"));
+    }
 }
