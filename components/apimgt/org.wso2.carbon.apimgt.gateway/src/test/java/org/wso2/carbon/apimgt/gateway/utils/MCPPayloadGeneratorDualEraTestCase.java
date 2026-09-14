@@ -53,6 +53,15 @@ public class MCPPayloadGeneratorDualEraTestCase {
     }
 
     @Test
+    public void testServerDiscoverResponseUsesExplicitProtocolVersion() {
+        String payload = MCPPayloadGenerator.getServerDiscoverResponse(11, "mcp-server", "2.0", "desc", false,
+                APIConstants.MCP.PROTOCOL_VERSION_2026_JULY);
+        JsonObject result = JsonParser.parseString(payload).getAsJsonObject().getAsJsonObject("result");
+        Assert.assertEquals(APIConstants.MCP.PROTOCOL_VERSION_2026_JULY,
+                result.get("protocolVersion").getAsString());
+    }
+
+    @Test
     public void testInitializeErrorListsBothSupportedVersions() {
         JsonObject data = MCPPayloadGenerator.getInitializeErrorBody("1999-01-01");
         Assert.assertEquals("1999-01-01", data.get("requested").getAsString());

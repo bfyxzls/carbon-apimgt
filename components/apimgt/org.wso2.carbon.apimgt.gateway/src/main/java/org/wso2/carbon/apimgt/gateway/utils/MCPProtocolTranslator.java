@@ -144,7 +144,8 @@ public final class MCPProtocolTranslator {
     private static boolean prepareModernClientToLegacyBackend(MessageContext messageContext, API matchedApi,
                                                               McpRequest request, String method,
                                                               Map<String, Object> headers) {
-        // server/discover is answered locally against gateway capabilities for legacy backends.
+        // server/discover is answered locally against gateway capabilities (defense in depth;
+        // McpMediator also short-circuits discover for all SERVER_PROXY eras).
         if (APIConstants.MCP.METHOD_SERVER_DISCOVER.equals(method)) {
             return false;
         }

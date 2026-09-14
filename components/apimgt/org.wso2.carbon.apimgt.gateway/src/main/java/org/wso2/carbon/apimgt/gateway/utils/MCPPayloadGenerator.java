@@ -95,8 +95,20 @@ public class MCPPayloadGenerator {
      */
     public static String getServerDiscoverResponse(Object id, String serverName, String serverVersion,
                                                    String serverDescription, boolean toolListChangeNotified) {
+        return getServerDiscoverResponse(id, serverName, serverVersion, serverDescription, toolListChangeNotified,
+                APIConstants.MCP.PROTOCOL_VERSION_2026_JULY);
+    }
+
+    /**
+     * Generates a {@code server/discover} response with an explicit protocol version.
+     */
+    public static String getServerDiscoverResponse(Object id, String serverName, String serverVersion,
+                                                   String serverDescription, boolean toolListChangeNotified,
+                                                   String protocolVersion) {
         JsonObject result = new JsonObject();
-        result.addProperty(APIConstants.MCP.PROTOCOL_VERSION_KEY, APIConstants.MCP.PROTOCOL_VERSION_2026_JULY);
+        String version = StringUtils.isNotEmpty(protocolVersion)
+                ? protocolVersion : APIConstants.MCP.PROTOCOL_VERSION_2026_JULY;
+        result.addProperty(APIConstants.MCP.PROTOCOL_VERSION_KEY, version);
 
         JsonObject serverInfo = new JsonObject();
         serverInfo.addProperty(APIConstants.MCP.CLIENT_NAME_KEY, serverName);

@@ -130,8 +130,9 @@ public class McpMediator extends AbstractMediator implements ManagedLifecycle {
                 if (messageContext.getProperty(APIMgtGatewayConstants.MCP_PROTOCOL_ERA_KEY) == null) {
                     MCPProtocolNegotiator.negotiateAndStore(messageContext, requestBody, matchedAPI);
                 }
-                // Gateway still synthesizes tools/list from published catalog.
-                if (StringUtils.equals(APIConstants.MCP.METHOD_TOOL_LIST, mcpMethod)) {
+                // Gateway synthesizes catalog-facing methods locally (tools/list + server/discover).
+                if (StringUtils.equals(APIConstants.MCP.METHOD_TOOL_LIST, mcpMethod)
+                        || StringUtils.equals(APIConstants.MCP.METHOD_SERVER_DISCOVER, mcpMethod)) {
                     handleMcpRequest(messageContext, matchedAPI);
                     return true;
                 }
@@ -177,7 +178,7 @@ public class McpMediator extends AbstractMediator implements ManagedLifecycle {
         if (APIConstants.MCP.METHOD_INITIALIZE.equals(mcpMethod)) {
             mcpResponse = MCPUtils.handleMcpInitialize(messageContext, id, matchedAPI);
         } else if (APIConstants.MCP.METHOD_SERVER_DISCOVER.equals(mcpMethod)) {
-            mcpResponse = MCPUtils.handleMcpServerDiscover(id, matchedAPI);
+            mcpResponse = MCPUtils.handleMcpServerDiscover(messageContext, id, matchedAPI);
         } else if (APIConstants.MCP.METHOD_NOTIFICATION_INITIALIZED.equals(mcpMethod)) {
             JsonUtil.removeJsonPayload(axis2MessageContext);
             messageContext.setProperty(MCP_PROCESSED, "true");

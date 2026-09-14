@@ -464,23 +464,17 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         if (messageContext.getPropertyKeySet().contains(MCP_METHOD)) {
             customProperties.put("mcpMethod", messageContext.getProperty(MCP_METHOD));
         }
-        // properties.protocolVersion is the negotiated northbound dialect (MCP_PROTOCOL_VERSION),
-        // not leftover params.protocolVersion from the JSON body. Prefer modern backend when
-        // northbound is still legacy but the API/backend is MCP 2.0 (stale body field / missing header).
+        // properties.protocolVersion reflects negotiated northbound dialect (MCP_PROTOCOL_VERSION).
+        // Fallback: backend version, then default 2025-06-18.
         Object northboundProtocolVersion =
                 messageContext.getProperty(APIMgtGatewayConstants.MCP_PROTOCOL_VERSION_KEY);
         Object backendProtocolVersion =
                 messageContext.getProperty(APIMgtGatewayConstants.MCP_BACKEND_PROTOCOL_VERSION_KEY);
         String publishedProtocolVersion =
                 resolvePublishedProtocolVersion(northboundProtocolVersion, backendProtocolVersion);
-        if (publishedProtocolVersion != null) {
-            customProperties.put(APIMgtGatewayConstants.MCP_PROTOCOL_VERSION, publishedProtocolVersion);
-            customProperties.put("mcpProtocolEra",
-                    APIConstants.MCP.resolveProtocolEra(publishedProtocolVersion));
-        } else if (messageContext.getPropertyKeySet().contains(APIMgtGatewayConstants.MCP_PROTOCOL_ERA_KEY)) {
-            customProperties.put("mcpProtocolEra",
-                    messageContext.getProperty(APIMgtGatewayConstants.MCP_PROTOCOL_ERA_KEY));
-        }
+        customProperties.put(APIMgtGatewayConstants.MCP_PROTOCOL_VERSION, publishedProtocolVersion);
+        customProperties.put("mcpProtocolEra",
+                APIConstants.MCP.resolveProtocolEra(publishedProtocolVersion));
         if (backendProtocolVersion != null) {
             customProperties.put("mcpBackendProtocolVersion", String.valueOf(backendProtocolVersion));
         }
@@ -785,19 +779,29 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
 
     /**
      * Chooses the protocol version written to analytics {@code properties.protocolVersion}.
-     * When northbound negotiation still yields a legacy version but the southbound API is MCP 2.0,
-     * publish the backend version so ES does not keep a stale {@code 2025-06-18} from body params.
+     * Prefer negotiated northbound, then backend, then legacy default {@code 2025-06-18}.
      */
     private static String resolvePublishedProtocolVersion(Object northbound, Object backend) {
-        String north = northbound != null ? String.valueOf(northbound) : null;
-        String south = backend != null ? String.valueOf(backend) : null;
-        if (APIConstants.MCP.isModernProtocol(north)) {
+        String north = toNonEmptyVersion(northbound);
+        if (north != null) {
             return north;
         }
-        if (APIConstants.MCP.isModernProtocol(south)) {
+        String south = toNonEmptyVersion(backend);
+        if (south != null) {
             return south;
         }
-        return north != null ? north : south;
+        return APIConstants.MCP.PROTOCOL_VERSION_2025_JUNE;
+    }
+
+    private static String toNonEmptyVersion(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value);
+        if (text.isEmpty() || "null".equals(text)) {
+            return null;
+        }
+        return text;
     }
 
 }

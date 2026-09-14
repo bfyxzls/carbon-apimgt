@@ -197,7 +197,7 @@ public class MCPUtils {
                     validateInitializeRequest(id, requestObject);
                     return handleMcpInitialize(messageContext, id, matchedMcpApi);
                 case APIConstants.MCP.METHOD_SERVER_DISCOVER:
-                    return handleMcpServerDiscover(id, matchedMcpApi);
+                    return handleMcpServerDiscover(messageContext, id, matchedMcpApi);
                 case APIConstants.MCP.METHOD_TOOL_LIST:
                     return handleMcpToolList(id, matchedMcpApi, false);
                 case APIConstants.MCP.METHOD_TOOL_CALL:
@@ -324,15 +324,31 @@ public class MCPUtils {
     }
 
     /**
-     * Handles MCP 2.0 {@code server/discover}.
+     * Handles MCP 2.0 {@code server/discover}. Always answered from gateway catalog metadata
+     * (same posture as {@code tools/list}), including SERVER_PROXY same-era modern clients.
      */
-    public static McpResponseDto handleMcpServerDiscover(Object id, API matchedApi) {
+    public static McpResponseDto handleMcpServerDiscover(MessageContext messageContext, Object id, API matchedApi) {
         String name = matchedApi.getName();
         String version = matchedApi.getVersion();
         String description = "This is an MCP Server";
+        Object negotiated = messageContext != null
+                ? messageContext.getProperty(APIMgtGatewayConstants.MCP_PROTOCOL_VERSION_KEY) : null;
+        // server/discover is an MCP 2.0 method; default to modern revision when unset.
+        String protocolVersion = APIConstants.MCP.PROTOCOL_VERSION_2026_JULY;
+        if (negotiated != null && APIConstants.MCP.isModernProtocol(String.valueOf(negotiated))) {
+            protocolVersion = String.valueOf(negotiated);
+        }
         return new McpResponseDto(
-                MCPPayloadGenerator.getServerDiscoverResponse(id, name, version, description, false),
+                MCPPayloadGenerator.getServerDiscoverResponse(id, name, version, description, false,
+                        protocolVersion),
                 200, null);
+    }
+
+    /**
+     * Backward-compatible {@code server/discover} handler without message context.
+     */
+    public static McpResponseDto handleMcpServerDiscover(Object id, API matchedApi) {
+        return handleMcpServerDiscover(null, id, matchedApi);
     }
 
     /**
