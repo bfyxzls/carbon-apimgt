@@ -60,20 +60,34 @@ public final class MCPProtocolNegotiator {
         }
 
         String metaVersion = request != null ? request.getMetaProtocolVersion() : null;
-        String initializeVersion = null;
-        if (request != null && request.getParams() != null) {
-            initializeVersion = request.getParams().getProtocolVersion();
+        // params.protocolVersion is MCP 1.0 initialize-only. Never use it for tools/call etc., or a
+        // stale 2025-06-18 wins negotiation and is written to analytics as properties.protocolVersion.
+        String legacyParamsProtocolVersion = null;
+        if (APIConstants.MCP.METHOD_INITIALIZE.equals(method)
+                && request != null && request.getParams() != null) {
+            legacyParamsProtocolVersion = request.getParams().getProtocolVersion();
         }
 
-        String northboundVersion = resolveNorthboundVersion(headerVersion, metaVersion, initializeVersion,
+        String northboundVersion = resolveNorthboundVersion(headerVersion, metaVersion, legacyParamsProtocolVersion,
                 method, sessionId, mcpMethodHeader);
         String northboundEra = APIConstants.MCP.resolveProtocolEra(northboundVersion);
 
         messageContext.setProperty(APIMgtGatewayConstants.MCP_PROTOCOL_VERSION_KEY, northboundVersion);
         messageContext.setProperty(APIMgtGatewayConstants.MCP_PROTOCOL_ERA_KEY, northboundEra);
-        if (StringUtils.isNotEmpty(initializeVersion)) {
-            messageContext.setProperty(APIMgtGatewayConstants.MCP_REQUESTED_PROTOCOL_VERSION_KEY, initializeVersion);
+
+        // Always strip leftover params.protocolVersion on non-initialize traffic (MCP 2.0 and mixed).
+        if (!APIConstants.MCP.METHOD_INITIALIZE.equals(method)) {
+            clearLegacyParamsProtocolVersion(messageContext, request);
+        } else if (StringUtils.isNotEmpty(legacyParamsProtocolVersion)
+                && APIConstants.MCP.PROTOCOL_ERA_LEGACY.equals(northboundEra)) {
+            messageContext.setProperty(APIMgtGatewayConstants.MCP_REQUESTED_PROTOCOL_VERSION_KEY,
+                    legacyParamsProtocolVersion);
         }
+
+        if (APIConstants.MCP.PROTOCOL_ERA_MODERN.equals(northboundEra)) {
+            clearLegacyParamsProtocolVersion(messageContext, request);
+        }
+
         if (StringUtils.isNotEmpty(sessionId)) {
             messageContext.setProperty(APIMgtGatewayConstants.MCP_SESSION_ID_KEY, sessionId);
         }
@@ -86,6 +100,42 @@ public final class MCPProtocolNegotiator {
         messageContext.setProperty(APIMgtGatewayConstants.MCP_NEEDS_TRANSLATION_KEY, needsTranslation);
 
         return northboundVersion;
+    }
+
+    /**
+     * Removes leftover {@code params.protocolVersion} from the parsed request and JSON body.
+     * That field is MCP 1.0 initialize-only; a stale {@code 2025-06-18} on {@code tools/call}
+     * must not leak into forwarded payloads or confuse debugging.
+     */
+    private static void clearLegacyParamsProtocolVersion(MessageContext messageContext, McpRequest request) {
+        if (request != null && request.getParams() != null) {
+            request.getParams().setProtocolVersion(null);
+        }
+
+        if (!(messageContext instanceof Axis2MessageContext)) {
+            return;
+        }
+        try {
+            org.apache.axis2.context.MessageContext axis2MC =
+                    ((Axis2MessageContext) messageContext).getAxis2MessageContext();
+            if (!org.apache.synapse.commons.json.JsonUtil.hasAJsonPayload(axis2MC)) {
+                return;
+            }
+            String body = org.apache.synapse.commons.json.JsonUtil.jsonPayloadToString(axis2MC);
+            com.google.gson.JsonObject root = com.google.gson.JsonParser.parseString(body).getAsJsonObject();
+            if (!root.has(APIConstants.MCP.PARAMS_KEY) || !root.get(APIConstants.MCP.PARAMS_KEY).isJsonObject()) {
+                return;
+            }
+            com.google.gson.JsonObject params = root.getAsJsonObject(APIConstants.MCP.PARAMS_KEY);
+            if (!params.has(APIConstants.MCP.PROTOCOL_VERSION_KEY)) {
+                return;
+            }
+            params.remove(APIConstants.MCP.PROTOCOL_VERSION_KEY);
+            org.apache.synapse.commons.json.JsonUtil.removeJsonPayload(axis2MC);
+            org.apache.synapse.commons.json.JsonUtil.getNewJsonPayload(axis2MC, root.toString(), true, true);
+        } catch (Exception e) {
+            // Best-effort; negotiated modern dialect already ignores this field.
+        }
     }
 
     /**

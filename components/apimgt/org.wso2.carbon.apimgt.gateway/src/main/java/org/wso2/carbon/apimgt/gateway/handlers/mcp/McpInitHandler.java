@@ -161,15 +161,11 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
                     StringUtils.equals(APIConstants.HTTP_GET, httpMethod)) {
                 messageContext.setProperty(MCP_NO_AUTH_REQUEST, true);
             } else if (Utils.isMcpStreamableHttpGetRequest(path, httpMethod)) {
+                // Always reject GET /mcp (including SERVER_PROXY). Proxying upstream SSE holds
+                // PassThrough workers and exhausts the primary pool; clients must use POST only.
                 messageContext.setProperty(MCP_NO_AUTH_REQUEST, true);
-                API matchedApi = GatewayUtils.getAPI(messageContext);
-                // SERVER_PROXY: continue so McpMediator can proxy Streamable HTTP GET to upstream.
-                // Other subtypes: reject with 405 (no Axis2Sender.sendBack — that yields MalformedURLException).
-                if (matchedApi == null
-                        || !APIConstants.API_SUBTYPE_SERVER_PROXY.equals(matchedApi.getSubtype())) {
-                    MCPUtils.rejectStreamableHttpGetRequest(messageContext);
-                    return false;
-                }
+                MCPUtils.rejectStreamableHttpGetRequest(messageContext);
+                return false;
             } else {
                 String mcpMethod = buildMCPRequest(messageContext);
                 boolean isNoAuthMCPRequest = isNoAuthMCPRequest(mcpMethod);

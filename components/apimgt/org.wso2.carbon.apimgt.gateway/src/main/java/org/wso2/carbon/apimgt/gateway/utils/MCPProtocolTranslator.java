@@ -250,6 +250,12 @@ public final class MCPProtocolTranslator {
             }
             root.remove(APIConstants.MCP.META_KEY);
 
+            // MCP 2.0: do not forward legacy params.protocolVersion (initialize-era field).
+            params.remove(APIConstants.MCP.PROTOCOL_VERSION_KEY);
+            if (request.getParams() != null) {
+                request.getParams().setProtocolVersion(null);
+            }
+
             if (!meta.has(APIConstants.MCP.META_PROTOCOL_VERSION_KEY)) {
                 // Prefer namespaced key; fall back from legacy plain key if a client already sent it.
                 if (meta.has(APIConstants.MCP.PROTOCOL_VERSION_KEY)) {

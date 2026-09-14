@@ -56,7 +56,6 @@ import org.wso2.carbon.apimgt.gateway.exception.McpException;
 import org.wso2.carbon.apimgt.gateway.exception.McpExceptionWithId;
 import org.wso2.carbon.apimgt.gateway.handlers.Utils;
 import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityConstants;
-import org.wso2.carbon.apimgt.gateway.handlers.streaming.sse.SseApiConstants;
 import org.wso2.carbon.apimgt.api.dto.KeyManagerConfigurationDTO;
 import org.wso2.carbon.apimgt.gateway.internal.DataHolder;
 import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
@@ -1949,68 +1948,13 @@ public class MCPUtils {
     }
 
     /**
-     * Minimal SSE preamble for Streamable HTTP {@code GET /mcp}. Clients use this channel for server-initiated
-     * JSON-RPC messages after {@code initialize} on POST; the gateway answers POST synchronously today.
+     * @deprecated GET /mcp is always rejected with 405; kept only for binary compatibility.
+     * Prefer {@link #rejectStreamableHttpGetRequest(MessageContext)}.
      */
-    private static final String STREAMABLE_HTTP_SSE_PREAMBLE = ": stream open\n\n";
-
-    /**
-     * Answers Streamable HTTP {@code GET /mcp} with {@code text/event-stream} (MCP 1.0 / legacy transport).
-     * Modern (MCP 2.0) clients receive HTTP 405 because they do not rely on a server-push SSE channel.
-     */
+    @Deprecated
     public static boolean writeStreamableHttpGetResponse(MessageContext messageContext) {
-        org.apache.axis2.context.MessageContext axis2MessageContext =
-                ((Axis2MessageContext) messageContext).getAxis2MessageContext();
-        String headerVersion = MCPProtocolNegotiator.getTransportHeader(messageContext,
-                APIConstants.MCP.MCP_PROTOCOL_VERSION_HEADER);
-        if (APIConstants.MCP.isModernProtocol(headerVersion)) {
-            try {
-                JsonUtil.removeJsonPayload(axis2MessageContext);
-                axis2MessageContext.setProperty(APIConstants.NO_ENTITY_BODY, true);
-                axis2MessageContext.setProperty(APIMgtGatewayConstants.HTTP_SC, HttpStatus.SC_METHOD_NOT_ALLOWED);
-                axis2MessageContext.setProperty(NhttpConstants.HTTP_SC, HttpStatus.SC_METHOD_NOT_ALLOWED);
-                messageContext.setProperty("MCP_PROCESSED", "true");
-                if (log.isDebugEnabled()) {
-                    log.debug("Rejected Streamable HTTP GET /mcp for modern MCP protocol version: " + headerVersion);
-                }
-                return true;
-            } catch (Exception e) {
-                log.error("Error while rejecting Streamable HTTP GET /mcp for modern protocol", e);
-                return false;
-            }
-        }
-        try {
-            JsonUtil.removeJsonPayload(axis2MessageContext);
-            JsonUtil.getNewJsonPayload(axis2MessageContext, STREAMABLE_HTTP_SSE_PREAMBLE, true, true);
-            axis2MessageContext.setProperty(Constants.Configuration.MESSAGE_TYPE, SseApiConstants.SSE_CONTENT_TYPE);
-            axis2MessageContext.setProperty(Constants.Configuration.CONTENT_TYPE, SseApiConstants.SSE_CONTENT_TYPE);
-            axis2MessageContext.setProperty(APIMgtGatewayConstants.HTTP_SC, HttpStatus.SC_OK);
-            axis2MessageContext.setProperty(NhttpConstants.HTTP_SC, HttpStatus.SC_OK);
-            messageContext.setProperty(APIConstants.CUSTOM_HTTP_STATUS_CODE, null);
-            messageContext.setProperty(APIConstants.CUSTOM_ERROR_CODE, null);
-            messageContext.setProperty(APIConstants.CUSTOM_ERROR_MESSAGE, null);
-            axis2MessageContext.removeProperty(APIConstants.NO_ENTITY_BODY);
-
-            Map headers = (Map) axis2MessageContext.getProperty(
-                    org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS);
-            if (headers == null) {
-                headers = new HashMap<>();
-                axis2MessageContext.setProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS, headers);
-            }
-            headers.put(HttpHeaders.CACHE_CONTROL, "no-cache");
-            headers.put(HttpHeaders.CONNECTION, "keep-alive");
-            headers.put(APIConstants.HEADER_CONTENT_TYPE, SseApiConstants.SSE_CONTENT_TYPE);
-            markMcpStreamableHttpAsAsync(messageContext);
-            messageContext.setProperty("MCP_PROCESSED", "true");
-            if (log.isDebugEnabled()) {
-                log.debug("Streamable HTTP GET /mcp answered with text/event-stream");
-            }
-            return true;
-        } catch (AxisFault e) {
-            log.error("Error while generating Streamable HTTP GET /mcp response "
-                    + axis2MessageContext.getLogIDString(), e);
-            return false;
-        }
+        rejectStreamableHttpGetRequest(messageContext);
+        return false;
     }
 
     /**

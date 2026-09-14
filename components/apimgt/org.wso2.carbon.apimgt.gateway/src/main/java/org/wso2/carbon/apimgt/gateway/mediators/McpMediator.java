@@ -119,9 +119,7 @@ public class McpMediator extends AbstractMediator implements ManagedLifecycle {
                 return handleProtectedResourceMetadataResponse(messageContext, matchedAPI);
             }
             if (Utils.isMcpStreamableHttpGetRequest(path, httpMethod)) {
-                if (StringUtils.equals(subType, APIConstants.API_SUBTYPE_SERVER_PROXY)) {
-                    return true;
-                }
+                // Defense in depth: InitHandler should already have rejected GET /mcp.
                 MCPUtils.rejectStreamableHttpGetRequest(messageContext);
                 return false;
             }

@@ -34,6 +34,32 @@ import java.util.Map;
 public class MCPProtocolNegotiatorTestCase {
 
     @Test
+    public void testModernIgnoresStaleParamsProtocolVersion() {
+        Map<String, Object> headers = new HashMap<>();
+        headers.put(APIConstants.MCP.MCP_PROTOCOL_VERSION_HEADER, APIConstants.MCP.PROTOCOL_VERSION_2026_JULY);
+        headers.put(APIConstants.MCP.HEADER_MCP_METHOD, APIConstants.MCP.METHOD_TOOL_CALL);
+        Axis2MessageContext messageContext = mockContext(headers);
+
+        McpRequest request = new McpRequest(6);
+        request.setMethod(APIConstants.MCP.METHOD_TOOL_CALL);
+        Params params = new Params();
+        params.setProtocolVersion(APIConstants.MCP.PROTOCOL_VERSION_2025_JUNE);
+        params.setToolName("search");
+        request.setParams(params);
+
+        API api = new API();
+        api.setProtocolVersion(APIConstants.MCP.PROTOCOL_VERSION_2026_JULY);
+
+        String version = MCPProtocolNegotiator.negotiateAndStore(messageContext, request, api);
+        Assert.assertEquals(APIConstants.MCP.PROTOCOL_VERSION_2026_JULY, version);
+        Assert.assertEquals(APIConstants.MCP.PROTOCOL_VERSION_2026_JULY,
+                messageContext.getProperty(APIMgtGatewayConstants.MCP_BACKEND_PROTOCOL_VERSION_KEY));
+        Assert.assertNull("Legacy params.protocolVersion must be cleared for MCP 2.0",
+                request.getParams().getProtocolVersion());
+        Assert.assertFalse(MCPProtocolNegotiator.needsTranslation(messageContext));
+    }
+
+    @Test
     public void testNegotiateLegacyFromInitialize() {
         Axis2MessageContext messageContext = mockContext(new HashMap<>());
         McpRequest request = new McpRequest(1);
