@@ -140,6 +140,9 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
 
     private boolean removeOAuthHeadersFromOutMessage = true;
 
+    /** Comma-separated API category names injected from Synapse auth handler properties. */
+    private String apiCategories;
+
     public String getApiUUID() {
         return apiUUID;
     }
@@ -223,6 +226,61 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
      */
     public void setSubType(String subType) {
         this.subType = subType;
+    }
+
+    /**
+     * Returns the raw comma-separated API categories configured on the handler.
+     *
+     * @return API categories string, or null if unset
+     */
+    public String getApiCategories() {
+        return apiCategories;
+    }
+
+    /**
+     * Sets API categories from Synapse handler properties (comma-separated names).
+     * Mirrors {@link #setAudiences(String)}.
+     *
+     * @param apiCategories comma-separated category names
+     */
+    public void setApiCategories(String apiCategories) {
+        this.apiCategories = apiCategories;
+    }
+
+    /**
+     * Parses configured API categories into a list (same pattern as audiences).
+     *
+     * @return list of category names; empty if none configured
+     */
+    public List<String> getApiCategoriesList() {
+        if (StringUtils.isBlank(apiCategories)) {
+            return new ArrayList<>();
+        }
+        List<String> categories = new ArrayList<>();
+        for (String category : apiCategories.split(",")) {
+            if (StringUtils.isNotBlank(category)) {
+                categories.add(category.trim());
+            }
+        }
+        return categories;
+    }
+
+    /**
+     * Whether this API/MCP is tagged with the given category name (case-insensitive).
+     *
+     * @param categoryName category to match
+     * @return true if present
+     */
+    public boolean hasApiCategory(String categoryName) {
+        if (StringUtils.isBlank(categoryName)) {
+            return false;
+        }
+        for (String category : getApiCategoriesList()) {
+            if (categoryName.equalsIgnoreCase(category)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public void init(SynapseEnvironment synapseEnvironment) {
@@ -730,6 +788,7 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
         String apiType = (String) messageContext.getProperty(APIMgtGatewayConstants.API_TYPE);
         boolean isMcpRelated = APIConstants.API_TYPE_MCP.equalsIgnoreCase(apiType)
                 || messageContext.getProperty("isMcp") != null;
+        // mcp方法非tools/call的调用，不进行积分检查
         if (isMcpRelated) {
             String mcpMethod = (String) messageContext.getProperty(APIMgtGatewayConstants.MCP_METHOD);
             if (!APIConstants.MCP.METHOD_TOOL_CALL.equals(mcpMethod)) {
@@ -741,6 +800,16 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
             }
         }
 
+        // api和mcp中，包含分类为NO_CHECK_POINTS的服务，不进行积分检查
+        if (hasApiCategory(APIConstants.NO_CHECK_POINTS)) {
+            if (log.isDebugEnabled()) {
+                log.debug("Skipping points validation for API with category "
+                        + APIConstants.NO_CHECK_POINTS + ", categories: " + apiCategories);
+            }
+            return;
+        }
+
+        // 检查用户是否还有积分
         if (messageContext.getProperty("userName") != null) {
             String userNameStr = (String) messageContext.getProperty("userName");
             if (userNameStr.endsWith("@carbon.super")) {

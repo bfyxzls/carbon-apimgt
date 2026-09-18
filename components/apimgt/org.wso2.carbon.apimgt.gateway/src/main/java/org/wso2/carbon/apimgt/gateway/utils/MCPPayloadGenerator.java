@@ -47,6 +47,8 @@ public class MCPPayloadGenerator {
     private static final Log log = LogFactory.getLog(MCPPayloadGenerator.class);
 
     private static final Gson gson = new GsonBuilder().serializeNulls().setPrettyPrinting().create();
+    /** MCP list/discover payloads should omit absent optional fields. */
+    private static final Gson gsonOmitNulls = new GsonBuilder().create();
 
     private static final String[] SCHEMA_PARAM_PREFIXES = {"query_", "header_", "path_"};
 
@@ -102,14 +104,23 @@ public class MCPPayloadGenerator {
 
     /**
      * Generates a {@code server/discover} response with an explicit protocol version.
+     * Shape follows MCP 2.0 DiscoverResult ({@code supportedVersions}, capabilities,
+     * namespaced serverInfo in {@code _meta}, optional cache hints).
      */
     public static String getServerDiscoverResponse(Object id, String serverName, String serverVersion,
                                                    String serverDescription, boolean toolListChangeNotified,
                                                    String protocolVersion) {
         JsonObject result = new JsonObject();
-        String version = StringUtils.isNotEmpty(protocolVersion)
-                ? protocolVersion : APIConstants.MCP.PROTOCOL_VERSION_2026_JULY;
-        result.addProperty(APIConstants.MCP.PROTOCOL_VERSION_KEY, version);
+        result.addProperty(APIConstants.MCP.RESULT_TYPE_KEY, APIConstants.MCP.RESULT_TYPE_COMPLETE);
+
+        JsonArray supportedVersions = new JsonArray();
+        for (String version : APIConstants.MCP.SUPPORTED_PROTOCOL_VERSIONS) {
+            supportedVersions.add(version);
+        }
+        result.add(APIConstants.MCP.SUPPORTED_VERSIONS_KEY, supportedVersions);
+
+        InitializeResult.Capabilities capabilities = getCapabilities(toolListChangeNotified);
+        result.add(APIConstants.MCP.CAPABILITIES_KEY, gsonOmitNulls.toJsonTree(capabilities));
 
         JsonObject serverInfo = new JsonObject();
         serverInfo.addProperty(APIConstants.MCP.CLIENT_NAME_KEY, serverName);
@@ -117,14 +128,24 @@ public class MCPPayloadGenerator {
         if (StringUtils.isNotEmpty(serverDescription)) {
             serverInfo.addProperty("description", serverDescription);
         }
-        result.add(APIConstants.MCP.SERVER_INFO_KEY, serverInfo);
+        JsonObject meta = new JsonObject();
+        meta.add(APIConstants.MCP.META_SERVER_INFO_KEY, serverInfo);
+        result.add(APIConstants.MCP.META_KEY, meta);
 
-        InitializeResult.Capabilities capabilities = getCapabilities(toolListChangeNotified);
-        result.add(APIConstants.MCP.CAPABILITIES_KEY, gson.toJsonTree(capabilities));
+        if (StringUtils.isNotEmpty(serverDescription)) {
+            result.addProperty(APIConstants.MCP.INSTRUCTIONS_KEY, serverDescription);
+        }
+        result.addProperty(APIConstants.MCP.TTL_MS_KEY, APIConstants.MCP.DEFAULT_DISCOVER_TTL_MS);
+        result.addProperty(APIConstants.MCP.CACHE_SCOPE_KEY, APIConstants.MCP.CACHE_SCOPE_PUBLIC);
+
+        // Keep negotiated version for dual-era clients that still inspect protocolVersion.
+        String version = StringUtils.isNotEmpty(protocolVersion)
+                ? protocolVersion : APIConstants.MCP.PROTOCOL_VERSION_2026_JULY;
+        result.addProperty(APIConstants.MCP.PROTOCOL_VERSION_KEY, version);
 
         McpResponse<JsonObject> response = new McpResponse<>(id);
         response.setResult(result);
-        return gson.toJson(response);
+        return gsonOmitNulls.toJson(response);
     }
 
     private static InitializeResult.Capabilities getCapabilities(boolean toolListChangeNotified) {
@@ -179,13 +200,15 @@ public class MCPPayloadGenerator {
                                     + ", rawSchema=" + schema);
                         } else {
                             JsonObject schemaObject = parsed.getAsJsonObject();
+                            JsonObject inputSchemaObject = resolveInputSchema(schemaObject);
+                            applyToolMetadata(tool, schemaObject);
                             // Preserve $defs / $ref / title / additionalProperties. The old JsonSchema
                             // POJO only kept type/properties/required, which dropped $defs and left
                             // dangling refs such as {"caseInput":{"$ref":"#/$defs/CaseInputModel"}}.
                             if (!isThirdParty) {
-                                schemaObject = sanitizeInputSchema(schemaObject);
+                                inputSchemaObject = sanitizeInputSchema(inputSchemaObject);
                             }
-                            tool.setInputSchema(inlineSingleDefsRef(schemaObject));
+                            tool.setInputSchema(inlineSingleDefsRef(inputSchemaObject));
                         }
                     } catch (JsonParseException e) {
                         log.error("MCP tools/list serialize FAILED (JSON parse) for tool=" + toolName
@@ -205,7 +228,7 @@ public class MCPPayloadGenerator {
         toolListResult.setTools(toolInfoList);
         toolListResponse.setResult(toolListResult);
         try {
-            String payload = gson.toJson(toolListResponse);
+            String payload = gsonOmitNulls.toJson(toolListResponse);
             return payload;
         } catch (RuntimeException e) {
             log.error("MCP tools/list serialize FAILED while writing final JSON-RPC payload, toolCount="
@@ -298,6 +321,76 @@ public class MCPPayloadGenerator {
     }
 
     /**
+     * Extracts the bare JSON Schema used for {@code tools/call} argument resolution.
+     * Supports both legacy bare schemas and MCP 2.0 metadata envelopes that nest
+     * {@code inputSchema}.
+     *
+     * @param schemaDefinition persisted schema definition (may be envelope or bare schema)
+     * @return JSON string of the input schema, or the original value when not an envelope
+     */
+    public static String extractInputSchemaDefinition(String schemaDefinition) {
+        if (StringUtils.isEmpty(schemaDefinition)) {
+            return schemaDefinition;
+        }
+        try {
+            JsonElement parsed = JsonParser.parseString(schemaDefinition);
+            if (parsed != null && parsed.isJsonObject()) {
+                JsonObject root = parsed.getAsJsonObject();
+                if (root.has(APIConstants.MCP.TOOL_INPUT_SCHEMA_KEY)
+                        && root.get(APIConstants.MCP.TOOL_INPUT_SCHEMA_KEY).isJsonObject()) {
+                    return root.getAsJsonObject(APIConstants.MCP.TOOL_INPUT_SCHEMA_KEY).toString();
+                }
+            }
+        } catch (RuntimeException e) {
+            log.debug("Unable to unwrap MCP tool schema envelope; treating as bare inputSchema", e);
+        }
+        return schemaDefinition;
+    }
+
+    /**
+     * Resolves the JSON Schema for tool inputs from either a legacy bare schema or an MCP 2.0
+     * metadata envelope that nests {@code inputSchema}.
+     */
+    private static JsonObject resolveInputSchema(JsonObject schemaObject) {
+        if (schemaObject.has(APIConstants.MCP.TOOL_INPUT_SCHEMA_KEY)
+                && schemaObject.get(APIConstants.MCP.TOOL_INPUT_SCHEMA_KEY).isJsonObject()) {
+            return schemaObject.getAsJsonObject(APIConstants.MCP.TOOL_INPUT_SCHEMA_KEY).deepCopy();
+        }
+        return schemaObject.deepCopy();
+    }
+
+    /**
+     * Copies optional MCP 2.0 tool metadata fields from a persisted schema envelope onto ToolInfo.
+     */
+    private static void applyToolMetadata(ToolListResult.ToolInfo tool, JsonObject schemaObject) {
+        if (!schemaObject.has(APIConstants.MCP.TOOL_INPUT_SCHEMA_KEY)
+                || !schemaObject.get(APIConstants.MCP.TOOL_INPUT_SCHEMA_KEY).isJsonObject()) {
+            // Legacy bare inputSchema — no envelope metadata.
+            return;
+        }
+        if (schemaObject.has(APIConstants.MCP.TOOL_TITLE_KEY)
+                && schemaObject.get(APIConstants.MCP.TOOL_TITLE_KEY).isJsonPrimitive()) {
+            tool.setTitle(schemaObject.get(APIConstants.MCP.TOOL_TITLE_KEY).getAsString());
+        }
+        if (schemaObject.has(APIConstants.MCP.TOOL_OUTPUT_SCHEMA_KEY)
+                && !schemaObject.get(APIConstants.MCP.TOOL_OUTPUT_SCHEMA_KEY).isJsonNull()) {
+            tool.setOutputSchema(schemaObject.get(APIConstants.MCP.TOOL_OUTPUT_SCHEMA_KEY));
+        }
+        if (schemaObject.has(APIConstants.MCP.TOOL_ANNOTATIONS_KEY)
+                && !schemaObject.get(APIConstants.MCP.TOOL_ANNOTATIONS_KEY).isJsonNull()) {
+            tool.setAnnotations(schemaObject.get(APIConstants.MCP.TOOL_ANNOTATIONS_KEY));
+        }
+        if (schemaObject.has(APIConstants.MCP.TOOL_ICONS_KEY)
+                && !schemaObject.get(APIConstants.MCP.TOOL_ICONS_KEY).isJsonNull()) {
+            tool.setIcons(schemaObject.get(APIConstants.MCP.TOOL_ICONS_KEY));
+        }
+        if (schemaObject.has(APIConstants.MCP.META_KEY)
+                && !schemaObject.get(APIConstants.MCP.META_KEY).isJsonNull()) {
+            tool.setMeta(schemaObject.get(APIConstants.MCP.META_KEY));
+        }
+    }
+
+    /**
      * Strips OpenAPI parameter location prefixes used when APIM maps REST ops to MCP tools.
      * Leaves other names (including those with underscores) unchanged.
      */
@@ -324,9 +417,19 @@ public class MCPPayloadGenerator {
         contentItem.setText(body);
         contentItems.add(contentItem);
         toolCallResult.setContent(contentItems);
+        if (!isError && StringUtils.isNotEmpty(body)) {
+            try {
+                JsonElement parsed = JsonParser.parseString(body);
+                if (parsed != null && (parsed.isJsonObject() || parsed.isJsonArray())) {
+                    toolCallResult.setStructuredContent(parsed);
+                }
+            } catch (RuntimeException ignored) {
+                // Non-JSON backend bodies stay text-only.
+            }
+        }
         mcpResponse.setResult(toolCallResult);
 
-        return gson.toJson(mcpResponse);
+        return gsonOmitNulls.toJson(mcpResponse);
     }
 
     public static String generatePingResponse(Object id) {
@@ -367,6 +470,28 @@ public class MCPPayloadGenerator {
     public static String generatePromptListResponse(Object id) {
         // Prompts are not supported at the moment
         return generateEmptyResult(id);
+    }
+
+    /**
+     * Generates a stub {@code prompts/get} response. Prompt content is not backed yet,
+     * so the result contains an empty {@code messages} array.
+     *
+     * @param id JSON-RPC request id
+     * @return JSON-RPC success payload
+     */
+    public static String generatePromptGetResponse(Object id) {
+        JsonObject response = new JsonObject();
+        response.addProperty("jsonrpc", "2.0");
+        if (id instanceof Number) {
+            response.addProperty("id", (Number) id);
+        } else {
+            response.addProperty("id", String.valueOf(id));
+        }
+        JsonObject result = new JsonObject();
+        result.addProperty("description", "");
+        result.add("messages", new JsonArray());
+        response.add("result", result);
+        return gsonOmitNulls.toJson(response);
     }
 
     private static String generateEmptyResult(Object id) {

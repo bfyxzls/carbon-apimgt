@@ -886,7 +886,8 @@ public class ApisApiServiceImplUtils {
      * Populates lookup maps for tool schemas and descriptions using the provided tools array.
      *
      * @param toolsArray            JSON array of tool objects
-     * @param schemaByToolName      Map to populate with tool name → input schema JSON string
+     * @param schemaByToolName      Map to populate with tool name → persisted schema definition
+     *                              (MCP 2.0 metadata envelope when optional fields are present)
      * @param descriptionByToolName Map to populate with tool name → tool description
      * @throws APIManagementException If any tool entry is missing a required field
      */
@@ -902,8 +903,6 @@ public class ApisApiServiceImplUtils {
             String toolName = StringUtils.trimToNull(toolJson.optString(APIConstants.MCP.TOOL_NAME_KEY, null));
             String toolDescription =
                     StringUtils.trimToNull(toolJson.optString(APIConstants.MCP.TOOL_DESCRIPTION_KEY, null));
-            org.json.JSONObject inputSchemaJson = toolJson.optJSONObject(APIConstants.MCP.TOOL_INPUT_SCHEMA_KEY);
-            String inputSchema = (inputSchemaJson != null) ? inputSchemaJson.toString() : null;
 
             if (StringUtils.isBlank(toolName)) {
                 throw new APIManagementException("Tool[" + index + "]: name is required.",
@@ -913,21 +912,59 @@ public class ApisApiServiceImplUtils {
                 throw new APIManagementException("Tool[" + index + "]: description is required.",
                         ExceptionCodes.PARAMETER_NOT_PROVIDED);
             }
-            if (StringUtils.isBlank(inputSchema)) {
-                throw new APIManagementException("Tool[" + index + "]: input schema is required.",
-                        ExceptionCodes.PARAMETER_NOT_PROVIDED);
-            }
 
-            schemaByToolName.put(toolName, inputSchema);
+            String persistedSchema = buildPersistedToolSchemaDefinition(toolJson, index);
+            schemaByToolName.put(toolName, persistedSchema);
             descriptionByToolName.put(toolName, toolDescription);
         }
+    }
+
+    /**
+     * Builds the schema definition string persisted on MCP URI templates / operations.
+     * Always nests {@code inputSchema}; preserves MCP 2.0 optional fields including
+     * {@code _meta} (e.g. MCP Apps {@code ui.resourceUri}), {@code title}, {@code annotations},
+     * {@code outputSchema}, and {@code icons}.
+     *
+     * @param toolJson tool object from upstream {@code tools/list}
+     * @param index    tool index for error messages (use {@code -1} when unknown)
+     * @return JSON string stored as {@code schemaDefinition}
+     * @throws APIManagementException if {@code inputSchema} is missing
+     */
+    public static String buildPersistedToolSchemaDefinition(org.json.JSONObject toolJson, int index)
+            throws APIManagementException {
+
+        if (toolJson == null) {
+            throw new APIManagementException("Tool[" + index + "]: tool object is required.",
+                    ExceptionCodes.PARAMETER_NOT_PROVIDED);
+        }
+        org.json.JSONObject inputSchemaJson = toolJson.optJSONObject(APIConstants.MCP.TOOL_INPUT_SCHEMA_KEY);
+        if (inputSchemaJson == null) {
+            throw new APIManagementException("Tool[" + index + "]: input schema is required.",
+                    ExceptionCodes.PARAMETER_NOT_PROVIDED);
+        }
+        org.json.JSONObject schemaEnvelope = new org.json.JSONObject();
+        schemaEnvelope.put(APIConstants.MCP.TOOL_INPUT_SCHEMA_KEY, inputSchemaJson);
+        copyOptionalToolJsonField(toolJson, schemaEnvelope, APIConstants.MCP.TOOL_TITLE_KEY);
+        copyOptionalToolJsonField(toolJson, schemaEnvelope, APIConstants.MCP.TOOL_OUTPUT_SCHEMA_KEY);
+        copyOptionalToolJsonField(toolJson, schemaEnvelope, APIConstants.MCP.TOOL_ANNOTATIONS_KEY);
+        copyOptionalToolJsonField(toolJson, schemaEnvelope, APIConstants.MCP.TOOL_ICONS_KEY);
+        copyOptionalToolJsonField(toolJson, schemaEnvelope, APIConstants.MCP.META_KEY);
+        return schemaEnvelope.toString();
+    }
+
+    private static void copyOptionalToolJsonField(org.json.JSONObject source, org.json.JSONObject target, String key) {
+        if (source == null || target == null || StringUtils.isBlank(key) || !source.has(key)
+                || source.isNull(key)) {
+            return;
+        }
+        target.put(key, source.get(key));
     }
 
     /**
      * Populate URI templates with tool metadata from the MCP backend definition.
      *
      * @param uriTemplates          Candidate URI templates to enrich
-     * @param schemaByToolName      Map of tool names to their input schemas
+     * @param schemaByToolName      Map of tool names to their persisted schema definitions
      * @param descriptionByToolName Map of tool names to their descriptions
      * @param backendId             Backend identifier to set on matched templates' mappings
      * @return Templates that were matched and updated (never null)

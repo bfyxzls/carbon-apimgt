@@ -355,7 +355,8 @@ public class APIKeyValidator {
             }
             String mcpMethod = (String) synCtx.getProperty(APIMgtGatewayConstants.MCP_METHOD);
             if (APIConstants.MCP.METHOD_TOOL_LIST.equals(mcpMethod)
-                    || APIConstants.MCP.METHOD_INITIALIZE.equals(mcpMethod)) {
+                    || APIConstants.MCP.METHOD_INITIALIZE.equals(mcpMethod)
+                    || APIConstants.MCP.METHOD_SERVER_DISCOVER.equals(mcpMethod)) {
                 electedResource = APIConstants.MCP.MCP_RESOURCES_MCP;
                 httpMethod = APIConstants.HTTP_POST;
                 synCtx.setProperty("MCP_API_ELECTED_RESOURCE", electedResource);
@@ -588,7 +589,8 @@ public class APIKeyValidator {
                 && APIConstants.API_TYPE_MCP.equals(api.getApiType())) {
             String mcpMethod = (String) synCtx.getProperty(APIMgtGatewayConstants.MCP_METHOD);
             boolean isMcpCoreMethod = APIConstants.MCP.METHOD_TOOL_LIST.equals(mcpMethod)
-                    || APIConstants.MCP.METHOD_INITIALIZE.equals(mcpMethod);
+                    || APIConstants.MCP.METHOD_INITIALIZE.equals(mcpMethod)
+                    || APIConstants.MCP.METHOD_SERVER_DISCOVER.equals(mcpMethod);
             if (!isMcpCoreMethod) {
                 return verbInfoList;
             }

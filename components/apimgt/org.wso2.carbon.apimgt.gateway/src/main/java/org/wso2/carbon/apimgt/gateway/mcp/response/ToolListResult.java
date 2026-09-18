@@ -40,11 +40,26 @@ public class ToolListResult {
         @SerializedName("name")
         public String name;
 
+        @SerializedName("title")
+        public String title;
+
         @SerializedName("description")
         public String description;
 
         @SerializedName("inputSchema")
         public JsonElement inputSchema;
+
+        @SerializedName("outputSchema")
+        public JsonElement outputSchema;
+
+        @SerializedName("annotations")
+        public JsonElement annotations;
+
+        @SerializedName("icons")
+        public JsonElement icons;
+
+        @SerializedName("_meta")
+        public JsonElement meta;
 
         public String getName() {
             return name;
@@ -52,6 +67,14 @@ public class ToolListResult {
 
         public void setName(String name) {
             this.name = name;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public void setTitle(String title) {
+            this.title = title;
         }
 
         public String getDescription() {
@@ -68,6 +91,38 @@ public class ToolListResult {
 
         public void setInputSchema(JsonElement inputSchema) {
             this.inputSchema = inputSchema;
+        }
+
+        public JsonElement getOutputSchema() {
+            return outputSchema;
+        }
+
+        public void setOutputSchema(JsonElement outputSchema) {
+            this.outputSchema = outputSchema;
+        }
+
+        public JsonElement getAnnotations() {
+            return annotations;
+        }
+
+        public void setAnnotations(JsonElement annotations) {
+            this.annotations = annotations;
+        }
+
+        public JsonElement getIcons() {
+            return icons;
+        }
+
+        public void setIcons(JsonElement icons) {
+            this.icons = icons;
+        }
+
+        public JsonElement getMeta() {
+            return meta;
+        }
+
+        public void setMeta(JsonElement meta) {
+            this.meta = meta;
         }
     }
 

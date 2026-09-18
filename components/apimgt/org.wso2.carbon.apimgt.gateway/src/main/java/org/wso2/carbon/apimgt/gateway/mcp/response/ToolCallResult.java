@@ -26,6 +26,9 @@ public class ToolCallResult {
     @SerializedName("content")
     public List<ContentItem> content;
 
+    @SerializedName("structuredContent")
+    public com.google.gson.JsonElement structuredContent;
+
     @SerializedName("isError")
     public boolean isError;
 
@@ -35,6 +38,14 @@ public class ToolCallResult {
 
     public void setContent(List<ContentItem> content) {
         this.content = content;
+    }
+
+    public com.google.gson.JsonElement getStructuredContent() {
+        return structuredContent;
+    }
+
+    public void setStructuredContent(com.google.gson.JsonElement structuredContent) {
+        this.structuredContent = structuredContent;
     }
 
     public boolean isError() {

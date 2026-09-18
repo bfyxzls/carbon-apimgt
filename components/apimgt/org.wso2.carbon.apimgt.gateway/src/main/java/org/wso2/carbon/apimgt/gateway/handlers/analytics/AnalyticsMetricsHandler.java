@@ -209,12 +209,12 @@ public class AnalyticsMetricsHandler extends AbstractExtendedSynapseHandler {
     /**
      * Determines whether analytics/audit event publishing should be skipped for the current request.
      * <p>
-     * For MCP traffic, only authenticated {@code tools/call} invocations with a resolved
-     * {@code mcpToolName} and a real {@code applicationId} are audited.
-     * Non-POST transport calls (SSE GET, well-known GET, OPTIONS), handshake / list / ping, and
-     * requests without an application (which would otherwise become {@code applicationId=UNKNOWN})
-     * are skipped. MCP detection uses both {@code API_TYPE=MCP} and {@code isMcp}, because fault
-     * flows may clear {@code isMcp} before analytics runs.
+     * For MCP traffic, only authenticated {@code tools/call} (with {@code mcpToolName}) is audited
+     * when a real {@code applicationId} is present. {@code tools/list}, non-POST transport calls
+     * (SSE GET, well-known GET, OPTIONS), handshake / ping / other catalog methods, and requests
+     * without an application (which would otherwise become {@code applicationId=UNKNOWN}) are
+     * skipped. MCP detection uses both {@code API_TYPE=MCP} and {@code isMcp}, because fault flows
+     * may clear {@code isMcp} before analytics runs.
      * </p>
      */
     private boolean shouldSkipAnalyticsPublishing(MessageContext messageContext) {
@@ -243,15 +243,23 @@ public class AnalyticsMetricsHandler extends AbstractExtendedSynapseHandler {
             return true;
         }
 
+        String mcpMethod = (String) messageContext.getProperty(APIMgtGatewayConstants.MCP_METHOD);
+        if (APIConstants.MCP.METHOD_TOOL_LIST.equals(mcpMethod)) {
+            if (log.isDebugEnabled()) {
+                log.debug("Skipping analytics publishing for MCP tools/list");
+            }
+            return true;
+        }
         Object mcpToolName = messageContext.getProperty(APIMgtGatewayConstants.MCP_TOOL_NAME);
         if (mcpToolName == null) {
             mcpToolName = messageContext.getProperty("MCP_TOOL_NAME");
         }
         String toolName = mcpToolName != null ? String.valueOf(mcpToolName).trim() : null;
-        if (StringUtils.isEmpty(toolName) || "null".equalsIgnoreCase(toolName)) {
+        boolean hasToolName = StringUtils.isNotEmpty(toolName) && !"null".equalsIgnoreCase(toolName);
+        if (!hasToolName) {
             if (log.isDebugEnabled()) {
                 log.debug("Skipping analytics publishing for MCP request without mcpToolName, method="
-                        + messageContext.getProperty(APIMgtGatewayConstants.MCP_METHOD));
+                        + mcpMethod);
             }
             return true;
         }

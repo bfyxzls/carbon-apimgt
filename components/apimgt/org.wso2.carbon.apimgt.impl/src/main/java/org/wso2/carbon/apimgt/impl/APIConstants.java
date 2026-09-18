@@ -2962,6 +2962,10 @@ public final class APIConstants {
      */
     public static final String API_CATEGORIES_CATEGORY_NAME = "apiCategories_categoryName";
     public static final String API_CATEGORY = "api-category";
+    /** Synapse auth-handler property name for comma-separated API category names. */
+    public static final String API_CATEGORIES = "apiCategories";
+    /** Category name: skip remaining-points / member-token points validation at gateway. */
+    public static final String NO_CHECK_POINTS = "NO_CHECK_POINTS";
 
     // AWS Lambda: Constants for aws lambda
     public static final String AWS_SECRET_KEY = "AWS_SECRET_KEY";
@@ -3841,6 +3845,20 @@ public final class APIConstants {
         public static final String META_PROTOCOL_VERSION_KEY = "io.modelcontextprotocol/protocolVersion";
         public static final String META_CLIENT_CAPABILITIES_KEY = "io.modelcontextprotocol/clientCapabilities";
         public static final String META_CLIENT_INFO_KEY = "io.modelcontextprotocol/clientInfo";
+        public static final String META_SERVER_INFO_KEY = "io.modelcontextprotocol/serverInfo";
+        /**
+         * MCP Apps tool/request UI metadata under {@code _meta.ui} (preferred) and legacy
+         * {@code _meta["ui/resourceUri"]}.
+         */
+        public static final String META_UI_KEY = "ui";
+        public static final String META_UI_RESOURCE_URI_KEY = "resourceUri";
+        public static final String META_UI_RESOURCE_URI_LEGACY_KEY = "ui/resourceUri";
+        public static final String RESULT_TYPE_KEY = "resultType";
+        public static final String RESULT_TYPE_COMPLETE = "complete";
+        public static final String SUPPORTED_VERSIONS_KEY = "supportedVersions";
+        public static final String INSTRUCTIONS_KEY = "instructions";
+        public static final String CACHE_SCOPE_PUBLIC = "public";
+        public static final long DEFAULT_DISCOVER_TTL_MS = 3600000L;
         public static final String VHOST_HEADER = "x-wso2-mcp-vhost";
         public static final String BASEPATH_HEADER = "x-wso2-mcp-basepath";
         public static final String VERSION_HEADER = "x-wso2-mcp-version";
@@ -3917,6 +3935,11 @@ public final class APIConstants {
         // Tools payload
         public static final String TOOLS_METHOD = METHOD_TOOL_LIST;
         public static final String TOOL_INPUT_SCHEMA_KEY = "inputSchema";
+        public static final String TOOL_OUTPUT_SCHEMA_KEY = "outputSchema";
+        public static final String TOOL_TITLE_KEY = "title";
+        public static final String TOOL_ANNOTATIONS_KEY = "annotations";
+        public static final String TOOL_ICONS_KEY = "icons";
+        public static final String TOOL_STRUCTURED_CONTENT_KEY = "structuredContent";
 
         // SSE parsing
         public static final String SSE_DATA_PREFIX = "data:";

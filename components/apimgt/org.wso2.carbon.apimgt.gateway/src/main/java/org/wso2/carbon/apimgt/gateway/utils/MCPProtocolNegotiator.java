@@ -32,6 +32,11 @@ import java.util.Map;
 /**
  * Detects the northbound MCP protocol era (legacy 1.0 vs modern 2.0) and resolves the
  * configured southbound backend protocol version for an MCP Server.
+ * <p>
+ * For {@code SERVER_PROXY} APIs the gateway is a transparent proxy: negotiation results are
+ * stored for analytics, but the request body is not rewritten and
+ * {@code MCP_NEEDS_TRANSLATION} is always false so upstream servers can auto-negotiate.
+ * </p>
  */
 public final class MCPProtocolNegotiator {
 
@@ -49,6 +54,8 @@ public final class MCPProtocolNegotiator {
      * @return negotiated northbound protocol version
      */
     public static String negotiateAndStore(MessageContext messageContext, McpRequest request, API matchedApi) {
+        boolean serverProxyPassthrough = isServerProxy(matchedApi);
+
         String headerVersion = getTransportHeader(messageContext, APIConstants.MCP.MCP_PROTOCOL_VERSION_HEADER);
         String sessionId = getTransportHeader(messageContext, APIConstants.MCP.HEADER_MCP_SESSION_ID);
         String mcpMethodHeader = getTransportHeader(messageContext, APIConstants.MCP.HEADER_MCP_METHOD);
@@ -75,17 +82,25 @@ public final class MCPProtocolNegotiator {
         messageContext.setProperty(APIMgtGatewayConstants.MCP_PROTOCOL_VERSION_KEY, northboundVersion);
         messageContext.setProperty(APIMgtGatewayConstants.MCP_PROTOCOL_ERA_KEY, northboundEra);
 
-        // Always strip leftover params.protocolVersion on non-initialize traffic (MCP 2.0 and mixed).
-        if (!APIConstants.MCP.METHOD_INITIALIZE.equals(method)) {
-            clearLegacyParamsProtocolVersion(messageContext, request);
-        } else if (StringUtils.isNotEmpty(legacyParamsProtocolVersion)
+        // SERVER_PROXY: upstream MCP servers negotiate 1.0/2.0 themselves — do not rewrite the body.
+        if (!serverProxyPassthrough) {
+            // Always strip leftover params.protocolVersion on non-initialize traffic (MCP 2.0 and mixed).
+            if (!APIConstants.MCP.METHOD_INITIALIZE.equals(method)) {
+                clearLegacyParamsProtocolVersion(messageContext, request);
+            } else if (StringUtils.isNotEmpty(legacyParamsProtocolVersion)
+                    && APIConstants.MCP.PROTOCOL_ERA_LEGACY.equals(northboundEra)) {
+                messageContext.setProperty(APIMgtGatewayConstants.MCP_REQUESTED_PROTOCOL_VERSION_KEY,
+                        legacyParamsProtocolVersion);
+            }
+
+            if (APIConstants.MCP.PROTOCOL_ERA_MODERN.equals(northboundEra)) {
+                clearLegacyParamsProtocolVersion(messageContext, request);
+            }
+        } else if (APIConstants.MCP.METHOD_INITIALIZE.equals(method)
+                && StringUtils.isNotEmpty(legacyParamsProtocolVersion)
                 && APIConstants.MCP.PROTOCOL_ERA_LEGACY.equals(northboundEra)) {
             messageContext.setProperty(APIMgtGatewayConstants.MCP_REQUESTED_PROTOCOL_VERSION_KEY,
                     legacyParamsProtocolVersion);
-        }
-
-        if (APIConstants.MCP.PROTOCOL_ERA_MODERN.equals(northboundEra)) {
-            clearLegacyParamsProtocolVersion(messageContext, request);
         }
 
         if (StringUtils.isNotEmpty(sessionId)) {
@@ -96,10 +111,16 @@ public final class MCPProtocolNegotiator {
         String backendEra = APIConstants.MCP.resolveProtocolEra(backendVersion);
         messageContext.setProperty(APIMgtGatewayConstants.MCP_BACKEND_PROTOCOL_VERSION_KEY, backendVersion);
         messageContext.setProperty(APIMgtGatewayConstants.MCP_BACKEND_PROTOCOL_ERA_KEY, backendEra);
-        boolean needsTranslation = !StringUtils.equals(northboundEra, backendEra);
+        // SERVER_PROXY is a transparent proxy; never translate request/response dialects.
+        boolean needsTranslation = !serverProxyPassthrough && !StringUtils.equals(northboundEra, backendEra);
         messageContext.setProperty(APIMgtGatewayConstants.MCP_NEEDS_TRANSLATION_KEY, needsTranslation);
 
         return northboundVersion;
+    }
+
+    private static boolean isServerProxy(API matchedApi) {
+        return matchedApi != null
+                && APIConstants.API_SUBTYPE_SERVER_PROXY.equals(matchedApi.getSubtype());
     }
 
     /**

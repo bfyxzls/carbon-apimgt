@@ -5158,9 +5158,6 @@ public class PublisherCommonUtils {
                     toolJsonObject.optString(APIConstants.MCP.TOOL_NAME_KEY, null));
             String toolDescription = StringUtils.trimToNull(
                     toolJsonObject.optString(APIConstants.MCP.TOOL_DESCRIPTION_KEY, null));
-            org.json.JSONObject inputSchemaObject =
-                    toolJsonObject.optJSONObject(APIConstants.MCP.TOOL_INPUT_SCHEMA_KEY);
-            String inputSchema = (inputSchemaObject != null) ? inputSchemaObject.toString() : null;
 
             if (StringUtils.isBlank(toolName)) {
                 throw new APIManagementException("Tool[" + index + "]: name is required.",
@@ -5170,16 +5167,13 @@ public class PublisherCommonUtils {
                 throw new APIManagementException("Tool[" + index + "]: description is required.",
                         ExceptionCodes.PARAMETER_NOT_PROVIDED);
             }
-            if (StringUtils.isBlank(inputSchema)) {
-                throw new APIManagementException("Tool[" + index + "]: input schema is required.",
-                        ExceptionCodes.PARAMETER_NOT_PROVIDED);
-            }
 
             MCPServerOperationDTO serverOperation = new MCPServerOperationDTO();
             serverOperation.setFeature(MCPServerOperationDTO.FeatureEnum.TOOL);
             serverOperation.setTarget(toolName);
             serverOperation.setDescription(toolDescription);
-            serverOperation.setSchemaDefinition(inputSchema);
+            serverOperation.setSchemaDefinition(
+                    ApisApiServiceImplUtils.buildPersistedToolSchemaDefinition(toolJsonObject, index));
             operationList.add(serverOperation);
         }
         return operationList;

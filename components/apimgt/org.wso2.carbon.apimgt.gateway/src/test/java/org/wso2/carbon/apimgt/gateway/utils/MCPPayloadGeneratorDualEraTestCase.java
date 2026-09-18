@@ -46,10 +46,16 @@ public class MCPPayloadGeneratorDualEraTestCase {
         String payload = MCPPayloadGenerator.getServerDiscoverResponse(10, "mcp-server", "2.0", "desc", false);
         JsonObject root = JsonParser.parseString(payload).getAsJsonObject();
         JsonObject result = root.getAsJsonObject("result");
-        Assert.assertEquals(APIConstants.MCP.PROTOCOL_VERSION_2026_JULY,
-                result.get("protocolVersion").getAsString());
-        Assert.assertEquals("mcp-server", result.getAsJsonObject("serverInfo").get("name").getAsString());
+        Assert.assertEquals(APIConstants.MCP.RESULT_TYPE_COMPLETE, result.get("resultType").getAsString());
+        Assert.assertTrue(result.getAsJsonArray("supportedVersions").toString()
+                .contains(APIConstants.MCP.PROTOCOL_VERSION_2026_JULY));
+        Assert.assertEquals("mcp-server",
+                result.getAsJsonObject("_meta")
+                        .getAsJsonObject(APIConstants.MCP.META_SERVER_INFO_KEY)
+                        .get("name").getAsString());
         Assert.assertTrue(result.has("capabilities"));
+        Assert.assertEquals("desc", result.get("instructions").getAsString());
+        Assert.assertEquals(APIConstants.MCP.CACHE_SCOPE_PUBLIC, result.get("cacheScope").getAsString());
     }
 
     @Test
@@ -59,6 +65,7 @@ public class MCPPayloadGeneratorDualEraTestCase {
         JsonObject result = JsonParser.parseString(payload).getAsJsonObject().getAsJsonObject("result");
         Assert.assertEquals(APIConstants.MCP.PROTOCOL_VERSION_2026_JULY,
                 result.get("protocolVersion").getAsString());
+        Assert.assertEquals(APIConstants.MCP.RESULT_TYPE_COMPLETE, result.get("resultType").getAsString());
     }
 
     @Test
@@ -96,5 +103,68 @@ public class MCPPayloadGeneratorDualEraTestCase {
         Assert.assertTrue(inputSchema.getAsJsonObject("properties").has("title"));
         Assert.assertTrue(inputSchema.getAsJsonObject("properties").has("caseGrade"));
         Assert.assertFalse(inputSchema.getAsJsonObject("properties").has("caseInput"));
+    }
+
+    @Test
+    public void testExtractInputSchemaDefinitionFromEnvelope() {
+        String envelope = "{"
+                + "\"inputSchema\":{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\"}}},"
+                + "\"title\":\"Search\""
+                + "}";
+        String extracted = MCPPayloadGenerator.extractInputSchemaDefinition(envelope);
+        JsonObject schema = JsonParser.parseString(extracted).getAsJsonObject();
+        Assert.assertEquals("object", schema.get("type").getAsString());
+        Assert.assertTrue(schema.getAsJsonObject("properties").has("q"));
+        Assert.assertFalse(schema.has("title"));
+    }
+
+    @Test
+    public void testToolListEmitsFullMcp20MetadataFromEnvelope() {
+        org.wso2.carbon.apimgt.api.model.subscription.URLMapping mapping =
+                new org.wso2.carbon.apimgt.api.model.subscription.URLMapping();
+        mapping.setUrlPattern("weather.get");
+        mapping.setDescription("Get weather");
+        mapping.setSchemaDefinition("{"
+                + "\"inputSchema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}},"
+                + "\"title\":\"Weather\","
+                + "\"outputSchema\":{\"type\":\"object\",\"properties\":{\"temp\":{\"type\":\"number\"}}},"
+                + "\"annotations\":{\"readOnlyHint\":true,\"destructiveHint\":false},"
+                + "\"icons\":[{\"src\":\"https://example.com/icon.png\"}],"
+                + "\"_meta\":{\"vendor\":\"apim\","
+                + "\"ui\":{\"resourceUri\":\"ui://weather/view.html\"},"
+                + "\"openai/outputTemplate\":\"ui://weather/view.html\"}"
+                + "}");
+        String payload = MCPPayloadGenerator.generateToolListPayload(2,
+                java.util.Collections.singletonList(mapping), true);
+        JsonObject tool = JsonParser.parseString(payload).getAsJsonObject()
+                .getAsJsonObject("result").getAsJsonArray("tools").get(0).getAsJsonObject();
+        Assert.assertEquals("Weather", tool.get("title").getAsString());
+        Assert.assertTrue(tool.getAsJsonObject("inputSchema").getAsJsonObject("properties").has("city"));
+        Assert.assertTrue(tool.getAsJsonObject("outputSchema").getAsJsonObject("properties").has("temp"));
+        Assert.assertTrue(tool.getAsJsonObject("annotations").get("readOnlyHint").getAsBoolean());
+        Assert.assertEquals(1, tool.getAsJsonArray("icons").size());
+        Assert.assertEquals("apim", tool.getAsJsonObject("_meta").get("vendor").getAsString());
+        Assert.assertEquals("ui://weather/view.html",
+                tool.getAsJsonObject("_meta").getAsJsonObject("ui").get("resourceUri").getAsString());
+        Assert.assertEquals("ui://weather/view.html",
+                tool.getAsJsonObject("_meta").get("openai/outputTemplate").getAsString());
+        Assert.assertFalse(tool.has("inputSchema") && tool.getAsJsonObject("inputSchema").has("annotations"));
+    }
+
+    @Test
+    public void testToolCallAddsStructuredContentForJsonBody() {
+        String payload = MCPPayloadGenerator.generateMCPResponsePayload(3, false, "{\"ok\":true}");
+        JsonObject result = JsonParser.parseString(payload).getAsJsonObject().getAsJsonObject("result");
+        Assert.assertTrue(result.getAsJsonObject("structuredContent").get("ok").getAsBoolean());
+        Assert.assertEquals("text", result.getAsJsonArray("content").get(0).getAsJsonObject()
+                .get("type").getAsString());
+    }
+
+    @Test
+    public void testPromptGetStubHasMessagesArray() {
+        String payload = MCPPayloadGenerator.generatePromptGetResponse(4);
+        JsonObject result = JsonParser.parseString(payload).getAsJsonObject().getAsJsonObject("result");
+        Assert.assertTrue(result.has("messages"));
+        Assert.assertEquals(0, result.getAsJsonArray("messages").size());
     }
 }

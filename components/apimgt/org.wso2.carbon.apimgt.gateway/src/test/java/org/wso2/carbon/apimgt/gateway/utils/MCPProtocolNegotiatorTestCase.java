@@ -118,6 +118,41 @@ public class MCPProtocolNegotiatorTestCase {
     }
 
     @Test
+    public void testPreferServerDiscoverHeaderOverBodyMethod() {
+        Map<String, Object> headers = new HashMap<>();
+        headers.put(APIConstants.MCP.MCP_PROTOCOL_VERSION_HEADER, APIConstants.MCP.PROTOCOL_VERSION_2026_JULY);
+        headers.put(APIConstants.MCP.HEADER_MCP_METHOD, APIConstants.MCP.METHOD_SERVER_DISCOVER);
+        Axis2MessageContext messageContext = mockContext(headers);
+
+        McpRequest request = new McpRequest(7);
+        request.setMethod(APIConstants.MCP.METHOD_TOOL_LIST);
+
+        MCPProtocolNegotiator.negotiateAndStore(messageContext, request, null);
+        Assert.assertEquals(APIConstants.MCP.METHOD_SERVER_DISCOVER,
+                messageContext.getProperty(APIMgtGatewayConstants.MCP_METHOD));
+        Assert.assertEquals(APIConstants.MCP.PROTOCOL_ERA_MODERN,
+                messageContext.getProperty(APIMgtGatewayConstants.MCP_PROTOCOL_ERA_KEY));
+        Assert.assertEquals(APIConstants.MCP.METHOD_SERVER_DISCOVER,
+                MCPProtocolNegotiator.resolveMethod(messageContext, request));
+    }
+
+    @Test
+    public void testNegotiateServerDiscoverHeaderAndBodyAligned() {
+        Map<String, Object> headers = new HashMap<>();
+        headers.put(APIConstants.MCP.MCP_PROTOCOL_VERSION_HEADER, APIConstants.MCP.PROTOCOL_VERSION_2026_JULY);
+        headers.put(APIConstants.MCP.HEADER_MCP_METHOD, APIConstants.MCP.METHOD_SERVER_DISCOVER);
+        Axis2MessageContext messageContext = mockContext(headers);
+
+        McpRequest request = new McpRequest(8);
+        request.setMethod(APIConstants.MCP.METHOD_SERVER_DISCOVER);
+
+        MCPProtocolNegotiator.negotiateAndStore(messageContext, request, null);
+        Assert.assertEquals(APIConstants.MCP.METHOD_SERVER_DISCOVER,
+                messageContext.getProperty(APIMgtGatewayConstants.MCP_METHOD));
+        Assert.assertTrue(MCPProtocolNegotiator.isModernNorthbound(messageContext));
+    }
+
+    @Test
     public void testBackendProtocolFromApiPropertyAndNeedsTranslation() {
         Map<String, Object> headers = new HashMap<>();
         headers.put(APIConstants.MCP.MCP_PROTOCOL_VERSION_HEADER, APIConstants.MCP.PROTOCOL_VERSION_2026_JULY);
@@ -133,6 +168,32 @@ public class MCPProtocolNegotiatorTestCase {
         Assert.assertEquals(APIConstants.MCP.PROTOCOL_VERSION_2025_JUNE,
                 messageContext.getProperty(APIMgtGatewayConstants.MCP_BACKEND_PROTOCOL_VERSION_KEY));
         Assert.assertTrue(MCPProtocolNegotiator.needsTranslation(messageContext));
+    }
+
+    @Test
+    public void testServerProxyNeverNeedsTranslationAndPreservesBody() {
+        Map<String, Object> headers = new HashMap<>();
+        headers.put(APIConstants.MCP.MCP_PROTOCOL_VERSION_HEADER, APIConstants.MCP.PROTOCOL_VERSION_2026_JULY);
+        headers.put(APIConstants.MCP.HEADER_MCP_METHOD, APIConstants.MCP.METHOD_TOOL_CALL);
+        Axis2MessageContext messageContext = mockContext(headers);
+
+        McpRequest request = new McpRequest(9);
+        request.setMethod(APIConstants.MCP.METHOD_TOOL_CALL);
+        Params params = new Params();
+        params.setProtocolVersion(APIConstants.MCP.PROTOCOL_VERSION_2025_JUNE);
+        params.setToolName("search");
+        request.setParams(params);
+
+        API api = new API();
+        api.setSubtype(APIConstants.API_SUBTYPE_SERVER_PROXY);
+        api.setProtocolVersion(APIConstants.MCP.PROTOCOL_VERSION_2025_JUNE);
+
+        String version = MCPProtocolNegotiator.negotiateAndStore(messageContext, request, api);
+        Assert.assertEquals(APIConstants.MCP.PROTOCOL_VERSION_2026_JULY, version);
+        Assert.assertFalse("SERVER_PROXY must not translate dialects",
+                MCPProtocolNegotiator.needsTranslation(messageContext));
+        Assert.assertEquals("SERVER_PROXY must not strip params.protocolVersion",
+                APIConstants.MCP.PROTOCOL_VERSION_2025_JUNE, request.getParams().getProtocolVersion());
     }
 
     @Test

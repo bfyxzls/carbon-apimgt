@@ -18,12 +18,15 @@
 
 package org.wso2.carbon.apimgt.gateway.utils;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
+import org.wso2.carbon.apimgt.api.model.subscription.URLMapping;
 import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
 import org.wso2.carbon.apimgt.gateway.mcp.request.McpRequest;
 import org.wso2.carbon.apimgt.gateway.mcp.request.Params;
@@ -31,7 +34,9 @@ import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.keymgt.model.entity.API;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -39,6 +44,8 @@ import java.util.UUID;
  * dialects for SERVER_PROXY backends when northbound and southbound eras differ.
  */
 public final class MCPProtocolTranslator {
+
+    private static final Gson GSON = new Gson();
 
     private MCPProtocolTranslator() {
     }
@@ -62,6 +69,10 @@ public final class MCPProtocolTranslator {
         String southVersion = String.valueOf(
                 messageContext.getProperty(APIMgtGatewayConstants.MCP_BACKEND_PROTOCOL_VERSION_KEY));
         String method = (String) messageContext.getProperty(APIMgtGatewayConstants.MCP_METHOD);
+        // Keep JSON-RPC body method aligned with negotiated Mcp-Method (header may win).
+        if (StringUtils.isNotEmpty(method) && !method.equals(request.getMethod())) {
+            request.setMethod(method);
+        }
 
         org.apache.axis2.context.MessageContext axis2MC =
                 ((Axis2MessageContext) messageContext).getAxis2MessageContext();
@@ -144,8 +155,7 @@ public final class MCPProtocolTranslator {
     private static boolean prepareModernClientToLegacyBackend(MessageContext messageContext, API matchedApi,
                                                               McpRequest request, String method,
                                                               Map<String, Object> headers) {
-        // server/discover is answered locally against gateway capabilities (defense in depth;
-        // McpMediator also short-circuits discover for all SERVER_PROXY eras).
+        // Legacy backends do not support MCP 2.0 server/discover — answer locally.
         if (APIConstants.MCP.METHOD_SERVER_DISCOVER.equals(method)) {
             return false;
         }
@@ -221,6 +231,8 @@ public final class MCPProtocolTranslator {
      * Ensures MCP 2.0 {@code params._meta} carries the required namespaced envelope keys
      * ({@code io.modelcontextprotocol/protocolVersion}, {@code clientCapabilities}).
      * Root-level {@code _meta} (pre-spec mistake) is migrated into {@code params} when present.
+     * Client-supplied extension keys such as MCP Apps {@code ui.resourceUri} are preserved and
+     * forwarded upstream unchanged.
      */
     private static void ensureMetaOnRequestBody(org.apache.axis2.context.MessageContext axis2MC,
                                                 McpRequest request, String protocolVersion) {
@@ -230,6 +242,9 @@ public final class MCPProtocolTranslator {
             }
             String body = org.apache.synapse.commons.json.JsonUtil.jsonPayloadToString(axis2MC);
             JsonObject root = JsonParser.parseString(body).getAsJsonObject();
+            if (request != null && StringUtils.isNotEmpty(request.getMethod())) {
+                root.addProperty("method", request.getMethod());
+            }
             JsonObject params;
             if (root.has(APIConstants.MCP.PARAMS_KEY) && root.get(APIConstants.MCP.PARAMS_KEY).isJsonObject()) {
                 params = root.getAsJsonObject(APIConstants.MCP.PARAMS_KEY);
@@ -257,35 +272,86 @@ public final class MCPProtocolTranslator {
                 request.getParams().setProtocolVersion(null);
             }
 
-            if (!meta.has(APIConstants.MCP.META_PROTOCOL_VERSION_KEY)) {
-                // Prefer namespaced key; fall back from legacy plain key if a client already sent it.
-                if (meta.has(APIConstants.MCP.PROTOCOL_VERSION_KEY)) {
-                    meta.addProperty(APIConstants.MCP.META_PROTOCOL_VERSION_KEY,
-                            meta.get(APIConstants.MCP.PROTOCOL_VERSION_KEY).getAsString());
-                    meta.remove(APIConstants.MCP.PROTOCOL_VERSION_KEY);
-                } else {
-                    meta.addProperty(APIConstants.MCP.META_PROTOCOL_VERSION_KEY, protocolVersion);
-                }
-            }
-            if (!meta.has(APIConstants.MCP.META_CLIENT_CAPABILITIES_KEY)) {
-                meta.add(APIConstants.MCP.META_CLIENT_CAPABILITIES_KEY, new JsonObject());
-            }
-            if (!meta.has(APIConstants.MCP.META_CLIENT_INFO_KEY)) {
-                JsonObject clientInfo = new JsonObject();
-                clientInfo.addProperty(APIConstants.MCP.CLIENT_NAME_KEY, APIConstants.MCP.CLIENT_NAME);
-                clientInfo.addProperty(APIConstants.MCP.CLIENT_VERSION_KEY, APIConstants.MCP.CLIENT_VERSION);
-                meta.add(APIConstants.MCP.META_CLIENT_INFO_KEY, clientInfo);
+            // Restore any client _meta already parsed onto the request (e.g. ui.resourceUri)
+            // when the wire body lost nested extension keys.
+            if (request.getMeta() != null) {
+                mergeClientMetaIntoJson(meta, request.getMeta());
             }
 
-            Map<String, Object> metaMap = new HashMap<>();
-            metaMap.put(APIConstants.MCP.META_PROTOCOL_VERSION_KEY, protocolVersion);
-            metaMap.put(APIConstants.MCP.META_CLIENT_CAPABILITIES_KEY, new HashMap<>());
-            request.setMeta(metaMap);
+            enrichRequiredMetaKeys(meta, protocolVersion);
+
+            // Keep the in-memory model aligned with the forwarded body (full _meta, not a wipe).
+            @SuppressWarnings("unchecked")
+            Map<String, Object> fullMeta = GSON.fromJson(meta, Map.class);
+            request.setMeta(fullMeta != null ? fullMeta : new HashMap<>());
 
             org.apache.synapse.commons.json.JsonUtil.removeJsonPayload(axis2MC);
             org.apache.synapse.commons.json.JsonUtil.getNewJsonPayload(axis2MC, root.toString(), true, true);
         } catch (Exception e) {
             // Best-effort enrichment; leave original body on failure.
+        }
+    }
+
+    /**
+     * Adds required MCP 2.0 {@code _meta} keys without removing client extension fields
+     * such as {@code ui} / {@code ui/resourceUri}.
+     */
+    static void enrichRequiredMetaKeys(JsonObject meta, String protocolVersion) {
+        if (meta == null) {
+            return;
+        }
+        if (!meta.has(APIConstants.MCP.META_PROTOCOL_VERSION_KEY)) {
+            if (meta.has(APIConstants.MCP.PROTOCOL_VERSION_KEY)) {
+                meta.addProperty(APIConstants.MCP.META_PROTOCOL_VERSION_KEY,
+                        meta.get(APIConstants.MCP.PROTOCOL_VERSION_KEY).getAsString());
+                meta.remove(APIConstants.MCP.PROTOCOL_VERSION_KEY);
+            } else if (StringUtils.isNotEmpty(protocolVersion)) {
+                meta.addProperty(APIConstants.MCP.META_PROTOCOL_VERSION_KEY, protocolVersion);
+            }
+        }
+        if (!meta.has(APIConstants.MCP.META_CLIENT_CAPABILITIES_KEY)) {
+            meta.add(APIConstants.MCP.META_CLIENT_CAPABILITIES_KEY, new JsonObject());
+        }
+        if (!meta.has(APIConstants.MCP.META_CLIENT_INFO_KEY)) {
+            JsonObject clientInfo = new JsonObject();
+            clientInfo.addProperty(APIConstants.MCP.CLIENT_NAME_KEY, APIConstants.MCP.CLIENT_NAME);
+            clientInfo.addProperty(APIConstants.MCP.CLIENT_VERSION_KEY, APIConstants.MCP.CLIENT_VERSION);
+            meta.add(APIConstants.MCP.META_CLIENT_INFO_KEY, clientInfo);
+        }
+    }
+
+    /**
+     * Merges parsed client {@code _meta} into the JSON object that will be forwarded upstream.
+     * Existing JSON keys win; missing keys (including nested {@code ui}) are copied from the client.
+     */
+    static void mergeClientMetaIntoJson(JsonObject meta, Map<String, Object> clientMeta) {
+        if (meta == null || clientMeta == null || clientMeta.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, Object> entry : clientMeta.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+            if (StringUtils.isEmpty(key) || value == null) {
+                continue;
+            }
+            if (!meta.has(key)) {
+                meta.add(key, GSON.toJsonTree(value));
+                continue;
+            }
+            // Deep-merge ui object so resourceUri is not dropped when only part of ui is present.
+            if (APIConstants.MCP.META_UI_KEY.equals(key)
+                    && value instanceof Map
+                    && meta.get(key).isJsonObject()) {
+                JsonObject uiJson = meta.getAsJsonObject(key);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> uiMap = (Map<String, Object>) value;
+                for (Map.Entry<String, Object> uiEntry : uiMap.entrySet()) {
+                    if (uiEntry.getKey() != null && uiEntry.getValue() != null
+                            && !uiJson.has(uiEntry.getKey())) {
+                        uiJson.add(uiEntry.getKey(), GSON.toJsonTree(uiEntry.getValue()));
+                    }
+                }
+            }
         }
     }
 
@@ -337,6 +403,70 @@ public final class MCPProtocolTranslator {
             }
             return responseBody;
         } catch (Exception e) {
+            return responseBody;
+        }
+    }
+
+    /**
+     * Filters a proxied {@code tools/list} JSON-RPC body to tools published on the MCP API.
+     * Preserves each upstream tool object intact (including MCP Apps {@code _meta.ui.resourceUri}).
+     *
+     * @param responseBody upstream JSON-RPC response
+     * @param matchedApi   gateway API whose URL mappings define the allowed tool names
+     * @return filtered body, or the original body when filtering is not applicable
+     */
+    public static String filterToolsListToPublishedCatalog(String responseBody, API matchedApi) {
+        if (StringUtils.isEmpty(responseBody) || matchedApi == null || matchedApi.getUrlMappings() == null
+                || matchedApi.getUrlMappings().isEmpty()) {
+            return responseBody;
+        }
+        Set<String> publishedToolNames = new HashSet<>();
+        for (URLMapping mapping : matchedApi.getUrlMappings()) {
+            if (mapping == null || StringUtils.isBlank(mapping.getUrlPattern())) {
+                continue;
+            }
+            String pattern = mapping.getUrlPattern();
+            // Skip HTTP resource paths; MCP tool names are bare identifiers (no leading '/').
+            if (pattern.startsWith("/")) {
+                continue;
+            }
+            publishedToolNames.add(pattern);
+        }
+        if (publishedToolNames.isEmpty()) {
+            return responseBody;
+        }
+        try {
+            JsonElement element = JsonParser.parseString(responseBody);
+            if (!element.isJsonObject()) {
+                return responseBody;
+            }
+            JsonObject root = element.getAsJsonObject();
+            if (!root.has(APIConstants.MCP.RESULT_KEY) || !root.get(APIConstants.MCP.RESULT_KEY).isJsonObject()) {
+                return responseBody;
+            }
+            JsonObject result = root.getAsJsonObject(APIConstants.MCP.RESULT_KEY);
+            if (!result.has(APIConstants.MCP.TOOLS_KEY) || !result.get(APIConstants.MCP.TOOLS_KEY).isJsonArray()) {
+                return responseBody;
+            }
+            JsonArray upstreamTools = result.getAsJsonArray(APIConstants.MCP.TOOLS_KEY);
+            JsonArray filtered = new JsonArray();
+            for (JsonElement toolEl : upstreamTools) {
+                if (toolEl == null || !toolEl.isJsonObject()) {
+                    continue;
+                }
+                JsonObject tool = toolEl.getAsJsonObject();
+                if (!tool.has(APIConstants.MCP.TOOL_NAME_KEY) || !tool.get(APIConstants.MCP.TOOL_NAME_KEY)
+                        .isJsonPrimitive()) {
+                    continue;
+                }
+                String name = tool.get(APIConstants.MCP.TOOL_NAME_KEY).getAsString();
+                if (publishedToolNames.contains(name)) {
+                    filtered.add(tool);
+                }
+            }
+            result.add(APIConstants.MCP.TOOLS_KEY, filtered);
+            return GSON.toJson(root);
+        } catch (RuntimeException e) {
             return responseBody;
         }
     }

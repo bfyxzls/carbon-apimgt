@@ -69,6 +69,7 @@ import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.HEADER_MCP_SESSION_ID
 import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.METHOD_INITIALIZE;
 import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.METHOD_NOTIFICATION_INITIALIZED;
 import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.METHOD_PING;
+import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.METHOD_PROMPTS_GET;
 import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.METHOD_PROMPTS_LIST;
 import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.METHOD_RESOURCES_LIST;
 import static org.wso2.carbon.apimgt.impl.APIConstants.MCP.METHOD_RESOURCES_READ;
@@ -438,6 +439,7 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
             case METHOD_RESOURCES_READ:
             case METHOD_RESOURCE_TEMPLATE_LIST:
             case METHOD_PROMPTS_LIST:
+            case METHOD_PROMPTS_GET:
                 return true;
             case METHOD_INITIALIZE:
             case METHOD_TOOL_LIST:
@@ -807,8 +809,9 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
 
     /**
      * Marks analytics publishing to be skipped for MCP requests that must not produce audit rows
-     * (non-POST transport, missing tool name). Uses {@code SKIP_METRICS_PUBLISHING} because fault
-     * handling clears {@code isMcp}/{@code MCP_TOOL_NAME} before AnalyticsMetricsHandler runs.
+     * (non-POST transport, {@code tools/list}, or missing tool name). Uses
+     * {@code SKIP_METRICS_PUBLISHING} because fault handling clears
+     * {@code isMcp}/{@code MCP_TOOL_NAME}/{@code MCP_METHOD} before AnalyticsMetricsHandler runs.
      */
     private void markSkipAnalyticsIfNotAuditableMcpRequest(MessageContext messageContext) {
         String httpMethod = (String) messageContext.getProperty(HTTP_METHOD);
@@ -818,6 +821,12 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
             httpMethod = axis2Method != null ? String.valueOf(axis2Method) : null;
         }
         if (StringUtils.isNotEmpty(httpMethod) && !APIConstants.HTTP_POST.equalsIgnoreCase(httpMethod)) {
+            messageContext.setProperty(
+                    org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.SKIP_METRICS_PUBLISHING, true);
+            return;
+        }
+        String mcpMethod = (String) messageContext.getProperty(MCP_METHOD);
+        if (METHOD_TOOL_LIST.equals(mcpMethod)) {
             messageContext.setProperty(
                     org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.SKIP_METRICS_PUBLISHING, true);
             return;

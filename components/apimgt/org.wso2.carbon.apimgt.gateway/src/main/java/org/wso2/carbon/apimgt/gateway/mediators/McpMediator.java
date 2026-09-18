@@ -64,8 +64,10 @@ import java.util.stream.Collectors;
 
 /**
  * Mediator for handling MCP (Model Context Protocol) requests and responses in the API Gateway.
- * This mediator processes MCP JSON-RPC messages, handles initialization, tool listing,
- * and tool calls, and transforms responses to MCP format.
+ * <p>
+ * {@code SERVER_PROXY} APIs are forwarded to the upstream MCP server without MCP 1.0/2.0 dialect
+ * rewriting (upstream auto-negotiates). Other subtypes process initialize / tools locally.
+ * </p>
  */
 public class McpMediator extends AbstractMediator implements ManagedLifecycle {
     private static final Log log = LogFactory.getLog(McpMediator.class);
@@ -111,7 +113,6 @@ public class McpMediator extends AbstractMediator implements ManagedLifecycle {
             return false;
         }
         String subType = matchedAPI.getSubtype();
-        String mcpMethod = (String) messageContext.getProperty(APIMgtGatewayConstants.MCP_METHOD);
 
         if (IN_FLOW.equals(mcpDirection)) {
             if (path != null && path.startsWith(APIMgtGatewayConstants.MCP_WELL_KNOWN_RESOURCE) &&
@@ -126,22 +127,10 @@ public class McpMediator extends AbstractMediator implements ManagedLifecycle {
             if (StringUtils.equals(subType, APIConstants.API_SUBTYPE_SERVER_PROXY)) {
                 McpRequest requestBody =
                         (McpRequest) messageContext.getProperty(APIMgtGatewayConstants.MCP_REQUEST_BODY);
-                // Ensure negotiation ran (e.g. if InitHandler skipped somehow).
+                // Negotiate for analytics only. Upstream MCP servers auto-negotiate 1.0/2.0 —
+                // do not rewrite headers/body or answer initialize/discover locally.
                 if (messageContext.getProperty(APIMgtGatewayConstants.MCP_PROTOCOL_ERA_KEY) == null) {
                     MCPProtocolNegotiator.negotiateAndStore(messageContext, requestBody, matchedAPI);
-                }
-                // Gateway synthesizes catalog-facing methods locally (tools/list + server/discover).
-                if (StringUtils.equals(APIConstants.MCP.METHOD_TOOL_LIST, mcpMethod)
-                        || StringUtils.equals(APIConstants.MCP.METHOD_SERVER_DISCOVER, mcpMethod)) {
-                    handleMcpRequest(messageContext, matchedAPI);
-                    return true;
-                }
-                boolean continueToBackend = MCPProtocolTranslator.prepareSouthboundRequest(
-                        messageContext, matchedAPI, requestBody);
-                if (!continueToBackend) {
-                    // Cross-era local answers: initialize (legacy→modern) or server/discover (modern→legacy).
-                    handleLocalTranslationResponse(messageContext, matchedAPI, mcpMethod);
-                    return true;
                 }
                 log.debug("Proxying MCP request for server proxy API: " + matchedAPI.getName() + ":" +
                         matchedAPI.getVersion());
@@ -153,7 +142,8 @@ public class McpMediator extends AbstractMediator implements ManagedLifecycle {
             }
         } else if (OUT_FLOW.equals(mcpDirection)) {
             if (StringUtils.equals(subType, APIConstants.API_SUBTYPE_SERVER_PROXY)) {
-                applyServerProxyOutTranslation(messageContext);
+                // Transparent proxy: no dialect translation. Still filter tools/list to published catalog.
+                applyServerProxyToolsListFilter(messageContext, matchedAPI);
                 return true;
             }
 
@@ -169,63 +159,25 @@ public class McpMediator extends AbstractMediator implements ManagedLifecycle {
         return true;
     }
 
-    private void handleLocalTranslationResponse(MessageContext messageContext, API matchedAPI, String mcpMethod) {
-        org.apache.axis2.context.MessageContext axis2MessageContext =
-                ((Axis2MessageContext) messageContext).getAxis2MessageContext();
-        McpRequest requestBody = (McpRequest) messageContext.getProperty(APIMgtGatewayConstants.MCP_REQUEST_BODY);
-        Object id = requestBody != null ? requestBody.getId() : null;
-        McpResponseDto mcpResponse = null;
-        if (APIConstants.MCP.METHOD_INITIALIZE.equals(mcpMethod)) {
-            mcpResponse = MCPUtils.handleMcpInitialize(messageContext, id, matchedAPI);
-        } else if (APIConstants.MCP.METHOD_SERVER_DISCOVER.equals(mcpMethod)) {
-            mcpResponse = MCPUtils.handleMcpServerDiscover(messageContext, id, matchedAPI);
-        } else if (APIConstants.MCP.METHOD_NOTIFICATION_INITIALIZED.equals(mcpMethod)) {
-            JsonUtil.removeJsonPayload(axis2MessageContext);
-            messageContext.setProperty(MCP_PROCESSED, "true");
-            axis2MessageContext.setProperty(APIConstants.NO_ENTITY_BODY, true);
-            axis2MessageContext.setProperty(APIMgtGatewayConstants.HTTP_SC, HttpStatus.SC_ACCEPTED);
-            return;
-        }
-        messageContext.setProperty(MCP_PROCESSED, "true");
-        if (mcpResponse != null) {
-            try {
-                JsonUtil.removeJsonPayload(axis2MessageContext);
-                JsonUtil.getNewJsonPayload(axis2MessageContext, mcpResponse.getResponse(), true, true);
-                axis2MessageContext.setProperty(Constants.Configuration.MESSAGE_TYPE,
-                        APIConstants.APPLICATION_JSON_MEDIA_TYPE);
-                axis2MessageContext.setProperty(Constants.Configuration.CONTENT_TYPE,
-                        APIConstants.APPLICATION_JSON_MEDIA_TYPE);
-                axis2MessageContext.setProperty(APIMgtGatewayConstants.HTTP_SC, mcpResponse.getStatusCode());
-                if (mcpResponse.getSessionId() != null) {
-                    messageContext.setProperty(APIMgtGatewayConstants.MCP_SESSION_ID_KEY, mcpResponse.getSessionId());
-                }
-            } catch (AxisFault e) {
-                log.error("Error while generating local MCP translation payload "
-                        + axis2MessageContext.getLogIDString(), e);
-            }
-        }
-    }
-
-    private void applyServerProxyOutTranslation(MessageContext messageContext) {
-        if (!MCPProtocolNegotiator.needsTranslation(messageContext)) {
-            // Still capture legacy session ids for modern clients on same-era? not needed.
+    private void applyServerProxyToolsListFilter(MessageContext messageContext, API matchedAPI) {
+        String mcpMethod = (String) messageContext.getProperty(APIMgtGatewayConstants.MCP_METHOD);
+        if (!StringUtils.equals(APIConstants.MCP.METHOD_TOOL_LIST, mcpMethod)) {
             return;
         }
         org.apache.axis2.context.MessageContext axis2MessageContext =
                 ((Axis2MessageContext) messageContext).getAxis2MessageContext();
         try {
             if (!JsonUtil.hasAJsonPayload(axis2MessageContext)) {
-                MCPProtocolTranslator.translateSouthboundResponse(messageContext, null);
                 return;
             }
             String body = JsonUtil.jsonPayloadToString(axis2MessageContext);
-            String translated = MCPProtocolTranslator.translateSouthboundResponse(messageContext, body);
-            if (translated != null && !translated.equals(body)) {
+            String filtered = MCPProtocolTranslator.filterToolsListToPublishedCatalog(body, matchedAPI);
+            if (filtered != null && !filtered.equals(body)) {
                 JsonUtil.removeJsonPayload(axis2MessageContext);
-                JsonUtil.getNewJsonPayload(axis2MessageContext, translated, true, true);
+                JsonUtil.getNewJsonPayload(axis2MessageContext, filtered, true, true);
             }
         } catch (Exception e) {
-            log.warn("Failed to apply SERVER_PROXY MCP response translation", e);
+            log.warn("Failed to filter SERVER_PROXY tools/list to published catalog", e);
         }
     }
 
@@ -244,6 +196,7 @@ public class McpMediator extends AbstractMediator implements ManagedLifecycle {
                 || APIConstants.MCP.METHOD_RESOURCES_READ.equals(mcpMethod)
                 || APIConstants.MCP.METHOD_RESOURCE_TEMPLATE_LIST.equals(mcpMethod)
                 || APIConstants.MCP.METHOD_PROMPTS_LIST.equals(mcpMethod)
+                || APIConstants.MCP.METHOD_PROMPTS_GET.equals(mcpMethod)
                 || (APIConstants.MCP.METHOD_TOOL_CALL.equals(mcpMethod) && mcpResponse != null)) {
             messageContext.setProperty(MCP_PROCESSED, "true");
             if (mcpResponse != null) {

@@ -18,9 +18,11 @@
 
 package org.wso2.carbon.apimgt.gateway.mcp.request;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.synapse.MessageContext;
+import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
 import org.wso2.carbon.apimgt.gateway.mcp.response.McpResponseDto;
 import org.wso2.carbon.apimgt.gateway.utils.MCPUtils;
 import org.wso2.carbon.apimgt.keymgt.model.entity.API;
@@ -31,16 +33,22 @@ public class McpRequestProcessor {
     public static McpResponseDto processRequest(MessageContext messageContext, API matchedMcpApi,
                                                 McpRequest requestBody) {
 
+        // Prefer negotiated MCP_METHOD (Mcp-Method header wins over body during negotiation).
+        String method = messageContext != null
+                ? (String) messageContext.getProperty(APIMgtGatewayConstants.MCP_METHOD) : null;
+        if (StringUtils.isEmpty(method) && requestBody != null) {
+            method = requestBody.getMethod();
+        }
+
         if (log.isDebugEnabled()) {
-            log.debug("Processing MCP request: " + requestBody.getMethod() + " for API: " +
+            log.debug("Processing MCP request: " + method + " for API: " +
                     matchedMcpApi.getName() + "-" + matchedMcpApi.getVersion());
         }
 
-        String method = requestBody.getMethod();
         McpResponseDto dto = MCPUtils.processInternalRequest(messageContext, matchedMcpApi, requestBody, method);
 
         if (log.isDebugEnabled()) {
-            log.debug("Successfully processed MCP request: " + requestBody.getMethod() + " for API: " +
+            log.debug("Successfully processed MCP request: " + method + " for API: " +
                     matchedMcpApi.getName() + "-" + matchedMcpApi.getVersion());
         }
 

@@ -215,6 +215,8 @@ public class MCPUtils {
                     return new McpResponseDto(MCPPayloadGenerator.generateResourceTemplateListResponse(id), 200, null);
                 case APIConstants.MCP.METHOD_PROMPTS_LIST:
                     return new McpResponseDto(MCPPayloadGenerator.generatePromptListResponse(id), 200, null);
+                case APIConstants.MCP.METHOD_PROMPTS_GET:
+                    return new McpResponseDto(MCPPayloadGenerator.generatePromptGetResponse(id), 200, null);
                 case APIConstants.MCP.METHOD_NOTIFICATION_INITIALIZED:
                     // We don't need to send a reply when it's a notification
                     return null;
@@ -326,8 +328,8 @@ public class MCPUtils {
     }
 
     /**
-     * Handles MCP 2.0 {@code server/discover}. Always answered from gateway catalog metadata
-     * (same posture as {@code tools/list}), including SERVER_PROXY same-era modern clients.
+     * Handles MCP 2.0 {@code server/discover} for local / legacy-southbound answers.
+     * SERVER_PROXY with a modern backend proxies discover upstream in {@code McpMediator}.
      */
     public static McpResponseDto handleMcpServerDiscover(MessageContext messageContext, Object id, API matchedApi) {
         String name = matchedApi.getName();
@@ -430,8 +432,9 @@ public class MCPUtils {
             }
 
             if (backendOperation != null) {
-                //process schema
-                String schemaDefinition = extendedOperation.getSchemaDefinition();
+                //process schema (unwrap MCP 2.0 metadata envelope when present)
+                String schemaDefinition = MCPPayloadGenerator.extractInputSchemaDefinition(
+                        extendedOperation.getSchemaDefinition());
                 if (StringUtils.isEmpty(schemaDefinition)) {
                     throw new McpException(APIConstants.MCP.RpcConstants.INTERNAL_ERROR_CODE,
                             APIConstants.MCP.RpcConstants.INTERNAL_ERROR_MESSAGE,

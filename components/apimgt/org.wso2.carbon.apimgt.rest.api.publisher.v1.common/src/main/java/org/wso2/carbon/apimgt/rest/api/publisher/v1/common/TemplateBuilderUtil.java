@@ -44,6 +44,7 @@ import org.wso2.carbon.apimgt.api.gateway.CredentialDto;
 import org.wso2.carbon.apimgt.api.gateway.GatewayAPIDTO;
 import org.wso2.carbon.apimgt.api.gateway.GatewayContentDTO;
 import org.wso2.carbon.apimgt.api.model.API;
+import org.wso2.carbon.apimgt.api.model.APICategory;
 import org.wso2.carbon.apimgt.api.model.APIOperationMapping;
 import org.wso2.carbon.apimgt.api.model.APIProduct;
 import org.wso2.carbon.apimgt.api.model.APIProductIdentifier;
@@ -241,6 +242,15 @@ public class TemplateBuilderUtil {
         authProperties.put(APIConstants.API_SECURITY, apiSecurity);
         authProperties.put(APIConstants.API_LEVEL_POLICY, apiLevelPolicy);
         authProperties.put(APIConstants.API_TYPE, api.getType());
+        if (api.getApiCategories() != null && !api.getApiCategories().isEmpty()) {
+            String categoryNames = api.getApiCategories().stream()
+                    .map(APICategory::getName)
+                    .filter(StringUtils::isNotBlank)
+                    .collect(Collectors.joining(","));
+            if (StringUtils.isNotBlank(categoryNames)) {
+                authProperties.put(APIConstants.API_CATEGORIES, categoryNames);
+            }
+        }
 
         String subType = api.getSubtype() != null ? api.getSubtype() : APIConstants.API_SUBTYPE_DEFAULT;
         authProperties.put(APIConstants.SUB_TYPE, subType);
@@ -505,6 +515,15 @@ public class TemplateBuilderUtil {
             audiences = "";
         }
         authProperties.put(APIConstants.AUDIENCES, audiences);
+        if (apiProduct.getApiCategories() != null && !apiProduct.getApiCategories().isEmpty()) {
+            String categoryNames = apiProduct.getApiCategories().stream()
+                    .map(APICategory::getName)
+                    .filter(StringUtils::isNotBlank)
+                    .collect(Collectors.joining(","));
+            if (StringUtils.isNotBlank(categoryNames)) {
+                authProperties.put(APIConstants.API_CATEGORIES, categoryNames);
+            }
+        }
         if (!clientCertificateObject.isEmpty()) {
             authProperties.put(APIConstants.CERTIFICATE_INFORMATION, clientCertificateObject.toString());
         }
