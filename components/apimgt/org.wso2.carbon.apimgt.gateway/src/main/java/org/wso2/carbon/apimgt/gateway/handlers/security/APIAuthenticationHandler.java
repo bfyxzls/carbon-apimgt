@@ -39,6 +39,7 @@ import org.apache.synapse.SynapseConstants;
 import org.apache.synapse.core.SynapseEnvironment;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.rest.AbstractHandler;
+import org.apache.synapse.rest.Handler;
 import org.apache.synapse.rest.RESTConstants;
 import org.apache.synapse.transport.passthru.PassThroughConstants;
 import org.apache.synapse.transport.passthru.util.RelayUtils;
@@ -61,6 +62,8 @@ import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.APIManagerConfiguration;
 import org.wso2.carbon.apimgt.impl.APIManagerConfigurationService;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
+import org.wso2.carbon.apimgt.keymgt.SubscriptionDataHolder;
+import org.wso2.carbon.apimgt.keymgt.model.SubscriptionDataStore;
 import org.wso2.carbon.apimgt.tracing.TracingSpan;
 import org.wso2.carbon.apimgt.tracing.TracingTracer;
 import org.wso2.carbon.apimgt.tracing.Util;
@@ -72,6 +75,7 @@ import org.wso2.carbon.metrics.manager.Timer;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashSet;
@@ -79,6 +83,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -99,6 +104,14 @@ import java.util.regex.Pattern;
 public class APIAuthenticationHandler extends AbstractHandler implements ManagedLifecycle {
 
     private static final Log log = LogFactory.getLog(APIAuthenticationHandler.class);
+
+    /**
+     * O(1) lookup cache for aggregated MCP points-skip decisions.
+     * Key: {@code tenantDomain|normalizedContextTemplate} → whether backend has NO_CHECK_POINTS.
+     * Populated lazily on first miss (O(N) scan once); invalidated when any handler categories change.
+     */
+    private static final ConcurrentHashMap<String, Boolean> AGG_BACKEND_NO_CHECK_POINTS_CACHE =
+            new ConcurrentHashMap<>();
 
     private final String type = ExtensionType.AUTHENTICATION.toString();
 
@@ -245,6 +258,8 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
      */
     public void setApiCategories(String apiCategories) {
         this.apiCategories = apiCategories;
+        // Category changes on deploy/redeploy; drop stale aggregated lookup results.
+        AGG_BACKEND_NO_CHECK_POINTS_CACHE.clear();
     }
 
     /**
@@ -809,6 +824,12 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
             return;
         }
 
+        // 如果是聚合服务，MCP_TOOL_NAME 通过英文句号分割后有两部分，取第1部分为真实服务的 context_template，
+        // 查看它对应的服务是否包含分类为 NO_CHECK_POINTS，有则不进行积分检查
+        if (hasApiCategory(APIConstants.AGG_SERVICE) && aggregatedBackendSkipsPoints(messageContext)) {
+            return;
+        }
+
         // 检查用户是否还有积分
         if (messageContext.getProperty("userName") != null) {
             String userNameStr = (String) messageContext.getProperty("userName");
@@ -1189,5 +1210,142 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
         String path = (String) messageContext.getProperty(APIMgtGatewayConstants.API_ELECTED_RESOURCE);
         String httpMethod = (String) messageContext.getProperty(APIMgtGatewayConstants.HTTP_METHOD);
         return (APIConstants.MCP.MCP_RESOURCES_MCP.equals(path) && APIConstants.HTTP_GET.equalsIgnoreCase(httpMethod));
+    }
+
+    /**
+     * Aggregated MCP tool names are {@code context_template.operation}. The first segment is the
+     * backend context_template. Skip points validation when that backend API's categories include
+     * {@link APIConstants#NO_CHECK_POINTS}.
+     * <p>
+     * Uses an in-memory map keyed by tenant + normalized context_template so repeated tools/call
+     * lookups are O(1). The first miss for a key still does a one-time O(N) resolve.
+     */
+    private boolean aggregatedBackendSkipsPoints(MessageContext messageContext) {
+        Object toolNameObj = messageContext.getProperty(APIMgtGatewayConstants.MCP_TOOL_NAME);
+        String toolName = toolNameObj == null ? null : String.valueOf(toolNameObj).trim();
+        if (StringUtils.isBlank(toolName) || "null".equalsIgnoreCase(toolName)) {
+            return false;
+        }
+        String[] parts = toolName.split("\\.", -1);
+        if (parts.length < 2 || StringUtils.isBlank(parts[0])) {
+            if (log.isDebugEnabled()) {
+                log.debug("Aggregated tool name has no context_template segment: " + toolName);
+            }
+            return false;
+        }
+        String contextTemplate = parts[0].trim();
+        String cacheKey = GatewayUtils.getTenantDomain() + "|" + normalizeContextTemplate(contextTemplate);
+        Boolean cached = AGG_BACKEND_NO_CHECK_POINTS_CACHE.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+        boolean skips = resolveAggregatedBackendNoCheckPoints(messageContext, contextTemplate, toolName);
+        Boolean previous = AGG_BACKEND_NO_CHECK_POINTS_CACHE.putIfAbsent(cacheKey, skips);
+        return previous != null ? previous : skips;
+    }
+
+    /**
+     * One-time (per cache miss) resolve: scan subscription memory map + Synapse handlers.
+     */
+    private boolean resolveAggregatedBackendNoCheckPoints(MessageContext messageContext,
+                                                          String contextTemplate, String toolName) {
+        if (messageContext.getEnvironment() == null
+                || messageContext.getEnvironment().getSynapseConfiguration() == null) {
+            return false;
+        }
+        Set<String> backendContexts = findBackendContexts(contextTemplate);
+        Collection<org.apache.synapse.api.API> synapseApis =
+                messageContext.getEnvironment().getSynapseConfiguration().getAPIs();
+        if (synapseApis == null) {
+            return false;
+        }
+        for (org.apache.synapse.api.API synapseApi : synapseApis) {
+            if (!matchesBackendContext(synapseApi.getContext(), contextTemplate, backendContexts)) {
+                continue;
+            }
+            Handler[] handlers = synapseApi.getHandlers();
+            if (handlers == null) {
+                continue;
+            }
+            for (Handler handler : handlers) {
+                if (handler instanceof APIAuthenticationHandler
+                        && ((APIAuthenticationHandler) handler)
+                        .hasApiCategory(APIConstants.NO_CHECK_POINTS)) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Skipping points validation for aggregated tool " + toolName
+                                + ", backend context=" + synapseApi.getContext()
+                                + " has category " + APIConstants.NO_CHECK_POINTS);
+                    }
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Resolves deployed API contexts whose context template matches the tool-name segment.
+     * Uses the same tenant subscription store as {@link GatewayUtils#getAPI(MessageContext)}.
+     */
+    private Set<String> findBackendContexts(String contextTemplate) {
+        Set<String> contexts = new HashSet<>();
+        SubscriptionDataStore store = SubscriptionDataHolder.getInstance()
+                .getTenantSubscriptionStore(GatewayUtils.getTenantDomain());
+        if (store == null) {
+            return contexts;
+        }
+        Map<String, org.wso2.carbon.apimgt.keymgt.model.entity.API> apis = store.getAllAPIsByContextList();
+        if (apis == null) {
+            return contexts;
+        }
+        for (org.wso2.carbon.apimgt.keymgt.model.entity.API api : apis.values()) {
+            if (api == null || StringUtils.isBlank(api.getContext())) {
+                continue;
+            }
+            if (sameContextTemplate(api.getContextTemplate(), contextTemplate)
+                    || sameContextTemplate(api.getContext(), contextTemplate)) {
+                contexts.add(api.getContext());
+            }
+        }
+        return contexts;
+    }
+
+    private boolean matchesBackendContext(String synapseContext, String contextTemplate,
+                                          Set<String> backendContexts) {
+        if (StringUtils.isBlank(synapseContext)) {
+            return false;
+        }
+        if (backendContexts != null && !backendContexts.isEmpty()) {
+            for (String context : backendContexts) {
+                if (synapseContext.equals(context) || synapseContext.endsWith(context)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        String normalized = normalizeContextTemplate(contextTemplate);
+        return synapseContext.equals(normalized)
+                || synapseContext.endsWith(normalized)
+                || synapseContext.contains(normalized + "/");
+    }
+
+    private static boolean sameContextTemplate(String actual, String expected) {
+        if (StringUtils.isBlank(actual) || StringUtils.isBlank(expected)) {
+            return false;
+        }
+        return normalizeContextTemplate(actual).equalsIgnoreCase(normalizeContextTemplate(expected));
+    }
+
+    private static String normalizeContextTemplate(String value) {
+        String normalized = value.trim();
+        if (!normalized.startsWith("/")) {
+            normalized = "/" + normalized;
+        }
+        normalized = normalized.replace("/" + APIConstants.VERSION_PLACEHOLDER, "");
+        normalized = normalized.replace(APIConstants.VERSION_PLACEHOLDER, "");
+        while (normalized.length() > 1 && normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized;
     }
 }

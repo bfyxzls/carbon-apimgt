@@ -2966,6 +2966,8 @@ public final class APIConstants {
     public static final String API_CATEGORIES = "apiCategories";
     /** Category name: skip remaining-points / member-token points validation at gateway. */
     public static final String NO_CHECK_POINTS = "NO_CHECK_POINTS";
+    /** Category name: aggregated MCP/API that dispatches to a backend service by tool name. */
+    public static final String AGG_SERVICE = "AGG_SERVICE";
 
     // AWS Lambda: Constants for aws lambda
     public static final String AWS_SECRET_KEY = "AWS_SECRET_KEY";
