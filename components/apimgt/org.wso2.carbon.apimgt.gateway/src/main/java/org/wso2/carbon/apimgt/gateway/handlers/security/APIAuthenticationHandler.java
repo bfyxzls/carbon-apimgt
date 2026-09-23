@@ -107,8 +107,8 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
 
     /**
      * O(1) lookup cache for aggregated MCP points-skip decisions.
-     * Key: {@code tenantDomain|normalizedContextTemplate} → whether backend has NO_CHECK_POINTS.
-     * Populated lazily on first miss (O(N) scan once); invalidated when any handler categories change.
+     * Key: {@code tenantDomain|apiUuid} → whether backend has NO_CHECK_POINTS.
+     * Populated lazily on first miss; invalidated when any handler categories change.
      */
     private static final ConcurrentHashMap<String, Boolean> AGG_BACKEND_NO_CHECK_POINTS_CACHE =
             new ConcurrentHashMap<>();
@@ -824,8 +824,8 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
             return;
         }
 
-        // 如果是聚合服务，MCP_TOOL_NAME 通过英文句号分割后有两部分，取第1部分为真实服务的 context_template，
-        // 查看它对应的服务是否包含分类为 NO_CHECK_POINTS，有则不进行积分检查
+        // 如果是聚合服务：按 MCP_TOOL_NAME 调 api-portal 解析真实后端 API UUID，
+        // 再判断该后端是否包含分类 NO_CHECK_POINTS；有则不进行积分检查
         if (hasApiCategory(APIConstants.AGG_SERVICE) && aggregatedBackendSkipsPoints(messageContext)) {
             return;
         }
@@ -1213,12 +1213,10 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
     }
 
     /**
-     * Aggregated MCP tool names are {@code context_template.operation}. The first segment is the
-     * backend context_template. Skip points validation when that backend API's categories include
-     * {@link APIConstants#NO_CHECK_POINTS}.
+     * Aggregated MCP：按工具名向 api-portal 解析真实后端 {@code apiUuid}，再判断该后端是否
+     * 配置了 {@link APIConstants#NO_CHECK_POINTS}。
      * <p>
-     * Uses an in-memory map keyed by tenant + normalized context_template so repeated tools/call
-     * lookups are O(1). The first miss for a key still does a one-time O(N) resolve.
+     * In-memory cache keyed by tenant + apiUuid. Portal/admin also cache tool→uuid in Redis.
      */
     private boolean aggregatedBackendSkipsPoints(MessageContext messageContext) {
         Object toolNameObj = messageContext.getProperty(APIMgtGatewayConstants.MCP_TOOL_NAME);
@@ -1226,34 +1224,91 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
         if (StringUtils.isBlank(toolName) || "null".equalsIgnoreCase(toolName)) {
             return false;
         }
-        String[] parts = toolName.split("\\.", -1);
-        if (parts.length < 2 || StringUtils.isBlank(parts[0])) {
+        String apiUuid = fetchBackendApiUuidByToolName(toolName);
+        if (StringUtils.isBlank(apiUuid)) {
             if (log.isDebugEnabled()) {
-                log.debug("Aggregated tool name has no context_template segment: " + toolName);
+                log.debug("Aggregated tool has no backend apiUuid: " + toolName);
             }
             return false;
         }
-        String contextTemplate = parts[0].trim();
-        String cacheKey = GatewayUtils.getTenantDomain() + "|" + normalizeContextTemplate(contextTemplate);
+        String cacheKey = GatewayUtils.getTenantDomain() + "|" + apiUuid;
         Boolean cached = AGG_BACKEND_NO_CHECK_POINTS_CACHE.get(cacheKey);
         if (cached != null) {
             return cached;
         }
-        boolean skips = resolveAggregatedBackendNoCheckPoints(messageContext, contextTemplate, toolName);
+        boolean skips = resolveAggregatedBackendNoCheckPointsByUuid(messageContext, apiUuid, toolName);
         Boolean previous = AGG_BACKEND_NO_CHECK_POINTS_CACHE.putIfAbsent(cacheKey, skips);
         return previous != null ? previous : skips;
     }
 
     /**
-     * One-time (per cache miss) resolve: scan subscription memory map + Synapse handlers.
+     * Calls api-portal {@code GET /mcp/tool-upstream?toolName=} and returns {@code data.apiUuid}.
      */
-    private boolean resolveAggregatedBackendNoCheckPoints(MessageContext messageContext,
-                                                          String contextTemplate, String toolName) {
+    private String fetchBackendApiUuidByToolName(String toolName) {
+        String apiPortalUri = "https://gateway.pkulaw.com/api-portal";
+        if (System.getenv().containsKey("API_PORTAL_URI")) {
+            apiPortalUri = System.getenv().get("API_PORTAL_URI");
+        }
+        try {
+            String encoded = java.net.URLEncoder.encode(toolName, java.nio.charset.StandardCharsets.UTF_8.name());
+            String uri = apiPortalUri + "/mcp/tool-upstream?toolName=" + encoded;
+            try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+                HttpGet httpGet = new HttpGet(uri);
+                httpGet.setHeader("Accept", "application/json");
+                HttpResponse response = httpClient.execute(httpGet);
+                String jsonResponse = EntityUtils.toString(response.getEntity(), "UTF-8");
+                JsonObject jsonObject = JsonParser.parseString(jsonResponse).getAsJsonObject();
+                String code = jsonObject.get("code").getAsString();
+                if (!"200".equals(code)) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("tool-upstream failed for tool=" + toolName + ", code=" + code
+                                + ", msg=" + (jsonObject.has("msg") ? jsonObject.get("msg").getAsString() : ""));
+                    }
+                    return null;
+                }
+                if (!jsonObject.has("data") || jsonObject.get("data").isJsonNull()) {
+                    return null;
+                }
+                JsonObject data = jsonObject.getAsJsonObject("data");
+                if (data == null || !data.has("apiUuid") || data.get("apiUuid").isJsonNull()) {
+                    return null;
+                }
+                String apiUuid = data.get("apiUuid").getAsString();
+                return StringUtils.isBlank(apiUuid) ? null : apiUuid.trim();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to resolve backend apiUuid for aggregated tool: " + toolName, e);
+            return null;
+        }
+    }
+
+    /**
+     * Resolve NO_CHECK_POINTS for the backend API identified by UUID (subscription store + Synapse handlers).
+     */
+    private boolean resolveAggregatedBackendNoCheckPointsByUuid(MessageContext messageContext,
+                                                               String apiUuid, String toolName) {
         if (messageContext.getEnvironment() == null
                 || messageContext.getEnvironment().getSynapseConfiguration() == null) {
             return false;
         }
-        Set<String> backendContexts = findBackendContexts(contextTemplate);
+        SubscriptionDataStore store = SubscriptionDataHolder.getInstance()
+                .getTenantSubscriptionStore(GatewayUtils.getTenantDomain());
+        if (store == null) {
+            return false;
+        }
+        org.wso2.carbon.apimgt.keymgt.model.entity.API backendApi = store.getAPIByUUID(apiUuid);
+        if (backendApi == null) {
+            if (log.isDebugEnabled()) {
+                log.debug("Backend API not in subscription store, apiUuid=" + apiUuid
+                        + ", tool=" + toolName);
+            }
+            return false;
+        }
+        String contextTemplate = backendApi.getContextTemplate();
+        Set<String> backendContexts = new HashSet<>();
+        if (StringUtils.isNotBlank(backendApi.getContext())) {
+            backendContexts.add(backendApi.getContext());
+        }
         Collection<org.apache.synapse.api.API> synapseApis =
                 messageContext.getEnvironment().getSynapseConfiguration().getAPIs();
         if (synapseApis == null) {
@@ -1273,7 +1328,8 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
                         .hasApiCategory(APIConstants.NO_CHECK_POINTS)) {
                     if (log.isDebugEnabled()) {
                         log.debug("Skipping points validation for aggregated tool " + toolName
-                                + ", backend context=" + synapseApi.getContext()
+                                + ", backend apiUuid=" + apiUuid
+                                + ", context=" + synapseApi.getContext()
                                 + " has category " + APIConstants.NO_CHECK_POINTS);
                     }
                     return true;
@@ -1281,33 +1337,6 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
             }
         }
         return false;
-    }
-
-    /**
-     * Resolves deployed API contexts whose context template matches the tool-name segment.
-     * Uses the same tenant subscription store as {@link GatewayUtils#getAPI(MessageContext)}.
-     */
-    private Set<String> findBackendContexts(String contextTemplate) {
-        Set<String> contexts = new HashSet<>();
-        SubscriptionDataStore store = SubscriptionDataHolder.getInstance()
-                .getTenantSubscriptionStore(GatewayUtils.getTenantDomain());
-        if (store == null) {
-            return contexts;
-        }
-        Map<String, org.wso2.carbon.apimgt.keymgt.model.entity.API> apis = store.getAllAPIsByContextList();
-        if (apis == null) {
-            return contexts;
-        }
-        for (org.wso2.carbon.apimgt.keymgt.model.entity.API api : apis.values()) {
-            if (api == null || StringUtils.isBlank(api.getContext())) {
-                continue;
-            }
-            if (sameContextTemplate(api.getContextTemplate(), contextTemplate)
-                    || sameContextTemplate(api.getContext(), contextTemplate)) {
-                contexts.add(api.getContext());
-            }
-        }
-        return contexts;
     }
 
     private boolean matchesBackendContext(String synapseContext, String contextTemplate,
@@ -1323,17 +1352,13 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
             }
             return false;
         }
+        if (StringUtils.isBlank(contextTemplate)) {
+            return false;
+        }
         String normalized = normalizeContextTemplate(contextTemplate);
         return synapseContext.equals(normalized)
                 || synapseContext.endsWith(normalized)
                 || synapseContext.contains(normalized + "/");
-    }
-
-    private static boolean sameContextTemplate(String actual, String expected) {
-        if (StringUtils.isBlank(actual) || StringUtils.isBlank(expected)) {
-            return false;
-        }
-        return normalizeContextTemplate(actual).equalsIgnoreCase(normalizeContextTemplate(expected));
     }
 
     private static String normalizeContextTemplate(String value) {

@@ -52,6 +52,7 @@ import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
 import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityUtils;
 import org.wso2.carbon.apimgt.gateway.handlers.security.AuthenticationContext;
 import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
+import org.wso2.carbon.apimgt.gateway.utils.MCPProtocolNegotiator;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.APIManagerConfiguration;
 import org.wso2.carbon.apimgt.keymgt.SubscriptionDataHolder;
@@ -464,14 +465,25 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         if (messageContext.getPropertyKeySet().contains(MCP_METHOD)) {
             customProperties.put("mcpMethod", messageContext.getProperty(MCP_METHOD));
         }
-        // properties.protocolVersion reflects negotiated northbound dialect (MCP_PROTOCOL_VERSION).
-        // Fallback: backend version, then default 2025-06-18.
+        // properties.protocolVersion: prefer HTTP header MCP-Protocol-Version (unified for MCP 1.0/2.0
+        // over Streamable HTTP), then negotiated northbound, then backend, then default.
+        // Do NOT rely on request params._meta "io.modelcontextprotocol/protocolVersion": many clients
+        // only send the header on tools/call and do not echo server-response _meta back.
+        String headerProtocolVersion = MCPProtocolNegotiator.getTransportHeader(messageContext,
+                APIConstants.MCP.MCP_PROTOCOL_VERSION_HEADER);
         Object northboundProtocolVersion =
                 messageContext.getProperty(APIMgtGatewayConstants.MCP_PROTOCOL_VERSION_KEY);
         Object backendProtocolVersion =
                 messageContext.getProperty(APIMgtGatewayConstants.MCP_BACKEND_PROTOCOL_VERSION_KEY);
-        String publishedProtocolVersion =
-                resolvePublishedProtocolVersion(northboundProtocolVersion, backendProtocolVersion);
+        String publishedProtocolVersion = resolvePublishedProtocolVersion(
+                headerProtocolVersion, northboundProtocolVersion, backendProtocolVersion);
+        if (log.isInfoEnabled()) {
+            log.info("MCP audit protocolVersion resolved to [" + publishedProtocolVersion
+                    + "], header(MCP-Protocol-Version)=" + headerProtocolVersion
+                    + ", northbound=" + northboundProtocolVersion
+                    + ", backend=" + backendProtocolVersion
+                    + ", mcpMethod=" + messageContext.getProperty(MCP_METHOD));
+        }
         customProperties.put(APIMgtGatewayConstants.MCP_PROTOCOL_VERSION, publishedProtocolVersion);
         customProperties.put("mcpProtocolEra",
                 APIConstants.MCP.resolveProtocolEra(publishedProtocolVersion));
@@ -779,9 +791,16 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
 
     /**
      * Chooses the protocol version written to analytics {@code properties.protocolVersion}.
-     * Prefer negotiated northbound, then backend, then legacy default {@code 2025-06-18}.
+     * Prefer HTTP {@code MCP-Protocol-Version} header (present on both MCP 1.0 and 2.0 Streamable HTTP
+     * requests), then negotiated northbound context value, then backend, then legacy default
+     * {@code 2025-06-18}.
      */
-    private static String resolvePublishedProtocolVersion(Object northbound, Object backend) {
+    private static String resolvePublishedProtocolVersion(Object headerVersion, Object northbound,
+                                                          Object backend) {
+        String header = toNonEmptyVersion(headerVersion);
+        if (header != null) {
+            return header;
+        }
         String north = toNonEmptyVersion(northbound);
         if (north != null) {
             return north;
