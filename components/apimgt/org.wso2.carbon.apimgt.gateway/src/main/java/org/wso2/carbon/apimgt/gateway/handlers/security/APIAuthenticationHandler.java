@@ -863,7 +863,8 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
                             String errorMsg =
                                     "User " + userId + " has insufficient points. Remaining points: " + remainingPoints;
                             log.error(errorMsg);
-                            Pair<Integer, String> error = Pair.of(90001, errorMsg);
+                            Pair<Integer, String> error =
+                                    Pair.of(APISecurityConstants.API_AUTH_INSUFFICIENT_POINTS, errorMsg);
                             throw new APISecurityException(error.getKey(), error.getValue());
                         }
 
@@ -871,14 +872,16 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
                     } else {
                         String msg = jsonObject.get("msg").getAsString();
                         log.error("API request failed with code: " + code + ", msg: " + msg);
-                        Pair<Integer, String> error = Pair.of(90001, msg);
+                        Pair<Integer, String> error =
+                                Pair.of(APISecurityConstants.API_AUTH_INSUFFICIENT_POINTS, msg);
                         throw new APISecurityException(error.getKey(), error.getValue());
                     }
 
                 } catch (Exception e) {
                     log.error("Error while checking remaining points for user: " + userId, e);
                     Pair<Integer, String> error =
-                            Pair.of(90001, "Error while checking remaining points for user: " + userId);
+                            Pair.of(APISecurityConstants.API_AUTH_INSUFFICIENT_POINTS,
+                                    "法宝 MCP 积分不足，请前往https://mcp.pkulaw.com/console进行积分充值" );
                     throw new APISecurityException(error.getKey(), error.getValue());
                 }
 
@@ -910,20 +913,23 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
                 if (!result) {
                     String msg = jsonObject.get("msg").getAsString();
                     log.error("API request failed with code: " + code + ", msg: " + msg);
-                    Pair<Integer, String> error = Pair.of(90002, msg);
+                    Pair<Integer, String> error =
+                            Pair.of(APISecurityConstants.API_AUTH_MEMBER_TOKEN_POINTS_UNAVAILABLE, msg);
                     throw new APISecurityException(error.getKey(), error.getValue());
                 }
             } else {
                 String msg = jsonObject.get("msg").getAsString();
                 log.error("API request failed with code: " + code + ", msg: " + msg);
-                Pair<Integer, String> error = Pair.of(90002, msg);
+                Pair<Integer, String> error =
+                        Pair.of(APISecurityConstants.API_AUTH_MEMBER_TOKEN_POINTS_UNAVAILABLE, msg);
                 throw new APISecurityException(error.getKey(), error.getValue());
             }
 
         } catch (Exception e) {
             log.error("Error while checking remaining points for token: " + token, e);
             Pair<Integer, String> error =
-                    Pair.of(90002, "Error while checking remaining points for token: " + token);
+                    Pair.of(APISecurityConstants.API_AUTH_MEMBER_TOKEN_POINTS_UNAVAILABLE,
+                            "Error while checking remaining points for token: " + token);
             throw new APISecurityException(error.getKey(), error.getValue());
         }
     }
@@ -1026,6 +1032,9 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
         if (e.getErrorCode() == APISecurityConstants.API_AUTH_GENERAL_ERROR ||
                 e.getErrorCode() == APISecurityConstants.API_AUTH_MISSING_OPEN_API_DEF) {
             status = HttpStatus.SC_INTERNAL_SERVER_ERROR;
+        } else if (e.getErrorCode() == APISecurityConstants.API_AUTH_INSUFFICIENT_POINTS ||
+                e.getErrorCode() == APISecurityConstants.API_AUTH_MEMBER_TOKEN_POINTS_UNAVAILABLE) {
+            status = HttpStatus.SC_OK;
         } else if (e.getErrorCode() == APISecurityConstants.API_AUTH_INCORRECT_API_RESOURCE ||
                 e.getErrorCode() == APISecurityConstants.API_AUTH_FORBIDDEN ||
                 e.getErrorCode() == APISecurityConstants.API_OAUTH_INVALID_AUDIENCES ||
@@ -1056,6 +1065,18 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
         }
 
         messageContext.setProperty(APIMgtGatewayConstants.HTTP_RESPONSE_STATUS_CODE, status);
+
+        if (e.getErrorCode() == APISecurityConstants.API_AUTH_INSUFFICIENT_POINTS
+                || e.getErrorCode() == APISecurityConstants.API_AUTH_MEMBER_TOKEN_POINTS_UNAVAILABLE) {
+            MCPUtils.sendPointsBusinessError(messageContext, e.getErrorCode());
+            return;
+        }
+        if (e.getErrorCode() == APISecurityConstants.API_AUTH_FORBIDDEN
+                && (APIConstants.API_TYPE_MCP.equalsIgnoreCase(apiType) || MCPUtils.isMcpRequest(messageContext))) {
+            MCPUtils.sendMcpJsonRpcError(messageContext, e.getErrorCode(),
+                    APISecurityConstants.API_AUTH_MCP_NOT_SUBSCRIBED_MESSAGE, HttpStatus.SC_FORBIDDEN);
+            return;
+        }
 
         // Invoke the custom error handler specified by the user
         if (sequence != null && !sequence.mediate(messageContext)) {

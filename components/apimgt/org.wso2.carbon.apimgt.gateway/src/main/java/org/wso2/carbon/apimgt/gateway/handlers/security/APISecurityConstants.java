@@ -60,6 +60,7 @@ public class APISecurityConstants {
 
     public static final int API_AUTH_FORBIDDEN = 900908;
     public static final String API_AUTH_FORBIDDEN_MESSAGE = "Resource forbidden ";
+    public static final String API_AUTH_MCP_NOT_SUBSCRIBED_MESSAGE = "当前未订阅此 MCP 服务";
 
     public static final int SUBSCRIPTION_INACTIVE = 900909;
     public static final String SUBSCRIPTION_INACTIVE_MESSAGE = "The subscription to the API is inactive";
@@ -83,6 +84,18 @@ public class APISecurityConstants {
     public static final int API_OAUTH_INVALID_AUDIENCES = 900914;
     public static final String API_OAUTH_INVALID_AUDIENCES_MESSAGE = "Access Denied";
     public static final String API_OAUTH_INVALID_AUDIENCES_DESCRIPTION = "The access token does not allow you to access the requested resource";
+
+    /** Remaining points are insufficient. Business error code stays 900001; HTTP status is 200. */
+    public static final int API_AUTH_INSUFFICIENT_POINTS = 900001;
+    public static final String API_AUTH_INSUFFICIENT_POINTS_MESSAGE = "Insufficient MCP points";
+    public static final String API_AUTH_INSUFFICIENT_POINTS_BIZ_MESSAGE =
+            "法宝 MCP 积分不足，请前往https://mcp.pkulaw.com/console进行积分充值";
+
+    /** Member token points are unavailable. Business error code stays 900002; HTTP status is 200. */
+    public static final int API_AUTH_MEMBER_TOKEN_POINTS_UNAVAILABLE = 900002;
+    public static final String API_AUTH_MEMBER_TOKEN_POINTS_UNAVAILABLE_MESSAGE = "Insufficient MCP member token quota";
+    public static final String API_AUTH_MEMBER_TOKEN_POINTS_UNAVAILABLE_BIZ_MESSAGE =
+            "法宝 MCP 成员Token额度不足，请前往https://mcp.pkulaw.com/console/sub-account-tokens进行配置";
 
     public static final int OAUTH_TEMPORARY_SERVER_ERROR = 900424;
     public static final String OAUTH_TEMPORARY_SERVER_ERROR_MESSAGE = "Temporary Server Error";
@@ -147,6 +160,12 @@ public class APISecurityConstants {
                 break;
             case API_AUTH_ACCESS_TOKEN_CLAIMS_INVALID:
                 errorMessage = API_AUTH_ACCESS_TOKEN_CLAIMS_INVALID_MESSAGE;
+                break;
+            case API_AUTH_INSUFFICIENT_POINTS:
+                errorMessage = API_AUTH_INSUFFICIENT_POINTS_MESSAGE;
+                break;
+            case API_AUTH_MEMBER_TOKEN_POINTS_UNAVAILABLE:
+                errorMessage = API_AUTH_MEMBER_TOKEN_POINTS_UNAVAILABLE_MESSAGE;
                 break;
             default:
                 errorMessage = API_AUTH_GENERAL_ERROR_MESSAGE;

@@ -19,6 +19,7 @@
 package org.wso2.carbon.apimgt.gateway.utils;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import org.apache.axis2.AxisFault;
 import org.apache.axis2.Constants;
@@ -677,6 +678,80 @@ public class MCPUtils {
                 org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.IS_ASYNC_API, true);
         messageContext.setProperty(APIConstants.AsyncApi.ASYNC_MESSAGE_TYPE,
                 APIConstants.AsyncApi.ASYNC_MESSAGE_TYPE_SUBSCRIBE);
+    }
+
+    /**
+     * Sends 90001/90002 as an MCP JSON-RPC error with HTTP 200.
+     * {@code error.code} is the business code and {@code error.message} is the client-facing text.
+     *
+     * @param messageContext Synapse message context
+     * @param bizCode        90001 or 90002
+     */
+    public static void sendPointsBusinessError(MessageContext messageContext, int bizCode) {
+        String message = bizCode == APISecurityConstants.API_AUTH_MEMBER_TOKEN_POINTS_UNAVAILABLE
+                ? APISecurityConstants.API_AUTH_MEMBER_TOKEN_POINTS_UNAVAILABLE_BIZ_MESSAGE
+                : APISecurityConstants.API_AUTH_INSUFFICIENT_POINTS_BIZ_MESSAGE;
+        sendMcpJsonRpcError(messageContext, bizCode, message, HttpStatus.SC_OK);
+    }
+
+    /**
+     * Sends a JSON-RPC error body back to the MCP client.
+     *
+     * @param messageContext Synapse message context
+     * @param code           JSON-RPC error code
+     * @param message        client-facing error message
+     * @param httpStatus     HTTP status to return
+     */
+    public static void sendMcpJsonRpcError(MessageContext messageContext, int code, String message, int httpStatus) {
+        String payload = buildMcpJsonRpcError(resolveMcpRequestId(messageContext), code, message);
+        org.apache.axis2.context.MessageContext axis2MC =
+                ((Axis2MessageContext) messageContext).getAxis2MessageContext();
+        try {
+            JsonUtil.removeJsonPayload(axis2MC);
+            JsonUtil.getNewJsonPayload(axis2MC, payload, true, true);
+            axis2MC.setProperty(Constants.Configuration.MESSAGE_TYPE, APIConstants.APPLICATION_JSON_MEDIA_TYPE);
+            axis2MC.setProperty(Constants.Configuration.CONTENT_TYPE, APIConstants.APPLICATION_JSON_MEDIA_TYPE);
+        } catch (AxisFault e) {
+            log.warn("Failed to set MCP JSON-RPC error payload", e);
+        }
+        messageContext.setProperty(APIMgtGatewayConstants.HTTP_RESPONSE_STATUS_CODE, httpStatus);
+        axis2MC.removeProperty(PassThroughConstants.NO_ENTITY_BODY);
+        // Mark this as a client response. sendFault() leaves the inbound EPR in place
+        // and passthrough tries to call the request path as a backend URL.
+        Utils.send(messageContext, httpStatus);
+    }
+
+    public static boolean isMcpRequest(MessageContext messageContext) {
+        if (messageContext.getProperty("isMcp") != null) {
+            return true;
+        }
+        Object apiType = messageContext.getProperty(APIMgtGatewayConstants.API_TYPE);
+        return apiType != null && APIConstants.API_TYPE_MCP.equalsIgnoreCase(String.valueOf(apiType));
+    }
+
+    private static Object resolveMcpRequestId(MessageContext messageContext) {
+        Object requestBody = messageContext.getProperty(APIMgtGatewayConstants.MCP_REQUEST_BODY);
+        if (requestBody instanceof McpRequest) {
+            return ((McpRequest) requestBody).getId();
+        }
+        return messageContext.getProperty(APIConstants.MCP.RECEIVED_MCP_ID);
+    }
+
+    private static String buildMcpJsonRpcError(Object id, int bizCode, String message) {
+        JsonObject error = new JsonObject();
+        error.addProperty("code", bizCode);
+        error.addProperty("message", message);
+        JsonObject response = new JsonObject();
+        response.addProperty(APIConstants.MCP.RpcConstants.JSON_RPC, APIConstants.MCP.RpcConstants.JSON_RPC_VERSION);
+        if (id instanceof Number) {
+            response.addProperty(APIConstants.MCP.RpcConstants.ID, (Number) id);
+        } else if (id != null) {
+            response.addProperty(APIConstants.MCP.RpcConstants.ID, String.valueOf(id));
+        } else {
+            response.add(APIConstants.MCP.RpcConstants.ID, JsonNull.INSTANCE);
+        }
+        response.add("error", error);
+        return new Gson().toJson(response);
     }
 
     /**
