@@ -60,7 +60,7 @@ public class APISecurityConstants {
 
     public static final int API_AUTH_FORBIDDEN = 900908;
     public static final String API_AUTH_FORBIDDEN_MESSAGE = "Resource forbidden ";
-    public static final String API_AUTH_MCP_NOT_SUBSCRIBED_MESSAGE = "当前未订阅此 MCP 服务";
+    public static final String API_AUTH_MCP_NOT_SUBSCRIBED_MESSAGE = "当前MCP服务处于关闭状态，请前往 https://mcp.pkulaw.com/console/apps 开启服务";
 
     public static final int SUBSCRIPTION_INACTIVE = 900909;
     public static final String SUBSCRIPTION_INACTIVE_MESSAGE = "The subscription to the API is inactive";

@@ -61,6 +61,7 @@ import org.wso2.carbon.apimgt.gateway.handlers.security.AuthenticationContext;
 import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
 import org.wso2.carbon.apimgt.gateway.throttling.ThrottleDataHolder;
 import org.wso2.carbon.apimgt.gateway.utils.GatewayUtils;
+import org.wso2.carbon.apimgt.gateway.utils.MCPUtils;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.dto.ConditionDto;
 import org.wso2.carbon.apimgt.impl.dto.VerbInfoDTO;
@@ -952,6 +953,11 @@ public class ThrottleHandler extends AbstractHandler implements ManagedLifecycle
         } catch (AxisFault axisFault) {
             //In case of an error it is logged and the process is continued because we're setting a fault message in the payload.
             log.error("Error occurred while consuming and discarding the message", axisFault);
+        }
+        if (errorCode == APIThrottleConstants.BLOCKED_ERROR_CODE && MCPUtils.isMcpRequest(messageContext)) {
+            MCPUtils.sendMcpJsonRpcError(messageContext, APIThrottleConstants.BLOCKED_ERROR_CODE,
+                    APIThrottleConstants.MCP_REQUEST_BLOCKED_MESSAGE, httpErrorCode);
+            return;
         }
         Mediator sequence = messageContext.getSequence(APIThrottleConstants.API_THROTTLE_OUT_HANDLER);
 

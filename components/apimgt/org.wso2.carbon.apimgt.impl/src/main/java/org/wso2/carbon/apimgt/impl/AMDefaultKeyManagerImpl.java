@@ -839,7 +839,7 @@ public class AMDefaultKeyManagerImpl extends AbstractKeyManager {
 
         try {
             // TEMP DEBUG: print token sent to /oauth2/introspect (remove after troubleshooting)
-            log.warn("TEMP DEBUG: calling token introspection with accessToken=[" + accessToken
+            log.debug("TEMP DEBUG: calling token introspection with accessToken=[" + accessToken
                     + "], length=" + (accessToken != null ? accessToken.length() : 0)
                     + ", segmentCount=" + (accessToken != null ? accessToken.split("\\.").length : 0));
             IntrospectInfo introspectInfo = introspectionClient.introspect(accessToken);

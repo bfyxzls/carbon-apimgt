@@ -791,7 +791,13 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
         MCPUtils.setMcpWwwAuthenticateHeader(messageContext, HttpStatus.SC_UNAUTHORIZED, "invalid_request",
                 "Access token is missing");
         MCPUtils.discardPassthroughMessage(messageContext);
-        Utils.sendFault(messageContext, HttpStatus.SC_UNAUTHORIZED);
+        org.apache.axis2.context.MessageContext axis2MC =
+                ((Axis2MessageContext) messageContext).getAxis2MessageContext();
+        axis2MC.removeProperty(PassThroughConstants.NO_ENTITY_BODY);
+        messageContext.setProperty(APIMgtGatewayConstants.HTTP_RESPONSE_STATUS_CODE, HttpStatus.SC_UNAUTHORIZED);
+        // sendFault() keeps the inbound EPR (/context/version/mcp). Passthrough then opens
+        // that relative path as a backend URL and the client waits until the gateway timeout.
+        Utils.send(messageContext, HttpStatus.SC_UNAUTHORIZED);
     }
 
     private void setToolsCallUnauthorizedResponseBody(MessageContext messageContext) {

@@ -178,6 +178,51 @@ public class SynapseAnalyticsDataProviderTestCase {
     }
 
     /**
+     * properties.userAgent 清洗为业务来源标识；最外层 userAgentHeader 仍是完整请求头。
+     */
+    @Test
+    public void testPropertiesUserAgentKeepsProductNameOnly() {
+        Map<String, Object> properties = new HashMap<>();
+        properties.put(Constants.USER_AGENT_PROPERTY, "WorkBuddy/5.8.1");
+        Axis2MessageContext messageContext = mockAxis2MessageContext(properties, new LinkedHashMap<>());
+        SynapseAnalyticsDataProvider provider = new SynapseAnalyticsDataProvider(messageContext);
+
+        Assert.assertEquals("WorkBuddy/5.8.1", provider.getUserAgentHeader());
+        Assert.assertEquals("WorkBuddy", provider.getProperties().get("userAgent"));
+    }
+
+    @Test
+    public void testPropertiesUserAgentWithoutSlashStaysWhole() {
+        Map<String, Object> properties = new HashMap<>();
+        properties.put(Constants.USER_AGENT_PROPERTY, "curl");
+        Axis2MessageContext messageContext = mockAxis2MessageContext(properties, new LinkedHashMap<>());
+        SynapseAnalyticsDataProvider provider = new SynapseAnalyticsDataProvider(messageContext);
+
+        Assert.assertEquals("curl", provider.getUserAgentHeader());
+        Assert.assertEquals("curl", provider.getProperties().get("userAgent"));
+    }
+
+    @Test
+    public void testPropertiesUserAgentPrefersAppOverBrowserShell() {
+        String raw = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                + "Qoder/0.4.4 Chrome/150.0.7871.114 Electron/43.1.1 Safari/537.36";
+        Map<String, Object> properties = new HashMap<>();
+        properties.put(Constants.USER_AGENT_PROPERTY, raw);
+        Axis2MessageContext messageContext = mockAxis2MessageContext(properties, new LinkedHashMap<>());
+        SynapseAnalyticsDataProvider provider = new SynapseAnalyticsDataProvider(messageContext);
+
+        Assert.assertEquals(raw, provider.getUserAgentHeader());
+        Assert.assertEquals("Qoder", provider.getProperties().get("userAgent"));
+    }
+
+    @Test
+    public void testToUserAgentSourceLabelBrowserOnlyFallsBackToMozilla() {
+        String raw = "Mozilla/5.0 (iPhone; CPU iPhone OS 5_1_1 like Mac OS X) AppleWebKit/534.46 "
+                + "(KHTML, like Gecko) Version/5.1 Mobile/9B206 Safari/7534.48.3";
+        Assert.assertEquals("Mozilla", SynapseAnalyticsDataProvider.toUserAgentSourceLabel(raw));
+    }
+
+    /**
      * Verifies guardrail and MCP analytics fields are emitted in custom properties for MCP guardrail failures.
      */
     @Test

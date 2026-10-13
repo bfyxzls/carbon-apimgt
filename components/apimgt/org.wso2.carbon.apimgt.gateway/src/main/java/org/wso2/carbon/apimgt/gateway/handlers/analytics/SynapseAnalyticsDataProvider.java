@@ -70,10 +70,16 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS;
 import static org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants.API_OBJECT;
@@ -87,6 +93,26 @@ import static org.wso2.carbon.apimgt.gateway.handlers.mcp.McpInitHandler.MCP_TOO
 public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
 
     private static final Log log = LogFactory.getLog(SynapseAnalyticsDataProvider.class);
+
+    /**
+     * UA 产品段：Name/version，如 {@code Qoder/0.4.4}、{@code WorkBuddy/5.8.1}。
+     */
+    private static final Pattern UA_PRODUCT_TOKEN = Pattern.compile(
+            "([A-Za-z][A-Za-z0-9._+-]*)/([0-9][^\\s]*)");
+
+    /**
+     * 浏览器 / 引擎等干扰项（大小写不敏感），归一化来源时跳过，优先保留业务客户端名。
+     */
+    private static final Set<String> UA_NOISE_PRODUCTS;
+
+    static {
+        Set<String> noise = new HashSet<>();
+        Collections.addAll(noise,
+                "mozilla", "applewebkit", "webkit", "chrome", "chromium", "safari", "firefox",
+                "gecko", "khtml", "version", "mobile", "crios", "edg", "edge", "edga", "edgios",
+                "opr", "opera", "electron", "msie", "trident", "dalvik");
+        UA_NOISE_PRODUCTS = Collections.unmodifiableSet(noise);
+    }
 
     static Gson gson = new Gson();
 
@@ -477,8 +503,8 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
                 messageContext.getProperty(APIMgtGatewayConstants.MCP_BACKEND_PROTOCOL_VERSION_KEY);
         String publishedProtocolVersion = resolvePublishedProtocolVersion(
                 headerProtocolVersion, northboundProtocolVersion, backendProtocolVersion);
-        if (log.isInfoEnabled()) {
-            log.info("MCP audit protocolVersion resolved to [" + publishedProtocolVersion
+        if (log.isDebugEnabled()) {
+            log.debug("MCP audit protocolVersion resolved to [" + publishedProtocolVersion
                     + "], header(MCP-Protocol-Version)=" + headerProtocolVersion
                     + ", northbound=" + northboundProtocolVersion
                     + ", backend=" + backendProtocolVersion
@@ -545,7 +571,12 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
             }
         }
         if (userAgent != null) {
-            customProperties.put("userAgent", userAgent);
+            // properties.userAgent：清洗为业务来源标识（如 Qoder），供 ES 检索 / terms 聚合。
+            // 最外层 userAgentHeader 仍是完整请求头。
+            String sourceLabel = toUserAgentSourceLabel(userAgent);
+            if (sourceLabel != null) {
+                customProperties.put("userAgent", sourceLabel);
+            }
         }
         if (messageContext.getPropertyKeySet().contains("headers")) {
             customProperties.put("headers",
@@ -810,6 +841,60 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
             return south;
         }
         return APIConstants.MCP.PROTOCOL_VERSION_2025_JUNE;
+    }
+
+    /**
+     * 将来源统计用的 User-Agent 清洗为单个业务标识（字符串，非数组）。
+     * <ul>
+     *   <li>{@code WorkBuddy/5.8.1} → {@code WorkBuddy}</li>
+     *   <li>浏览器壳 + {@code Qoder/0.4.4} + Chrome/Electron/Safari → {@code Qoder}</li>
+     *   <li>{@code curl} / {@code curl/7.68.0} → {@code curl}</li>
+     * </ul>
+     * 跳过 Mozilla/AppleWebKit/Chrome/Safari/Electron 等干扰项；版本号丢弃。
+     */
+    static String toUserAgentSourceLabel(Object userAgent) {
+        if (userAgent == null) {
+            return null;
+        }
+        String value = String.valueOf(userAgent).trim();
+        if (value.isEmpty()) {
+            return null;
+        }
+
+        List<String> products = new ArrayList<>();
+        Matcher matcher = UA_PRODUCT_TOKEN.matcher(value);
+        while (matcher.find()) {
+            String name = matcher.group(1);
+            if (name != null && !name.isEmpty()) {
+                products.add(name);
+            }
+        }
+
+        for (String product : products) {
+            if (!isUaNoiseProduct(product)) {
+                return product;
+            }
+        }
+
+        // 无 Name/version，且整体较短、无空格：视为简单客户端名（如 curl、PostmanRuntime）
+        if (products.isEmpty() && value.length() <= 64 && value.indexOf(' ') < 0 && value.indexOf('(') < 0) {
+            int slash = value.indexOf('/');
+            String simple = (slash < 0 ? value : value.substring(0, slash)).trim();
+            return simple.isEmpty() ? null : simple;
+        }
+
+        // 仅剩浏览器壳：回退第一个产品名（通常是 Mozilla），避免丢字段
+        if (!products.isEmpty()) {
+            return products.get(0);
+        }
+
+        int slash = value.indexOf('/');
+        String prefix = slash < 0 ? value : value.substring(0, slash).trim();
+        return prefix.isEmpty() ? null : prefix;
+    }
+
+    private static boolean isUaNoiseProduct(String product) {
+        return UA_NOISE_PRODUCTS.contains(product.toLowerCase(Locale.ROOT));
     }
 
     private static String toNonEmptyVersion(Object value) {

@@ -785,7 +785,9 @@ public class MCPUtils {
             setMcpWwwAuthenticateHeader(messageContext, HttpStatus.SC_UNAUTHORIZED, null, null);
         }
         discardPassthroughMessage(messageContext);
-        Utils.sendFault(messageContext, responseDto.getStatusCode());
+        axis2MC.removeProperty(PassThroughConstants.NO_ENTITY_BODY);
+        messageContext.setProperty(APIMgtGatewayConstants.HTTP_RESPONSE_STATUS_CODE, responseDto.getStatusCode());
+        Utils.send(messageContext, responseDto.getStatusCode());
     }
 
     /**

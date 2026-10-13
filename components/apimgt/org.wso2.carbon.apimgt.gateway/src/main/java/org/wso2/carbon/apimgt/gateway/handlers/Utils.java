@@ -275,7 +275,10 @@ public class Utils {
         axis2MC.setProperty(NhttpConstants.HTTP_SC, status);
         messageContext.setResponse(true);
         messageContext.setProperty(SynapseConstants.RESPONSE, "true");
+        // Inbound REST To/TRANSPORT_URL is the request path (no scheme). If left set,
+        // passthrough treats sendBack as a backend call and throws MalformedURLException.
         messageContext.setTo(null);
+        axis2MC.removeProperty(Constants.Configuration.TRANSPORT_URL);
         axis2MC.removeProperty(Constants.Configuration.CONTENT_TYPE);
         Axis2Sender.sendBack(messageContext);
     }

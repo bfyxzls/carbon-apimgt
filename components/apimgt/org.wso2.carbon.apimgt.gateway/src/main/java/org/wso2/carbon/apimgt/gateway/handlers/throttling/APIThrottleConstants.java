@@ -29,6 +29,8 @@ public class APIThrottleConstants {
     public static final int SUBSCRIPTION_BURST_THROTTLE_OUT_ERROR_CODE = 900807;
     public static final int APPLICATION_BURST_THROTTLE_OUT_ERROR_CODE = 900809;
     public static final int BLOCKED_ERROR_CODE = 900805;
+    public static final String MCP_REQUEST_BLOCKED_MESSAGE =
+            "法宝 MCP 请求被拦截，过于频繁的访问我们检测到风险";
     public static final int CUSTOM_POLICY_THROTTLE_OUT_ERROR_CODE = 900806;
     public static final int CONNECTIONS_COUNT_THROTTLE_OUT_ERROR_CODE = 900808;
     public static final int EVENTS_COUNT_THROTTLE_OUT_ERROR_CODE = 900808;
