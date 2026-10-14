@@ -18,6 +18,7 @@
 
 package org.wso2.carbon.apimgt.keymgt.handlers;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.apimgt.api.APIManagementException;
@@ -322,17 +323,11 @@ public abstract class AbstractKeyValidationHandler implements KeyValidationHandl
         } else if (!infoDTO.isAuthorized() && infoDTO.getValidationStatus() == 0) {
             //Scenario where validation failed and message is not set
             infoDTO.setValidationStatus(APIConstants.KeyValidationStatus.API_AUTH_RESOURCE_FORBIDDEN);
-            if (app != null) {
-                infoDTO.setApplicationName(app.getName());
-                infoDTO.setSubscriber(app.getSubName());
-            }
+            populateApplicationDetails(infoDTO, app, key != null ? key.getKeyType() : null);
         } else {
-            if (app != null) {
-                infoDTO.setApplicationName(app.getName());
-                infoDTO.setSubscriber(app.getSubName());
-            }
             infoDTO.setAuthorized(false);
             infoDTO.setValidationStatus(APIConstants.KeyValidationStatus.API_AUTH_RESOURCE_FORBIDDEN);
+            populateApplicationDetails(infoDTO, app, key != null ? key.getKeyType() : null);
         }
 
         return infoDTO;
@@ -393,6 +388,7 @@ public abstract class AbstractKeyValidationHandler implements KeyValidationHandl
                 // If API key not belongs to the API Invoked.
                 infoDTO.setAuthorized(false);
                 infoDTO.setValidationStatus(APIConstants.KeyValidationStatus.API_AUTH_RESOURCE_FORBIDDEN);
+                populateApplicationDetails(infoDTO, app, apiKeyInfo.getKeyType());
             } else {
                 if (log.isDebugEnabled()) {
                     log.debug("API key belongs to the API Invoked.");
@@ -426,6 +422,7 @@ public abstract class AbstractKeyValidationHandler implements KeyValidationHandl
                     } else {
                         infoDTO.setAuthorized(false);
                         infoDTO.setValidationStatus(APIConstants.KeyValidationStatus.API_AUTH_RESOURCE_FORBIDDEN);
+                        populateApplicationDetails(infoDTO, app, apiKeyInfo.getKeyType());
                     }
                 }
             }
@@ -479,11 +476,42 @@ public abstract class AbstractKeyValidationHandler implements KeyValidationHandl
         } else if (!infoDTO.isAuthorized() && infoDTO.getValidationStatus() == 0) {
             //Scenario where validation failed and message is not set
             infoDTO.setValidationStatus(APIConstants.KeyValidationStatus.API_AUTH_RESOURCE_FORBIDDEN);
+            populateApplicationDetails(infoDTO, app, keyType);
         } else {
             infoDTO.setAuthorized(false);
             infoDTO.setValidationStatus(APIConstants.KeyValidationStatus.API_AUTH_RESOURCE_FORBIDDEN);
+            populateApplicationDetails(infoDTO, app, keyType);
         }
 
+    }
+
+    /**
+     * Attach application identity to the DTO when subscription validation fails with 900908,
+     * so gateway analytics can audit the calling application.
+     */
+    private void populateApplicationDetails(APIKeyValidationInfoDTO infoDTO, Application app, String keyType) {
+        if (infoDTO == null || app == null) {
+            return;
+        }
+        infoDTO.setApplicationName(app.getName());
+        infoDTO.setSubscriber(app.getSubName());
+        if (app.getId() != null) {
+            infoDTO.setApplicationId(app.getId().toString());
+        }
+        infoDTO.setApplicationUUID(app.getUUID());
+        if (app.getGroupIds() != null) {
+            infoDTO.setApplicationGroupIds(app.getGroupIds().stream()
+                    .map(GroupId::getGroupId).collect(Collectors.toSet()));
+        }
+        if (app.getPolicy() != null) {
+            infoDTO.setApplicationTier(app.getPolicy());
+        }
+        if (StringUtils.isNotEmpty(keyType)) {
+            infoDTO.setType(keyType);
+        } else if (StringUtils.isEmpty(infoDTO.getType())) {
+            // Analytics ELK publisher requires keyType; default when mapping is unavailable.
+            infoDTO.setType(APIConstants.API_KEY_TYPE_PRODUCTION);
+        }
     }
 
     private APIKeyValidationInfoDTO validateSubscriptionDetailsWhenDisabled(APIKeyValidationInfoDTO infoDTO,

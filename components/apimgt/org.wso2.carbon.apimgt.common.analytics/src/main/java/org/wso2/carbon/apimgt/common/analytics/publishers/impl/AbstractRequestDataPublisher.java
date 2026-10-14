@@ -91,7 +91,8 @@ public abstract class AbstractRequestDataPublisher implements RequestDataPublish
 
     /**
      * Drops events whose applicationId is missing or {@code UNKNOWN}.
-     * Auth / unclassified faults fill application via {@code getUnknownApp()} and are not useful for audit.
+     * Most auth faults without a resolvable application use {@code getUnknownApp()} and are not useful for audit.
+     * Subscription-forbidden (900908) events with a real applicationId are retained.
      */
     private boolean shouldSkipUnknownApplication(Event analyticsEvent) {
         if (analyticsEvent == null) {

@@ -21,6 +21,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.apimgt.common.analytics.collectors.AnalyticsDataProvider;
 import org.wso2.carbon.apimgt.common.analytics.exceptions.AnalyticsException;
+import org.wso2.carbon.apimgt.common.analytics.exceptions.DataNotFoundException;
 import org.wso2.carbon.apimgt.common.analytics.publishers.RequestDataPublisher;
 import org.wso2.carbon.apimgt.common.analytics.publishers.dto.Application;
 import org.wso2.carbon.apimgt.common.analytics.publishers.dto.Event;
@@ -29,13 +30,19 @@ import org.wso2.carbon.apimgt.common.analytics.publishers.impl.FaultyRequestData
 
 /**
  * Auth faulty request data collector.
+ * <p>
+ * Prefer a resolvable application from the provider (e.g. 900908 subscription forbidden)
+ * so audit events can retain application identity. Fall back to UNKNOWN when unavailable.
+ * </p>
  */
 public class AuthFaultDataCollector extends AbstractFaultDataCollector {
     private static final Log log = LogFactory.getLog(AuthFaultDataCollector.class);
+    private AnalyticsDataProvider provider;
 
     public AuthFaultDataCollector(AnalyticsDataProvider provider, FaultCategory subType,
                                   RequestDataPublisher processor) {
         super(provider, subType, processor);
+        this.provider = provider;
     }
 
     public AuthFaultDataCollector(AnalyticsDataProvider provider) {
@@ -46,7 +53,19 @@ public class AuthFaultDataCollector extends AbstractFaultDataCollector {
     public void collectFaultData(Event faultyEvent) throws AnalyticsException {
         log.debug("handling auth failure analytics events");
 
-        Application application = getUnknownApp();
+        Application application;
+        try {
+            if (provider.isAuthenticated() && provider.isAnonymous()) {
+                application = getAnonymousApp();
+            } else {
+                application = provider.getApplication();
+            }
+        } catch (DataNotFoundException e) {
+            if (log.isDebugEnabled()) {
+                log.debug("Application not available for auth fault; using UNKNOWN", e);
+            }
+            application = getUnknownApp();
+        }
         faultyEvent.setApplication(application);
         this.processRequest(faultyEvent);
     }

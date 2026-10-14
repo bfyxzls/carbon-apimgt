@@ -906,7 +906,9 @@ public class GatewayUtils {
      * @param token      The token which was used to invoke the API
      * @return an APIKeyValidationInfoDTO containing APIKey validation information.
      * If the subscription information is not found, return a null object.
-     * @throws APISecurityException if the user is not subscribed to the API
+     * When unauthorized, returns the DTO with validation status set (typically 900908) instead of throwing,
+     * so callers can retain application details for audit publishing.
+     * @throws APISecurityException if an unexpected error occurs while validating
      */
     public static APIKeyValidationInfoDTO validateAPISubscription(String apiContext, String apiVersion, JWTClaimsSet payload,
                                                                   String token)
@@ -945,8 +947,10 @@ public class GatewayUtils {
                             ", version: " + apiVersion + ". Token: " + getMaskedToken(token));
                 }
                 log.error("User is not subscribed to access the API.");
-                throw new APISecurityException(APISecurityConstants.API_AUTH_FORBIDDEN,
-                        APISecurityConstants.API_AUTH_FORBIDDEN_MESSAGE);
+                if (apiKeyValidationInfoDTO.getValidationStatus() == 0) {
+                    apiKeyValidationInfoDTO.setValidationStatus(APISecurityConstants.API_AUTH_FORBIDDEN);
+                }
+                // Return DTO so callers can attach application identity for 900908 audit.
             }
         }
         return apiKeyValidationInfoDTO;
@@ -961,7 +965,9 @@ public class GatewayUtils {
      * @param apiKeyInfo    The key type
      * @return an APIKeyValidationInfoDTO containing APIKey validation information.
      * If the subscription information is not found, return a null object.
-     * @throws APISecurityException if the user is not subscribed to the API
+     * When unauthorized, returns the DTO with validation status set (typically 900908) instead of throwing,
+     * so callers can retain application details for audit publishing.
+     * @throws APISecurityException if an unexpected error occurs while validating
      */
     public static APIKeyValidationInfoDTO validateAPIKeySubscription(String apiContext, String apiVersion,
                                                                      APIKeyInfo apiKeyInfo)
@@ -981,9 +987,9 @@ public class GatewayUtils {
                 apiKeyValidationInfoDTO.setType(apiKeyInfo.getKeyType());
             } else {
                 log.error("User is not subscribed to access the API.");
-                throw new APISecurityException(APISecurityConstants.API_AUTH_FORBIDDEN,
-                        APISecurityConstants.API_AUTH_FORBIDDEN_MESSAGE);
-
+                if (apiKeyValidationInfoDTO.getValidationStatus() == 0) {
+                    apiKeyValidationInfoDTO.setValidationStatus(APISecurityConstants.API_AUTH_FORBIDDEN);
+                }
         }
         return apiKeyValidationInfoDTO;
     }

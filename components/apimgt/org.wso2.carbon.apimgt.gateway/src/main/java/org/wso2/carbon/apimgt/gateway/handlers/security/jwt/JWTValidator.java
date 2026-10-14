@@ -40,6 +40,7 @@ import org.wso2.carbon.apimgt.gateway.handlers.Utils;
 import org.wso2.carbon.apimgt.gateway.handlers.security.APIKeyValidator;
 import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityConstants;
 import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityException;
+import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityUtils;
 import org.wso2.carbon.apimgt.gateway.handlers.security.AuthenticationContext;
 import org.wso2.carbon.apimgt.gateway.handlers.streaming.websocket.WebSocketApiConstants;
 import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
@@ -308,6 +309,9 @@ public class JWTValidator {
                     if (includeTokenInfoInMsgCtx) {
                         synCtx.setProperty(APIMgtGatewayConstants.ACCESS_TOKEN_INVALID_REASON, "Access token invalid");
                     }
+                    // Preserve application identity for 900908 audit publishing.
+                    setAuthenticationContextForForbiddenAudit(synCtx, jwtTokenIdentifier, jwtValidationInfo,
+                            apiKeyValidationInfoDTO);
                     throw new APISecurityException(apiKeyValidationInfoDTO.getValidationStatus(),
                             "User is NOT authorized to access the Resource. API Subscription validation failed.");
 
@@ -1105,5 +1109,21 @@ public class JWTValidator {
      */
     private boolean isCNFValidationDisabled(Boolean disableCNFValidation, boolean defaultVal) {
         return JavaUtils.isTrueExplicitly(disableCNFValidation, defaultVal);
+    }
+
+    /**
+     * When subscription validation fails (typically 900908), attach application identity to the
+     * message context so analytics can publish an audit event for the calling application.
+     */
+    private void setAuthenticationContextForForbiddenAudit(MessageContext synCtx, String jwtTokenIdentifier,
+                                                           JWTValidationInfo jwtValidationInfo,
+                                                           APIKeyValidationInfoDTO apiKeyValidationInfoDTO) {
+        if (synCtx == null || apiKeyValidationInfoDTO == null
+                || StringUtils.isEmpty(apiKeyValidationInfoDTO.getApplicationUUID())) {
+            return;
+        }
+        AuthenticationContext authenticationContext = GatewayUtils.generateAuthenticationContext(
+                jwtTokenIdentifier, jwtValidationInfo, apiKeyValidationInfoDTO, null, true);
+        APISecurityUtils.setAuthenticationContext(synCtx, authenticationContext);
     }
 }

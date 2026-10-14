@@ -20,6 +20,7 @@ package org.wso2.carbon.apimgt.gateway.handlers.analytics;
 import com.google.gson.Gson;
 import org.apache.axiom.soap.SOAPBody;
 import org.apache.axiom.soap.SOAPEnvelope;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.HttpHeaders;
@@ -285,7 +286,19 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         application.setApplicationId(authContext.getApplicationUUID());
         application.setApplicationName(authContext.getApplicationName());
         application.setApplicationOwner(authContext.getSubscriber());
-        application.setKeyType(authContext.getKeyType());
+        String keyType = authContext.getKeyType();
+        if (StringUtils.isEmpty(keyType)) {
+            Object contextKeyType = messageContext.getProperty(APIConstants.API_KEY_TYPE);
+            if (contextKeyType != null) {
+                keyType = String.valueOf(contextKeyType);
+            }
+        }
+        if (StringUtils.isEmpty(keyType)) {
+            // ELK metric builder requires keyType; default when subscription-forbidden
+            // paths attach application identity without a resolved key type.
+            keyType = APIConstants.API_KEY_TYPE_PRODUCTION;
+        }
+        application.setKeyType(keyType);
         return application;
     }
 

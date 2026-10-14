@@ -29,6 +29,7 @@ import org.wso2.carbon.apimgt.common.analytics.collectors.AnalyticsDataProvider;
 import org.wso2.carbon.apimgt.common.analytics.collectors.impl.GenericRequestDataCollector;
 import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
 import org.wso2.carbon.apimgt.gateway.handlers.DataPublisherUtil;
+import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityConstants;
 import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityUtils;
 import org.wso2.carbon.apimgt.gateway.handlers.security.AuthenticationContext;
 import org.wso2.carbon.apimgt.gateway.handlers.streaming.AsyncAnalyticsDataProvider;
@@ -210,17 +211,26 @@ public class AnalyticsMetricsHandler extends AbstractExtendedSynapseHandler {
      * Determines whether analytics/audit event publishing should be skipped for the current request.
      * <p>
      * For MCP traffic, only authenticated {@code tools/call} (with {@code mcpToolName}) is audited
-     * when a real {@code applicationId} is present. {@code tools/list}, non-POST transport calls
-     * (SSE GET, well-known GET, OPTIONS), handshake / ping / other catalog methods, and requests
-     * without an application (which would otherwise become {@code applicationId=UNKNOWN}) are
-     * skipped. MCP detection uses both {@code API_TYPE=MCP} and {@code isMcp}, because fault flows
-     * may clear {@code isMcp} before analytics runs.
+     * when a real {@code applicationId} is present. Exception: HTTP 403 / error 900908 with a
+     * resolvable application is always published for audit. {@code tools/list}, non-POST transport
+     * calls (SSE GET, well-known GET, OPTIONS), handshake / ping / other catalog methods, and
+     * requests without an application (which would otherwise become {@code applicationId=UNKNOWN})
+     * are skipped. MCP detection uses both {@code API_TYPE=MCP} and {@code isMcp}, because fault
+     * flows may clear {@code isMcp} before analytics runs.
      * </p>
      */
     private boolean shouldSkipAnalyticsPublishing(MessageContext messageContext) {
         Object skipPublishMetrics = messageContext.getProperty(Constants.SKIP_METRICS_PUBLISHING);
         if (skipPublishMetrics != null && (Boolean) skipPublishMetrics) {
             return true;
+        }
+
+        // 900908 (forbidden / subscription closed) with a known application should be audited.
+        if (isForbiddenWithResolvableApplication(messageContext)) {
+            if (log.isDebugEnabled()) {
+                log.debug("Publishing analytics for 900908 with resolvable applicationId");
+            }
+            return false;
         }
 
         // AuthFaultDataCollector always sets applicationId=UNKNOWN — skip before collect/publish.
@@ -275,20 +285,38 @@ public class AnalyticsMetricsHandler extends AbstractExtendedSynapseHandler {
 
     /**
      * Auth fault range (900900–901000, excluding resource-not-found 900906).
-     * These always become applicationId=UNKNOWN in AuthFaultDataCollector.
+     * These typically become applicationId=UNKNOWN in AuthFaultDataCollector.
      */
     private boolean isAuthFaultRequest(MessageContext messageContext) {
-        if (!messageContext.getPropertyKeySet().contains(SynapseConstants.ERROR_CODE)) {
+        Integer errorCode = resolveErrorCode(messageContext);
+        if (errorCode == null) {
             return false;
         }
-        Object errorCodeObj = messageContext.getProperty(SynapseConstants.ERROR_CODE);
-        if (!(errorCodeObj instanceof Integer)) {
-            return false;
-        }
-        int errorCode = (Integer) errorCodeObj;
         return errorCode >= Constants.ERROR_CODE_RANGES.AUTH_FAILURE_START
                 && errorCode < Constants.ERROR_CODE_RANGES.AUTH_FAILURE__END
                 && errorCode != Constants.RESOURCE_NOT_FOUND_APIM_ERROR_CODE;
+    }
+
+    /**
+     * Subscription / resource forbidden (900908) where AuthenticationContext already carries
+     * a usable application UUID — these should produce audit events.
+     */
+    private boolean isForbiddenWithResolvableApplication(MessageContext messageContext) {
+        Integer errorCode = resolveErrorCode(messageContext);
+        return errorCode != null
+                && errorCode == APISecurityConstants.API_AUTH_FORBIDDEN
+                && hasResolvableApplicationId(messageContext);
+    }
+
+    private Integer resolveErrorCode(MessageContext messageContext) {
+        if (!messageContext.getPropertyKeySet().contains(SynapseConstants.ERROR_CODE)) {
+            return null;
+        }
+        Object errorCodeObj = messageContext.getProperty(SynapseConstants.ERROR_CODE);
+        if (!(errorCodeObj instanceof Integer)) {
+            return null;
+        }
+        return (Integer) errorCodeObj;
     }
 
     /**

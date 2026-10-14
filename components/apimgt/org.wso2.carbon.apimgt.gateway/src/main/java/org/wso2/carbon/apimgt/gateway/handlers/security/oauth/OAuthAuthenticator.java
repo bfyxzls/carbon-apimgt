@@ -421,6 +421,28 @@ public class OAuthAuthenticator implements Authenticator {
                     synCtx.setProperty(APIMgtGatewayConstants.ACCESS_TOKEN_INVALID_REASON, "Access token invalid");
                 }
             }
+            // Preserve application identity for 900908 audit publishing.
+            if (info.getValidationStatus() == APISecurityConstants.API_AUTH_FORBIDDEN
+                    && StringUtils.isNotEmpty(info.getApplicationUUID())) {
+                AuthenticationContext authContext = new AuthenticationContext();
+                authContext.setAuthenticated(true);
+                authContext.setApiKey(accessToken);
+                authContext.setKeyType(info.getType());
+                if (info.getEndUserName() != null) {
+                    authContext.setUsername(info.getEndUserName());
+                } else {
+                    authContext.setUsername(APIConstants.END_USER_ANONYMOUS);
+                }
+                authContext.setApplicationId(info.getApplicationId());
+                authContext.setApplicationUUID(info.getApplicationUUID());
+                authContext.setApplicationGroupIds(info.getApplicationGroupIds());
+                authContext.setApplicationName(info.getApplicationName());
+                authContext.setApplicationTier(info.getApplicationTier());
+                authContext.setSubscriber(info.getSubscriber());
+                authContext.setConsumerKey(info.getConsumerKey());
+                authContext.setSubscriberTenantDomain(info.getSubscriberTenantDomain());
+                APISecurityUtils.setAuthenticationContext(synCtx, authContext, securityContextHeader);
+            }
             return new AuthenticationResponse(false, isMandatory, true, info.getValidationStatus(),
                     "Access failure for API: " + apiContext +
                     ", version: "+ apiVersion + " status: (" + info.getValidationStatus() +

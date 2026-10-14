@@ -128,6 +128,14 @@ public class ApiKeyAuthenticator implements Authenticator {
                                         get(APIMgtGatewayConstants.REFERER));
                         APIKeyValidationInfoDTO apiKeyValidationInfoDTO = GatewayUtils.validateAPISubscription(apiContext, apiVersion,
                                 payload, splitToken[0]);
+                        if (apiKeyValidationInfoDTO == null || !apiKeyValidationInfoDTO.isAuthorized()) {
+                            int status = apiKeyValidationInfoDTO != null
+                                    && apiKeyValidationInfoDTO.getValidationStatus() != 0
+                                    ? apiKeyValidationInfoDTO.getValidationStatus()
+                                    : APISecurityConstants.API_AUTH_FORBIDDEN;
+                            throw new APISecurityException(status,
+                                    APISecurityConstants.API_AUTH_FORBIDDEN_MESSAGE);
+                        }
                         String endUserToken = ApiKeyAuthenticatorUtils.getEndUserToken(apiKeyValidationInfoDTO, jwtConfigurationDto,
                                 apiKey, signedJWT, payload, tokenIdentifier, apiContext, apiVersion, isGatewayTokenCacheEnabled);
                         AuthenticationContext authenticationContext = GatewayUtils.generateAuthenticationContext(tokenIdentifier,
@@ -234,7 +242,7 @@ public class ApiKeyAuthenticator implements Authenticator {
 
         // Validate subscriptions
         apiKeyValidationInfoDTO = GatewayUtils.validateAPIKeySubscription(apiContext, apiVersion, apiKeyInfo);
-        if (apiKeyValidationInfoDTO.isAuthorized()) {
+        if (apiKeyValidationInfoDTO != null && apiKeyValidationInfoDTO.isAuthorized()) {
             if (log.isDebugEnabled()) {
                 log.debug(
                         "User is subscribed to the API: " + apiContext + ", " + "version: " + apiVersion + ". Token: " +
@@ -249,8 +257,10 @@ public class ApiKeyAuthenticator implements Authenticator {
                         ". Token: " + apiKeyInfo.getKeyName());
             }
             log.error("User is not subscribed to access the API.");
-            throw new APISecurityException(APISecurityConstants.API_AUTH_FORBIDDEN,
-                    APISecurityConstants.API_AUTH_FORBIDDEN_MESSAGE);
+            int status = apiKeyValidationInfoDTO != null && apiKeyValidationInfoDTO.getValidationStatus() != 0
+                    ? apiKeyValidationInfoDTO.getValidationStatus()
+                    : APISecurityConstants.API_AUTH_FORBIDDEN;
+            throw new APISecurityException(status, APISecurityConstants.API_AUTH_FORBIDDEN_MESSAGE);
         }
         ApiKeyAuthenticatorUtils.updateApiKeyLastUsedTime(apiKeyHash, tenantDomain);
         // Set and return auth context

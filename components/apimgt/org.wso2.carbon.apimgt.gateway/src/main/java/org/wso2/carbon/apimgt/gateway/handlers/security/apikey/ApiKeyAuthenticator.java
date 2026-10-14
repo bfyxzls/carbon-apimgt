@@ -184,6 +184,23 @@ public class ApiKeyAuthenticator implements Authenticator {
                                 GatewayUtils.getIp(axis2MessageContext), apiContext, apiVersion, referer);
                         APIKeyValidationInfoDTO apiKeyValidationInfoDTO =
                                 GatewayUtils.validateAPISubscription(apiContext, apiVersion, payload, splitToken[0]);
+                        if (apiKeyValidationInfoDTO == null || !apiKeyValidationInfoDTO.isAuthorized()) {
+                            int status = apiKeyValidationInfoDTO != null
+                                    && apiKeyValidationInfoDTO.getValidationStatus() != 0
+                                    ? apiKeyValidationInfoDTO.getValidationStatus()
+                                    : APISecurityConstants.API_AUTH_FORBIDDEN;
+                            if (apiKeyValidationInfoDTO != null
+                                    && org.apache.commons.lang3.StringUtils.isNotEmpty(
+                                    apiKeyValidationInfoDTO.getApplicationUUID())) {
+                                AuthenticationContext forbiddenContext =
+                                        GatewayUtils.generateAuthenticationContext(tokenIdentifier, payload,
+                                                apiKeyValidationInfoDTO, null);
+                                APISecurityUtils.setAuthenticationContext(synCtx, forbiddenContext,
+                                        jwtGenerationEnabled ? getContextHeader() : null);
+                            }
+                            throw new APISecurityException(status,
+                                    APISecurityConstants.API_AUTH_FORBIDDEN_MESSAGE);
+                        }
                         String endUserToken =
                                 ApiKeyAuthenticatorUtils.getEndUserToken(apiKeyValidationInfoDTO, jwtConfigurationDto,
                                         apiKey, signedJWT, payload, tokenIdentifier, apiContext, apiVersion,
@@ -208,7 +225,7 @@ public class ApiKeyAuthenticator implements Authenticator {
             }
             AuthenticationContext opaqueApiKeyAuthenticationContext =
                     validateOpaqueApiKey(apiKey, apiContext, apiVersion, referer,
-                            GatewayUtils.getIp(axis2MessageContext), tenantDomain);
+                            GatewayUtils.getIp(axis2MessageContext), tenantDomain, synCtx);
             if (opaqueApiKeyAuthenticationContext.isAuthenticated()) {
                 APISecurityUtils.setAuthenticationContext(synCtx, opaqueApiKeyAuthenticationContext,
                         jwtGenerationEnabled ? getContextHeader() : null);
@@ -245,7 +262,8 @@ public class ApiKeyAuthenticator implements Authenticator {
      * @throws APIManagementException if an error occurs
      */
     private AuthenticationContext validateOpaqueApiKey(String apiKey, String apiContext, String apiVersion,
-                                                       String referrer, String ip, String tenantDomain)
+                                                       String referrer, String ip, String tenantDomain,
+                                                       MessageContext synCtx)
             throws APISecurityException, APIManagementException {
 
         // Hash the provided API key
@@ -297,8 +315,15 @@ public class ApiKeyAuthenticator implements Authenticator {
                         ". Token: " + apiKeyInfo.getKeyName());
             }
             log.error("User is not subscribed to access the API.");
-            throw new APISecurityException(APISecurityConstants.API_AUTH_FORBIDDEN,
-                    APISecurityConstants.API_AUTH_FORBIDDEN_MESSAGE);
+            int status = apiKeyValidationInfoDTO.getValidationStatus() != 0
+                    ? apiKeyValidationInfoDTO.getValidationStatus()
+                    : APISecurityConstants.API_AUTH_FORBIDDEN;
+            if (org.apache.commons.lang3.StringUtils.isNotEmpty(apiKeyValidationInfoDTO.getApplicationUUID())) {
+                AuthenticationContext forbiddenContext =
+                        GatewayUtils.generateAuthenticationContext(apiKey, null, apiKeyValidationInfoDTO, null);
+                APISecurityUtils.setAuthenticationContext(synCtx, forbiddenContext);
+            }
+            throw new APISecurityException(status, APISecurityConstants.API_AUTH_FORBIDDEN_MESSAGE);
         }
         ApiKeyAuthenticatorUtils.updateApiKeyLastUsedTime(apiKeyHash, tenantDomain);
         // Set and return auth context

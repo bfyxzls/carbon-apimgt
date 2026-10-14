@@ -108,7 +108,14 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
     public static final String MCP_RESULT_IS_ERROR = "MCP_RESULT_IS_ERROR";
 
     private static final String TOOLS_CALL_UNAUTHORIZED_RESPONSE_BODY =
-            "{\"message\":\"未检测到有效的 MCP 服务 Token，请前往购买页面订阅后获取\"}";
+            "{\"code\":\"" + APISecurityConstants.API_AUTH_MISSING_CREDENTIALS + "\","
+                    + "\"message\":\"" + APISecurityConstants.API_AUTH_MISSING_CREDENTIALS_MESSAGE + "\","
+                    + "\"description\":\""
+                    + APISecurityConstants.API_AUTH_MISSING_CREDENTIALS_MESSAGE
+                    + APISecurityConstants.DESCRIPTION_SEPARATOR
+                    + APISecurityConstants.API_AUTH_MISSING_CREDENTIALS_DESCRIPTION
+                    + "'Authorization : Bearer ACCESS_TOKEN' or 'Authorization : Basic ACCESS_TOKEN'"
+                    + " or 'ApiKey : API_KEY'\"}";
 
     private static final Log log = LogFactory.getLog(McpInitHandler.class);
 
@@ -787,6 +794,15 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
     }
 
     private void handleToolsCallUnauthorized(MessageContext messageContext) {
+        messageContext.setProperty(SynapseConstants.ERROR_CODE, APISecurityConstants.API_AUTH_MISSING_CREDENTIALS);
+        messageContext.setProperty(SynapseConstants.ERROR_MESSAGE,
+                APISecurityConstants.API_AUTH_MISSING_CREDENTIALS_MESSAGE);
+        messageContext.setProperty(SynapseConstants.ERROR_DETAIL,
+                APISecurityConstants.getFailureMessageDetailDescription(
+                        APISecurityConstants.API_AUTH_MISSING_CREDENTIALS,
+                        APISecurityConstants.API_AUTH_MISSING_CREDENTIALS_MESSAGE)
+                        + "'Authorization : Bearer ACCESS_TOKEN' or 'Authorization : Basic ACCESS_TOKEN'"
+                        + " or 'ApiKey : API_KEY'");
         setToolsCallUnauthorizedResponseBody(messageContext);
         MCPUtils.setMcpWwwAuthenticateHeader(messageContext, HttpStatus.SC_UNAUTHORIZED, "invalid_request",
                 "Access token is missing");
@@ -805,7 +821,7 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
                 ((Axis2MessageContext) messageContext).getAxis2MessageContext();
         try {
             JsonUtil.removeJsonPayload(axis2MC);
-            JsonUtil.getNewJsonPayload(axis2MC, TOOLS_CALL_UNAUTHORIZED_RESPONSE_BODY, true, true);
+            JsonUtil.getNewJsonPayload(axis2MC,TOOLS_CALL_UNAUTHORIZED_RESPONSE_BODY, true, true);
             axis2MC.setProperty(Constants.Configuration.MESSAGE_TYPE, APIConstants.APPLICATION_JSON_MEDIA_TYPE);
             axis2MC.setProperty(Constants.Configuration.CONTENT_TYPE, APIConstants.APPLICATION_JSON_MEDIA_TYPE);
         } catch (AxisFault e) {
