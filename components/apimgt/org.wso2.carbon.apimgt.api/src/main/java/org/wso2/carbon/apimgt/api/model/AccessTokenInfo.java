@@ -51,6 +51,8 @@ public class AccessTokenInfo {
     private int errorcode;
 
     private String endUserName;
+    /** Keycloak / OIDC login name for audit (distinct from endUserName). */
+    private String kcUserName;
     private String keyManager;
 
     public String getKeyManager() {
@@ -185,5 +187,13 @@ public class AccessTokenInfo {
 
     public void setEndUserName(String endUserName) {
         this.endUserName = endUserName;
+    }
+
+    public String getKcUserName() {
+        return kcUserName;
+    }
+
+    public void setKcUserName(String kcUserName) {
+        this.kcUserName = kcUserName;
     }
 }

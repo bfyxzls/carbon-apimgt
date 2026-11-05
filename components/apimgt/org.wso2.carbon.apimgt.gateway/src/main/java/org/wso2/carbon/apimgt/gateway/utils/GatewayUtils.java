@@ -668,6 +668,53 @@ public class GatewayUtils {
         return endUsername;
     }
 
+    /**
+     * Resolve Keycloak / OIDC login display name from JWT claims.
+     * Priority: {@code preferred_username} → {@code username} → {@code email} → {@code mobile}.
+     *
+     * @param claims JWT claim map (may be null)
+     * @return trimmed login name, or null when absent
+     */
+    public static String resolveKcUserName(Map<String, Object> claims) {
+        if (claims == null || claims.isEmpty()) {
+            return null;
+        }
+        String[] claimKeys = {
+                "preferred_username", "username", "email",
+                "mobile", "phone", "phone_number", "http://wso2.org/claims/mobile"
+        };
+        for (String key : claimKeys) {
+            Object value = claims.get(key);
+            if (value == null) {
+                continue;
+            }
+            String text = String.valueOf(value).trim();
+            if (StringUtils.isNotEmpty(text) && !"null".equalsIgnoreCase(text)) {
+                return text;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * When claims contain a login name, store it on the Synapse message context as
+     * {@link APIMgtGatewayConstants#KC_USER_NAME} for analytics {@code properties.kcUserName}.
+     * Does not alter {@link APIMgtGatewayConstants#END_USER_NAME}.
+     */
+    public static void setKcUserNameProperty(org.apache.synapse.MessageContext synCtx, Map<String, Object> claims) {
+        if (synCtx == null) {
+            return;
+        }
+        String kcUserName = resolveKcUserName(claims);
+        if (StringUtils.isNotEmpty(kcUserName)) {
+            synCtx.setProperty(APIMgtGatewayConstants.KC_USER_NAME, kcUserName);
+            log.info("[kcUserName] set on MessageContext from JWT claims, kcUserName=" + kcUserName);
+        } else {
+            log.info("[kcUserName] JWT claims had no preferred_username/username/email/mobile"
+                    + "; claimKeys=" + (claims == null ? "null" : claims.keySet()));
+        }
+    }
+
     public static AuthenticationContext generateAuthenticationContext(String tokenSignature, JWTClaimsSet payload,
                                                                       JSONObject api, String apiLevelPolicy)
             throws java.text.ParseException {

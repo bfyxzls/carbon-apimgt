@@ -49,6 +49,7 @@ public class TransportHeaderHandler extends AbstractSynapseHandler {
      * @return true
      */
     public boolean handleRequestInFlow(MessageContext synCtx) {
+        TransportHeaderUtil.captureRequestIdHeader(synCtx);
         return true;
     }
 
@@ -62,6 +63,7 @@ public class TransportHeaderHandler extends AbstractSynapseHandler {
 	if (log.isDebugEnabled()) {
             log.debug("Starting to remove standard Response headers defined from the request out flow.");
 	}
+        TransportHeaderUtil.captureRequestIdHeader(synCtx);
         //Remove all the standard well known response headers from the request outgoing
         TransportHeaderUtil.removeTransportHeadersFromList(synCtx, this.standardResponseHeaders);
         TransportHeaderUtil.removeExcessTransportHeadersFromList(synCtx, this.standardResponseHeaders);
@@ -93,6 +95,7 @@ public class TransportHeaderHandler extends AbstractSynapseHandler {
 	if (log.isDebugEnabled()) {
             log.debug("Starting to remove standard Request headers defined from the response out flow.");
 	}
+        TransportHeaderUtil.addRequestIdResponseHeader(synCtx);
         //Remove all the standard well known request headers from the final response
         TransportHeaderUtil.removeTransportHeadersFromList(synCtx, this.standardRequestHeaders);
         TransportHeaderUtil.removeExcessTransportHeadersFromList(synCtx, this.standardRequestHeaders);

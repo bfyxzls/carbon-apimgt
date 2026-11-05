@@ -53,6 +53,7 @@ import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
 import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityUtils;
 import org.wso2.carbon.apimgt.gateway.handlers.security.AuthenticationContext;
 import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
+import org.wso2.carbon.apimgt.gateway.utils.GatewayUtils;
 import org.wso2.carbon.apimgt.gateway.utils.MCPProtocolNegotiator;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.APIManagerConfiguration;
@@ -462,6 +463,31 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         return null;
     }
 
+    /**
+     * Keycloak login name for {@code properties.kcUserName}. Prefers MessageContext property set at JWT auth;
+     * falls back to {@link APIMgtGatewayConstants#JWT_CLAIMS}. Never overwrites top-level userName.
+     */
+    private String resolveKcUserNameForAnalytics() {
+        if (messageContext.getPropertyKeySet().contains(APIMgtGatewayConstants.KC_USER_NAME)) {
+            Object preSet = messageContext.getProperty(APIMgtGatewayConstants.KC_USER_NAME);
+            if (preSet != null) {
+                String text = String.valueOf(preSet).trim();
+                if (StringUtils.isNotEmpty(text)) {
+                    return text;
+                }
+            }
+        }
+        if (messageContext.getPropertyKeySet().contains(APIMgtGatewayConstants.JWT_CLAIMS)) {
+            Object claimsObj = messageContext.getProperty(APIMgtGatewayConstants.JWT_CLAIMS);
+            if (claimsObj instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> claims = (Map<String, Object>) claimsObj;
+                return GatewayUtils.resolveKcUserName(claims);
+            }
+        }
+        return null;
+    }
+
     @Override
     public String getEndUserIP() {
 
@@ -486,6 +512,20 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
             customProperties.put("urlPostfix", (String) messageContext.getProperty("URL_POSTFIX"));
         }
         customProperties.put(Constants.API_USER_NAME_KEY, getUserName());
+        String kcUserName = resolveKcUserNameForAnalytics();
+        if (StringUtils.isNotEmpty(kcUserName)) {
+            customProperties.put(Constants.KC_USER_NAME_KEY, kcUserName);
+            log.info("[kcUserName] publish properties.kcUserName=" + kcUserName
+                    + ", userName=" + getUserName());
+        } else {
+            boolean hasCtxProp = messageContext.getPropertyKeySet()
+                    .contains(APIMgtGatewayConstants.KC_USER_NAME);
+            boolean hasJwtClaims = messageContext.getPropertyKeySet()
+                    .contains(APIMgtGatewayConstants.JWT_CLAIMS);
+            log.info("[kcUserName] properties.kcUserName omitted: not found on MessageContext"
+                    + " (ctxProp=" + hasCtxProp + ", jwtClaims=" + hasJwtClaims
+                    + ", userName=" + getUserName() + ")");
+        }
         customProperties.put(Constants.API_CONTEXT_KEY, getApiContext());
         customProperties.put(Constants.RESPONSE_SIZE, getResponseSize());
         customProperties.put(Constants.RESPONSE_CONTENT_TYPE, getResponseContentType());

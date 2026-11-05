@@ -357,6 +357,15 @@ public class OAuthAuthenticator implements Authenticator {
             context.stop();
             synCtx.setProperty(APIMgtGatewayConstants.APPLICATION_NAME, info.getApplicationName());
             synCtx.setProperty(APIMgtGatewayConstants.END_USER_NAME, info.getEndUserName());
+            if (StringUtils.isNotEmpty(info.getKcUserName())) {
+                synCtx.setProperty(APIMgtGatewayConstants.KC_USER_NAME, info.getKcUserName());
+                log.info("[kcUserName] opaque auth set MessageContext kcUserName="
+                        + info.getKcUserName() + ", endUser=" + info.getEndUserName());
+            } else {
+                log.info("[kcUserName] opaque auth DTO.kcUserName empty, endUser="
+                        + info.getEndUserName()
+                        + " (KM did not resolve preferred_username/claims)");
+            }
             synCtx.setProperty(APIMgtGatewayConstants.SCOPES, info.getScopes() == null ? null : info.getScopes()
                                                                                                     .toString());
         }
@@ -400,6 +409,9 @@ public class OAuthAuthenticator implements Authenticator {
             synCtx.setProperty("api.ut.apiPublisher", info.getApiPublisher());
             synCtx.setProperty("API_NAME", info.getApiName());
             synCtx.setProperty("userName",info.getEndUserName());
+            if (StringUtils.isNotEmpty(info.getKcUserName())) {
+                synCtx.setProperty(APIMgtGatewayConstants.KC_USER_NAME, info.getKcUserName());
+            }
 
             /* GraphQL Query Analysis Information */
             if (APIConstants.GRAPHQL_API.equals(synCtx.getProperty(APIConstants.API_TYPE))) {

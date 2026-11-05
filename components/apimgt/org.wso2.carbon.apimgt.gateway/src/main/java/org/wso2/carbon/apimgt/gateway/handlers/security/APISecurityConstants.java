@@ -20,6 +20,10 @@ public class APISecurityConstants {
     public static final String API_AUTH_FAILURE_HANDLER = "_auth_failure_handler_";
     public static final String BACKEND_AUTH_FAILURE_HANDLER = "_backend_failure_handler_";
 
+    /**
+     * Gateway 内部/依赖调用失败时的统一业务错误码；{@code handleAuthFailure} 映射为 HTTP 500。
+     * 积分查询、成员 Token 额度接口本地异常等均应使用本码，勿冒充 900001/900002。
+     */
     public static final int API_AUTH_GENERAL_ERROR       = 900900;
     public static final String API_AUTH_GENERAL_ERROR_MESSAGE = "Unclassified Authentication Failure";
 
@@ -85,13 +89,19 @@ public class APISecurityConstants {
     public static final String API_OAUTH_INVALID_AUDIENCES_MESSAGE = "Access Denied";
     public static final String API_OAUTH_INVALID_AUDIENCES_DESCRIPTION = "The access token does not allow you to access the requested resource";
 
-    /** Remaining points are insufficient. Business error code stays 900001; HTTP status is 200. */
+    /**
+     * 积分余额不足（业务判定 remainingPoints &lt;= 0）。HTTP 200 + MCP JSON-RPC error.code=900001。
+     * 仅用于「确认不足」；查询接口调用/解析失败请用 {@link #API_AUTH_GENERAL_ERROR}。
+     */
     public static final int API_AUTH_INSUFFICIENT_POINTS = 900001;
     public static final String API_AUTH_INSUFFICIENT_POINTS_MESSAGE = "Insufficient MCP points";
     public static final String API_AUTH_INSUFFICIENT_POINTS_BIZ_MESSAGE =
             "法宝 MCP 积分不足，请前往https://mcp.pkulaw.com/console进行积分充值";
 
-    /** Member token points are unavailable. Business error code stays 900002; HTTP status is 200. */
+    /**
+     * 成员 Token 额度不可用（业务判定 available=false）。HTTP 200 + MCP JSON-RPC error.code=900002。
+     * 仅用于「确认额度不足」；查询接口调用/解析失败请用 {@link #API_AUTH_GENERAL_ERROR}。
+     */
     public static final int API_AUTH_MEMBER_TOKEN_POINTS_UNAVAILABLE = 900002;
     public static final String API_AUTH_MEMBER_TOKEN_POINTS_UNAVAILABLE_MESSAGE = "Insufficient MCP member token quota";
     public static final String API_AUTH_MEMBER_TOKEN_POINTS_UNAVAILABLE_BIZ_MESSAGE =

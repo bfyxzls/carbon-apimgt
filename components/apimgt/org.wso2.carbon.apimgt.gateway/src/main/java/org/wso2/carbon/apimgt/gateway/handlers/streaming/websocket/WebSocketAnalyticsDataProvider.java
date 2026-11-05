@@ -19,6 +19,7 @@
 package org.wso2.carbon.apimgt.gateway.handlers.streaming.websocket;
 
 import io.netty.channel.ChannelHandlerContext;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.synapse.SynapseConstants;
@@ -43,6 +44,7 @@ import org.wso2.carbon.apimgt.gateway.handlers.analytics.FaultCodeClassifier;
 import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityUtils;
 import org.wso2.carbon.apimgt.gateway.handlers.security.AuthenticationContext;
 import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
+import org.wso2.carbon.apimgt.gateway.utils.GatewayUtils;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.keymgt.SubscriptionDataHolder;
 import org.wso2.carbon.apimgt.keymgt.model.SubscriptionDataStore;
@@ -321,9 +323,30 @@ public class WebSocketAnalyticsDataProvider implements AnalyticsDataProvider {
             customProperties = new HashMap<>();
         }
         customProperties.put(Constants.API_USER_NAME_KEY, getUserName());
+        String kcUserName = resolveKcUserNameForAnalytics();
+        if (StringUtils.isNotEmpty(kcUserName)) {
+            customProperties.put(Constants.KC_USER_NAME_KEY, kcUserName);
+        }
         customProperties.put(Constants.API_CONTEXT_KEY, getApiContext());
         customProperties.put(Constants.RESPONSE_SIZE, getResponseSize());
         return customProperties;
+    }
+
+    private String resolveKcUserNameForAnalytics() {
+        Object preSet = WebSocketUtils.getPropertyFromChannel(APIMgtGatewayConstants.KC_USER_NAME, ctx);
+        if (preSet != null) {
+            String text = String.valueOf(preSet).trim();
+            if (StringUtils.isNotEmpty(text)) {
+                return text;
+            }
+        }
+        Object claimsObj = WebSocketUtils.getPropertyFromChannel(APIMgtGatewayConstants.JWT_CLAIMS, ctx);
+        if (claimsObj instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> claims = (Map<String, Object>) claimsObj;
+            return GatewayUtils.resolveKcUserName(claims);
+        }
+        return null;
     }
     
     @Override

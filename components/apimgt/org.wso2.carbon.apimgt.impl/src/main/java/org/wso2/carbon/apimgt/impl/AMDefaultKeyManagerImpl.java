@@ -875,10 +875,118 @@ public class AMDefaultKeyManagerImpl extends AbstractKeyManager {
                     APIConstants.ACCESS_TOKEN_USER_TYPE_APPLICATION)) {
                 tokenInfo.setApplicationToken(true);
             }
+
+            // Opaque path: resolve Keycloak/OIDC login name for gateway audit properties.kcUserName.
+            // Application tokens: introspect often has no end-user; kcUserName is enriched later from
+            // am_subscriber (application owner) after subscription validation.
+            if (StringUtils.isNotEmpty(username)) {
+                String kcUserName = resolveKcUserNameFromIntrospection(introspectInfo, username, accessToken);
+                if (StringUtils.isNotEmpty(kcUserName)) {
+                    tokenInfo.setKcUserName(kcUserName);
+                    tokenInfo.addParameter(APIConstants.KC_USER_NAME, kcUserName);
+                    log.info("[kcUserName] resolved from KM introspection/claims, endUser="
+                            + username + ", appToken=" + tokenInfo.isApplicationToken()
+                            + ", kcUserName=" + kcUserName);
+                } else {
+                    log.info("[kcUserName] not resolved at introspect for endUser=" + username
+                            + ", appToken=" + tokenInfo.isApplicationToken()
+                            + " (will try am_subscriber owner enrich if applicable)");
+                }
+            } else if (tokenInfo.isApplicationToken()) {
+                log.info("[kcUserName] application token without introspect username, clientId="
+                        + tokenInfo.getConsumerKey()
+                        + "; defer to am_subscriber owner enrich after subscription validation");
+            } else {
+                log.info("[kcUserName] skip resolve: introspect username empty, clientId="
+                        + tokenInfo.getConsumerKey());
+            }
             return tokenInfo;
         } catch (KeyManagerClientException e) {
             throw new APIManagementException("Error occurred in token introspection!", e);
         }
+    }
+
+    /**
+     * Resolve login display name for opaque tokens.
+     * Order: introspect {@code preferred_username} → KM user claims
+     * ({@code preferred_username} / displayName / nickname / email / mobile).
+     */
+    private String resolveKcUserNameFromIntrospection(IntrospectInfo introspectInfo, String endUserName,
+                                                      String accessToken) {
+        String tenantAwareEndUser = MultitenantUtils.getTenantAwareUsername(endUserName);
+        if (introspectInfo != null && StringUtils.isNotEmpty(introspectInfo.getPreferredUsername())) {
+            String preferred = introspectInfo.getPreferredUsername().trim();
+            if (!preferred.equals(tenantAwareEndUser) && !preferred.equals(endUserName)) {
+                log.info("[kcUserName] source=introspect.preferred_username, endUser="
+                        + endUserName + ", value=" + preferred);
+                return preferred;
+            }
+            log.info("[kcUserName] introspect.preferred_username ignored (same as endUser), endUser="
+                    + endUserName);
+        } else {
+            log.info("[kcUserName] introspect.preferred_username empty, endUser=" + endUserName
+                    + "; falling back to KM user claims");
+        }
+        try {
+            Map<String, Object> props = new HashMap<>();
+            if (StringUtils.isNotEmpty(accessToken)) {
+                props.put(APIConstants.KeyManager.ACCESS_TOKEN, accessToken);
+            }
+            props.put(APIConstants.KeyManager.BINDING_FEDERATED_USER_CLAIMS, Boolean.TRUE.toString());
+            Map<String, String> claims = getUserClaims(endUserName, props);
+            if (claims == null || claims.isEmpty()) {
+                log.info("[kcUserName] KM user claims empty for endUser=" + endUserName);
+                return null;
+            }
+            log.info("[kcUserName] KM user claims keys=" + claims.keySet() + ", endUser=" + endUserName);
+            String[] claimKeys = {
+                    APIConstants.PREFERRED_USERNAME_CLAIM,
+                    "username",
+                    APIConstants.DISPLAY_NAME_CLAIM,
+                    APIConstants.NICKNAME_CLAIM,
+                    APIConstants.EMAIL_CLAIM,
+                    APIConstants.MOBILE_CLAIM,
+                    "mobile",
+                    "phone",
+                    "phone_number"
+            };
+            for (String key : claimKeys) {
+                String value = firstClaimValue(claims, key);
+                // Skip values that are just the APIM subject (userId@tenant)
+                if (StringUtils.isNotEmpty(value)
+                        && !value.equals(tenantAwareEndUser)
+                        && !value.equals(endUserName)) {
+                    log.info("[kcUserName] source=userClaims[" + key + "], endUser="
+                            + endUserName + ", value=" + value);
+                    return value;
+                }
+            }
+            log.info("[kcUserName] no usable claim among preferred_username/username/displayName/"
+                    + "nickname/email/mobile for endUser=" + endUserName);
+        } catch (Exception e) {
+            log.info("[kcUserName] KM user claims lookup failed for endUser=" + endUserName
+                    + ", err=" + e.getMessage());
+        }
+        return null;
+    }
+
+    private static String firstClaimValue(Map<String, String> claims, String keyOrUri) {
+        if (claims.containsKey(keyOrUri) && StringUtils.isNotEmpty(claims.get(keyOrUri))) {
+            return claims.get(keyOrUri).trim();
+        }
+        // ClaimsList may use full URI or short name; also match by URI suffix.
+        for (Map.Entry<String, String> entry : claims.entrySet()) {
+            if (entry.getKey() == null || StringUtils.isEmpty(entry.getValue())) {
+                continue;
+            }
+            String claimKey = entry.getKey();
+            if (claimKey.equalsIgnoreCase(keyOrUri)
+                    || claimKey.endsWith("/" + keyOrUri)
+                    || claimKey.endsWith("#" + keyOrUri)) {
+                return entry.getValue().trim();
+            }
+        }
+        return null;
     }
 
     @Override

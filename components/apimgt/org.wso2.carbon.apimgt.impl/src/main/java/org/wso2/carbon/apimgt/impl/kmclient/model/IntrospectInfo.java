@@ -39,6 +39,10 @@ public class IntrospectInfo {
     @SerializedName("username")
     private String username;
 
+    /** OIDC preferred username when Identity Server exposes it on introspect. */
+    @SerializedName("preferred_username")
+    private String preferredUsername;
+
     @SerializedName("aut")
     private String aut;
 
@@ -137,5 +141,15 @@ public class IntrospectInfo {
     public void setUsername(String username) {
 
         this.username = username;
+    }
+
+    public String getPreferredUsername() {
+
+        return preferredUsername;
+    }
+
+    public void setPreferredUsername(String preferredUsername) {
+
+        this.preferredUsername = preferredUsername;
     }
 }

@@ -1464,6 +1464,15 @@ public final class APIConstants {
     public static final String API_PUBLISHER_ADMIN_PERMISSION_CACHE = "apimAdminPermissionCache";
     public static final String API_SUBSCRIBER_CACHE = "subscriberCache";
     public static final String EMAIL_CLAIM = "http://wso2.org/claims/emailaddress";
+    public static final String DISPLAY_NAME_CLAIM = "http://wso2.org/claims/displayName";
+    public static final String NICKNAME_CLAIM = "http://wso2.org/claims/nickname";
+    public static final String MOBILE_CLAIM = "http://wso2.org/claims/mobile";
+    /**
+     * Keycloak / OIDC login name carried on opaque-token validation for gateway audit
+     * {@code properties.kcUserName}. Distinct from endUserName ({@code sub@carbon.super}).
+     */
+    public static final String KC_USER_NAME = "kcUserName";
+    public static final String PREFERRED_USERNAME_CLAIM = "preferred_username";
 
     //URI Authentication Schemes
     public static final Set<String> SUPPORTED_METHODS =

@@ -26,6 +26,7 @@ import org.apache.synapse.transport.nhttp.NhttpConstants;
 import org.apache.synapse.transport.passthru.PassThroughConstants;
 import org.apache.synapse.transport.passthru.SourceRequest;
 import org.apache.synapse.transport.passthru.util.PassThroughTransportUtils;
+import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -121,6 +122,84 @@ public class TransportHeaderUtil {
                 }
             }
         }
+    }
+
+    /**
+     * Captures inbound {@code x-request-id} into a message-context property.
+     * The header itself is left unchanged so the upstream backend still receives {@code x-request-id}.
+     *
+     * @param synCtx Synapse Message Context
+     */
+    public static void captureRequestIdHeader(MessageContext synCtx) {
+        if (synCtx == null) {
+            return;
+        }
+        Object existing = synCtx.getProperty(APIMgtGatewayConstants.REQUEST_ID_PROPERTY);
+        if (existing != null && StringUtils.isNotEmpty(String.valueOf(existing))) {
+            return;
+        }
+        Map transportHeaders = getTransportHeaders(synCtx);
+        String requestIdValue = extractHeaderIgnoreCase(transportHeaders, APIMgtGatewayConstants.X_REQUEST_ID_HEADER);
+        if (StringUtils.isEmpty(requestIdValue)) {
+            return;
+        }
+        synCtx.setProperty(APIMgtGatewayConstants.REQUEST_ID_PROPERTY, requestIdValue);
+        if (log.isDebugEnabled()) {
+            log.debug("Captured " + APIMgtGatewayConstants.X_REQUEST_ID_HEADER + "=" + requestIdValue
+                    + " for upstream forward and response header "
+                    + APIMgtGatewayConstants.REQUEST_ID_RESPONSE_HEADER);
+        }
+    }
+
+    /**
+     * Adds {@code request_id} to the client response headers using the value captured from
+     * inbound {@code x-request-id}. Safe to call when the property is absent.
+     *
+     * @param synCtx Synapse Message Context
+     */
+    public static void addRequestIdResponseHeader(MessageContext synCtx) {
+        if (synCtx == null) {
+            return;
+        }
+        Object requestIdObj = synCtx.getProperty(APIMgtGatewayConstants.REQUEST_ID_PROPERTY);
+        if (requestIdObj == null) {
+            return;
+        }
+        String requestIdValue = String.valueOf(requestIdObj);
+        if (StringUtils.isEmpty(requestIdValue)) {
+            return;
+        }
+        Map transportHeaders = getTransportHeaders(synCtx);
+        if (transportHeaders == null) {
+            transportHeaders = new java.util.HashMap();
+            ((Axis2MessageContext) synCtx).getAxis2MessageContext()
+                    .setProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS, transportHeaders);
+        }
+        transportHeaders.put(APIMgtGatewayConstants.REQUEST_ID_RESPONSE_HEADER, requestIdValue);
+        if (log.isDebugEnabled()) {
+            log.debug("Added response header " + APIMgtGatewayConstants.REQUEST_ID_RESPONSE_HEADER
+                    + "=" + requestIdValue);
+        }
+    }
+
+    /**
+     * Resolves a transport header value in a case-insensitive manner.
+     */
+    public static String extractHeaderIgnoreCase(Map headers, String headerName) {
+        if (headers == null || headers.isEmpty() || StringUtils.isEmpty(headerName)) {
+            return null;
+        }
+        Object directValue = headers.get(headerName);
+        if (directValue != null) {
+            return String.valueOf(directValue);
+        }
+        for (Object keyObj : headers.keySet()) {
+            if (keyObj != null && headerName.equalsIgnoreCase(String.valueOf(keyObj))) {
+                Object value = headers.get(keyObj);
+                return value != null ? String.valueOf(value) : null;
+            }
+        }
+        return null;
     }
 
     /**

@@ -26,6 +26,7 @@ import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
 import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
 import org.wso2.carbon.apimgt.gateway.utils.GatewayUtils;
+import org.wso2.carbon.apimgt.gateway.utils.TransportHeaderUtil;
 import org.wso2.carbon.apimgt.keymgt.model.entity.API;
 import org.wso2.carbon.apimgt.tracing.TracingSpan;
 import org.wso2.carbon.apimgt.tracing.TracingTracer;
@@ -42,6 +43,9 @@ public class APIMgtLatencySynapseHandler extends AbstractSynapseHandler {
 
     @Override
     public boolean handleRequestInFlow(MessageContext messageContext) {
+        // Keep x-request-id for upstream; stash value for response header request_id.
+        TransportHeaderUtil.captureRequestIdHeader(messageContext);
+
         TracingTracer tracer = ServiceReferenceHolder.getInstance().getTracer();
         TelemetryTracer telemetryTracer = ServiceReferenceHolder.getInstance().getTelemetryTracer();
 
@@ -82,6 +86,8 @@ public class APIMgtLatencySynapseHandler extends AbstractSynapseHandler {
 
     @Override
     public boolean handleRequestOutFlow(MessageContext messageContext) {
+        // Ensure value is captured even if request-in was skipped for some paths.
+        TransportHeaderUtil.captureRequestIdHeader(messageContext);
 
         TracingTracer tracer = ServiceReferenceHolder.getInstance().getTracer();
         TelemetryTracer telemetryTracer = ServiceReferenceHolder.getInstance().getTelemetryTracer();
@@ -134,6 +140,7 @@ public class APIMgtLatencySynapseHandler extends AbstractSynapseHandler {
 
     @Override
     public boolean handleResponseOutFlow(MessageContext messageContext) {
+        TransportHeaderUtil.addRequestIdResponseHeader(messageContext);
         if (TelemetryUtil.telemetryEnabled()) {
             Object resourceSpanObject = messageContext.getProperty(APIMgtGatewayConstants.RESOURCE_SPAN);
             if (resourceSpanObject != null) {

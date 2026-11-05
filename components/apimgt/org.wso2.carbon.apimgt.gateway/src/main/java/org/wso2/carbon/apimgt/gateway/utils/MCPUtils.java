@@ -461,6 +461,8 @@ public class MCPUtils {
 
                     //process headers
                     processHeaders(messageContext, resolvedRequest);
+                    // Keep x-request-id for upstream; capture for response header request_id.
+                    TransportHeaderUtil.captureRequestIdHeader(messageContext);
 
                     //process request body
                     SchemaMapping parsedSchemaDefinition = parser.parse(schemaDefinition);

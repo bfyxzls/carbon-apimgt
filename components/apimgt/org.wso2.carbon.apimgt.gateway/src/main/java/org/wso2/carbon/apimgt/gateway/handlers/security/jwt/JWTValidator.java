@@ -324,6 +324,7 @@ public class JWTValidator {
                 validateAudiences(signedJWTInfo);
                 synCtx.setProperty(APIMgtGatewayConstants.SCOPES, jwtValidationInfo.getScopes().toString());
                 synCtx.setProperty(APIMgtGatewayConstants.JWT_CLAIMS, jwtValidationInfo.getClaims());
+                GatewayUtils.setKcUserNameProperty(synCtx, jwtValidationInfo.getClaims());
                 if (apiKeyValidationInfoDTO.isAuthorized()) {
                     /*
                      * Set api.ut.apiPublisher of the subscribed api to the message context.

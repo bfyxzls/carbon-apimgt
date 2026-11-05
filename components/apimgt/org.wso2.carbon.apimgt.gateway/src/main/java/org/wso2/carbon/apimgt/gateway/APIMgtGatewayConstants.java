@@ -47,7 +47,18 @@ public class APIMgtGatewayConstants {
     public static final String BACKEND_REQUEST_START_TIME = "api.ut.backendRequestTime";
     public static final String BACKEND_REQUEST_END_TIME = "api.ut.backendRequestEndTime";
     public static final String END_USER_NAME = "api.ut.userName";
+    /**
+     * Keycloak / OIDC login name for audit {@code properties.kcUserName}.
+     * Distinct from { @link #END_USER_NAME} which is typically {@code sub@carbon.super}.
+     */
+    public static final String KC_USER_NAME = "kcUserName";
     public static final String X_FORWARDED_FOR = "X-Forwarded-For";
+    /** Inbound / upstream header carrying the request correlation id. */
+    public static final String X_REQUEST_ID_HEADER = "x-request-id";
+    /** Response header returned to the client (renamed from x-request-id). */
+    public static final String REQUEST_ID_RESPONSE_HEADER = "request_id";
+    /** Synapse message context property used to carry the captured request id to the response flow. */
+    public static final String REQUEST_ID_PROPERTY = "api.ut.request_id";
     public static final String REQUEST_RECEIVED_TIME = "wso2statistics.request.received.time";
     public static final String AUTHORIZATION = "Authorization";
     public static final String ACCESS_TOKEN = "ACCESS_TOKEN";

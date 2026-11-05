@@ -30,10 +30,13 @@ import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.dto.ConditionDTO;
 import org.wso2.carbon.apimgt.api.dto.ConditionGroupDTO;
 import org.wso2.carbon.apimgt.api.model.APIKeyInfo;
+import org.wso2.carbon.apimgt.api.model.KeyManager;
 import org.wso2.carbon.apimgt.api.model.URITemplate;
 import org.wso2.carbon.apimgt.api.model.subscription.URLMapping;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.dto.APIKeyValidationInfoDTO;
+import org.wso2.carbon.apimgt.impl.dto.KeyManagerDto;
+import org.wso2.carbon.apimgt.impl.factory.KeyManagerHolder;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.apimgt.keymgt.APIKeyMgtException;
 import org.wso2.carbon.apimgt.keymgt.SubscriptionDataHolder;
@@ -171,6 +174,8 @@ public class APIKeyValidationService {
                 String endUser = getEndUserFromValidationContext(validationContext);
                 validationContext.getValidationInfoDTO().setEndUserName(endUser);
             }
+            // Application (and other) tokens: fill kcUserName from am_subscriber / endUser claims when missing
+            enrichKcUserNameFromOwner(validationContext);
 
             // Validate scopes
             Timer timer4 = MetricManager.timer(org.wso2.carbon.metrics.manager.Level.INFO, MetricManager.name(
@@ -228,6 +233,132 @@ public class APIKeyValidationService {
             }
         }
         return endUsername;
+    }
+
+    /**
+     * When {@code kcUserName} is still empty, resolve from application owner ({@code am_subscriber})
+     * / endUser via KM user claims. Used especially for application opaque tokens.
+     */
+    private void enrichKcUserNameFromOwner(TokenValidationContext ctx) {
+        if (ctx == null || ctx.getValidationInfoDTO() == null) {
+            return;
+        }
+        APIKeyValidationInfoDTO dto = ctx.getValidationInfoDTO();
+        if (StringUtils.isNotEmpty(dto.getKcUserName())) {
+            return;
+        }
+        String ownerUser = dto.getEndUserName();
+        if (StringUtils.isEmpty(ownerUser) && StringUtils.isNotEmpty(dto.getSubscriber())) {
+            ownerUser = dto.getSubscriber();
+            if (StringUtils.isNotEmpty(dto.getSubscriberTenantDomain())
+                    && APIConstants.SUPER_TENANT_DOMAIN.equals(dto.getSubscriberTenantDomain())) {
+                ownerUser = ownerUser + "@" + dto.getSubscriberTenantDomain();
+            }
+        }
+        if (StringUtils.isEmpty(ownerUser)) {
+            log.info("[kcUserName] skip owner enrich: no endUser/subscriber on validation DTO");
+            return;
+        }
+        boolean appToken = ctx.getTokenInfo() != null && ctx.getTokenInfo().isApplicationToken();
+        log.info("[kcUserName] enrich from am_subscriber/owner claims, appToken=" + appToken
+                + ", ownerUser=" + ownerUser + ", subscriber=" + dto.getSubscriber());
+        try {
+            String tenantDomain = ctx.getTenantDomain();
+            if (StringUtils.isEmpty(tenantDomain)) {
+                tenantDomain = MultitenantUtils.getTenantDomain(ownerUser);
+            }
+            KeyManager keyManager = resolveKeyManagerForClaims(ctx, tenantDomain);
+            if (keyManager == null) {
+                log.info("[kcUserName] no KeyManager available for owner claim lookup, ownerUser=" + ownerUser);
+                return;
+            }
+            Map<String, Object> props = new HashMap<>();
+            // Username-based claims for application owner; do not pass application access token as user token
+            props.put(APIConstants.KeyManager.BINDING_FEDERATED_USER_CLAIMS, Boolean.TRUE.toString());
+            Map<String, String> claims = keyManager.getUserClaims(ownerUser, props);
+            String kcUserName = pickKcUserNameFromClaims(claims, ownerUser);
+            if (StringUtils.isNotEmpty(kcUserName)) {
+                dto.setKcUserName(kcUserName);
+                log.info("[kcUserName] resolved from owner claims, ownerUser=" + ownerUser
+                        + ", kcUserName=" + kcUserName);
+            } else {
+                log.info("[kcUserName] owner claims empty/unusable, ownerUser=" + ownerUser
+                        + ", claimKeys=" + (claims == null ? "null" : claims.keySet()));
+            }
+        } catch (Exception e) {
+            log.info("[kcUserName] owner claim enrich failed, ownerUser=" + ownerUser
+                    + ", err=" + e.getMessage());
+        }
+    }
+
+    private KeyManager resolveKeyManagerForClaims(TokenValidationContext ctx, String tenantDomain) {
+        try {
+            Map<String, KeyManagerDto> tenantKeyManagers =
+                    KeyManagerHolder.getGlobalAndTenantKeyManagers(tenantDomain);
+            if (tenantKeyManagers == null || tenantKeyManagers.isEmpty()) {
+                return null;
+            }
+            if (ctx.getTokenInfo() != null && StringUtils.isNotEmpty(ctx.getTokenInfo().getKeyManager())) {
+                KeyManagerDto dto = tenantKeyManagers.get(ctx.getTokenInfo().getKeyManager());
+                if (dto != null && dto.getKeyManager() != null) {
+                    return dto.getKeyManager();
+                }
+            }
+            for (KeyManagerDto dto : tenantKeyManagers.values()) {
+                if (dto != null && dto.getKeyManager() != null) {
+                    return dto.getKeyManager();
+                }
+            }
+        } catch (Exception e) {
+            log.info("[kcUserName] resolve KeyManager failed, tenant=" + tenantDomain
+                    + ", err=" + e.getMessage());
+        }
+        return null;
+    }
+
+    private static String pickKcUserNameFromClaims(Map<String, String> claims, String ownerUser) {
+        if (claims == null || claims.isEmpty()) {
+            return null;
+        }
+        String tenantAware = MultitenantUtils.getTenantAwareUsername(ownerUser);
+        String[] claimKeys = {
+                APIConstants.PREFERRED_USERNAME_CLAIM,
+                "username",
+                APIConstants.DISPLAY_NAME_CLAIM,
+                APIConstants.NICKNAME_CLAIM,
+                APIConstants.EMAIL_CLAIM,
+                APIConstants.MOBILE_CLAIM,
+                "mobile",
+                "phone",
+                "phone_number"
+        };
+        for (String key : claimKeys) {
+            String value = firstClaimValue(claims, key);
+            if (StringUtils.isNotEmpty(value)
+                    && !value.equals(tenantAware)
+                    && !value.equals(ownerUser)) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private static String firstClaimValue(Map<String, String> claims, String keyOrUri) {
+        if (claims.containsKey(keyOrUri) && StringUtils.isNotEmpty(claims.get(keyOrUri))) {
+            return claims.get(keyOrUri).trim();
+        }
+        for (Map.Entry<String, String> entry : claims.entrySet()) {
+            if (entry.getKey() == null || StringUtils.isEmpty(entry.getValue())) {
+                continue;
+            }
+            String claimKey = entry.getKey();
+            if (claimKey.equalsIgnoreCase(keyOrUri)
+                    || claimKey.endsWith("/" + keyOrUri)
+                    || claimKey.endsWith("#" + keyOrUri)) {
+                return entry.getValue().trim();
+            }
+        }
+        return null;
     }
 
     /**

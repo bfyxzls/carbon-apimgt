@@ -45,6 +45,8 @@ public class APIKeyValidationInfoDTO implements Serializable {
     private String userType;
     private String endUserToken;
     private String endUserName;
+    /** Keycloak / OIDC login name for audit properties.kcUserName (opaque token path). */
+    private String kcUserName;
     private String applicationId;
     private String applicationName;
     private String applicationTier;
@@ -166,6 +168,14 @@ public class APIKeyValidationInfoDTO implements Serializable {
 
     public void setEndUserName(String endUserName) {
         this.endUserName = endUserName;
+    }
+
+    public String getKcUserName() {
+        return kcUserName;
+    }
+
+    public void setKcUserName(String kcUserName) {
+        this.kcUserName = kcUserName;
     }
 
     public String getApplicationId() {

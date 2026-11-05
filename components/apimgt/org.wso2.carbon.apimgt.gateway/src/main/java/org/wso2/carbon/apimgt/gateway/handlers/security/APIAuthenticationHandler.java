@@ -858,31 +858,31 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
                         JsonObject dataObject = jsonObject.getAsJsonObject("data");
                         String remainingPointsStr = dataObject.get("remainingPoints").getAsString();
                         int remainingPoints = Integer.parseInt(remainingPointsStr);
-                        // 如果积分<=0，报错
+                        // 如果积分<=0，报错（业务码 900001，HTTP 200）
                         if (remainingPoints <= 0) {
                             String errorMsg =
                                     "User " + userId + " has insufficient points. Remaining points: " + remainingPoints;
                             log.error(errorMsg);
-                            Pair<Integer, String> error =
-                                    Pair.of(APISecurityConstants.API_AUTH_INSUFFICIENT_POINTS, errorMsg);
-                            throw new APISecurityException(error.getKey(), error.getValue());
+                            throw new APISecurityException(
+                                    APISecurityConstants.API_AUTH_INSUFFICIENT_POINTS, errorMsg);
                         }
-
-
                     } else {
-                        String msg = jsonObject.get("msg").getAsString();
-                        log.error("API request failed with code: " + code + ", msg: " + msg);
-                        Pair<Integer, String> error =
-                                Pair.of(APISecurityConstants.API_AUTH_INSUFFICIENT_POINTS, msg);
-                        throw new APISecurityException(error.getKey(), error.getValue());
+                        // 积分查询接口业务失败：按服务端错误处理，勿冒充积分不足
+                        String msg = jsonObject.has("msg") ? jsonObject.get("msg").getAsString()
+                                : APISecurityConstants.API_AUTH_GENERAL_ERROR_MESSAGE;
+                        throw new APISecurityException(
+                                APISecurityConstants.API_AUTH_GENERAL_ERROR,
+                                APISecurityConstants.API_AUTH_GENERAL_ERROR_MESSAGE);
                     }
 
+                } catch (APISecurityException e) {
+                    throw e;
                 } catch (Exception e) {
+                    // 本地调用/解析异常：统一 900900 + HTTP 500，勿返回 900001
                     log.error("Error while checking remaining points for user: " + userId, e);
-                    Pair<Integer, String> error =
-                            Pair.of(APISecurityConstants.API_AUTH_INSUFFICIENT_POINTS,
-                                    "法宝 MCP 积分不足，请前往https://mcp.pkulaw.com/console进行积分充值" );
-                    throw new APISecurityException(error.getKey(), error.getValue());
+                    throw new APISecurityException(
+                            APISecurityConstants.API_AUTH_GENERAL_ERROR,
+                            APISecurityConstants.API_AUTH_GENERAL_ERROR_MESSAGE, e);
                 }
 
             }
@@ -911,26 +911,29 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
             if ("200".equals(code)) {
                 Boolean result = jsonObject.get("data").getAsBoolean();
                 if (!result) {
-                    String msg = jsonObject.get("msg").getAsString();
-                    log.error("API request failed with code: " + code + ", msg: " + msg);
-                    Pair<Integer, String> error =
-                            Pair.of(APISecurityConstants.API_AUTH_MEMBER_TOKEN_POINTS_UNAVAILABLE, msg);
-                    throw new APISecurityException(error.getKey(), error.getValue());
+                    // 成员额度不足（业务码 900002，HTTP 200）
+                    String msg = jsonObject.has("msg") ? jsonObject.get("msg").getAsString()
+                            : APISecurityConstants.API_AUTH_MEMBER_TOKEN_POINTS_UNAVAILABLE_MESSAGE;
+                    throw new APISecurityException(
+                            APISecurityConstants.API_AUTH_MEMBER_TOKEN_POINTS_UNAVAILABLE, msg);
                 }
             } else {
-                String msg = jsonObject.get("msg").getAsString();
-                log.error("API request failed with code: " + code + ", msg: " + msg);
-                Pair<Integer, String> error =
-                        Pair.of(APISecurityConstants.API_AUTH_MEMBER_TOKEN_POINTS_UNAVAILABLE, msg);
-                throw new APISecurityException(error.getKey(), error.getValue());
+                // 成员额度查询接口业务失败：按服务端错误处理，勿冒充额度不足
+                String msg = jsonObject.has("msg") ? jsonObject.get("msg").getAsString()
+                        : APISecurityConstants.API_AUTH_GENERAL_ERROR_MESSAGE;
+                throw new APISecurityException(
+                        APISecurityConstants.API_AUTH_GENERAL_ERROR,
+                        APISecurityConstants.API_AUTH_GENERAL_ERROR_MESSAGE);
             }
 
+        } catch (APISecurityException e) {
+            throw e;
         } catch (Exception e) {
+            // 本地调用/解析异常：统一 900900 + HTTP 500，勿返回 900002
             log.error("Error while checking remaining points for token: " + token, e);
-            Pair<Integer, String> error =
-                    Pair.of(APISecurityConstants.API_AUTH_MEMBER_TOKEN_POINTS_UNAVAILABLE,
-                            "Error while checking remaining points for token: " + token);
-            throw new APISecurityException(error.getKey(), error.getValue());
+            throw new APISecurityException(
+                    APISecurityConstants.API_AUTH_GENERAL_ERROR,
+                    APISecurityConstants.API_AUTH_GENERAL_ERROR_MESSAGE, e);
         }
     }
 

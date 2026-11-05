@@ -33,6 +33,8 @@ public class Constants {
     public static final String SKIP_METRICS_PUBLISHING = "SKIP_METRICS_PUBLISHING";
     public static final String REQUEST_CACHE_HIT = "api.analytics.cacheHit";
     public static final String API_USER_NAME_KEY = "userName";
+    /** Keycloak preferred_username (or username/email fallback) for ES properties */
+    public static final String KC_USER_NAME_KEY = "kcUserName";
     public static final String API_CONTEXT_KEY = "apiContext";
     public static final String RESPONSE_SIZE = "responseSize";
     public static final String REQUEST_SIZE = "requestSize";
