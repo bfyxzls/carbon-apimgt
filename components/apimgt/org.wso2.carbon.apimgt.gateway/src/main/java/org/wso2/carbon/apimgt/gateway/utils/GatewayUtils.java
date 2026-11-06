@@ -699,6 +699,7 @@ public class GatewayUtils {
     /**
      * When claims contain a login name, store it on the Synapse message context as
      * {@link APIMgtGatewayConstants#KC_USER_NAME} for analytics {@code properties.kcUserName}.
+     * Also sets {@code properties.email} / {@code properties.phone} when present.
      * Does not alter {@link APIMgtGatewayConstants#END_USER_NAME}.
      */
     public static void setKcUserNameProperty(org.apache.synapse.MessageContext synCtx, Map<String, Object> claims) {
@@ -713,6 +714,60 @@ public class GatewayUtils {
             log.info("[kcUserName] JWT claims had no preferred_username/username/email/mobile"
                     + "; claimKeys=" + (claims == null ? "null" : claims.keySet()));
         }
+        String email = resolveEmail(claims);
+        if (StringUtils.isNotEmpty(email)) {
+            synCtx.setProperty(APIMgtGatewayConstants.KC_EMAIL, email);
+        }
+        String phone = resolvePhone(claims);
+        if (StringUtils.isNotEmpty(phone)) {
+            synCtx.setProperty(APIMgtGatewayConstants.KC_PHONE, phone);
+        }
+    }
+
+    /**
+     * Resolve email from JWT / OIDC claims.
+     * Priority: {@code email} → {@code emailaddress} → WSO2 email claim URI.
+     */
+    public static String resolveEmail(Map<String, Object> claims) {
+        return firstClaimText(claims, "email", "emailaddress",
+                "http://wso2.org/claims/emailaddress");
+    }
+
+    /**
+     * Resolve phone/mobile from JWT / OIDC / Keycloak claims.
+     * Priority: {@code phoneNumber} → {@code phone_number} → {@code mobile} → {@code phone}
+     * → WSO2 mobile claim URI.
+     */
+    public static String resolvePhone(Map<String, Object> claims) {
+        return firstClaimText(claims, "phoneNumber", "phone_number", "mobile", "phone",
+                "http://wso2.org/claims/mobile");
+    }
+
+    private static String firstClaimText(Map<String, Object> claims, String... keys) {
+        if (claims == null || claims.isEmpty() || keys == null) {
+            return null;
+        }
+        for (String key : keys) {
+            Object value = claims.get(key);
+            if (value == null) {
+                // Case-insensitive key match
+                for (Map.Entry<String, Object> entry : claims.entrySet()) {
+                    if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(key)
+                            && entry.getValue() != null) {
+                        value = entry.getValue();
+                        break;
+                    }
+                }
+            }
+            if (value == null) {
+                continue;
+            }
+            String text = String.valueOf(value).trim();
+            if (StringUtils.isNotEmpty(text) && !"null".equalsIgnoreCase(text)) {
+                return text;
+            }
+        }
+        return null;
     }
 
     public static AuthenticationContext generateAuthenticationContext(String tokenSignature, JWTClaimsSet payload,

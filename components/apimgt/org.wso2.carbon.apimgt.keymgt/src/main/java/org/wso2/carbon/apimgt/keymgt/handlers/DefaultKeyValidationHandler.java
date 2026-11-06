@@ -115,6 +115,18 @@ public class DefaultKeyValidationHandler extends AbstractKeyValidationHandler {
                 apiKeyValidationInfoDTO.setKcUserName(
                         String.valueOf(tokenInfo.getParameter(APIConstants.KC_USER_NAME)));
             }
+            if (StringUtils.isNotEmpty(tokenInfo.getEmail())) {
+                apiKeyValidationInfoDTO.setEmail(tokenInfo.getEmail());
+            } else if (tokenInfo.getParameter(APIConstants.KC_EMAIL) != null) {
+                apiKeyValidationInfoDTO.setEmail(
+                        String.valueOf(tokenInfo.getParameter(APIConstants.KC_EMAIL)));
+            }
+            if (StringUtils.isNotEmpty(tokenInfo.getPhone())) {
+                apiKeyValidationInfoDTO.setPhone(tokenInfo.getPhone());
+            } else if (tokenInfo.getParameter(APIConstants.KC_PHONE) != null) {
+                apiKeyValidationInfoDTO.setPhone(
+                        String.valueOf(tokenInfo.getParameter(APIConstants.KC_PHONE)));
+            }
             apiKeyValidationInfoDTO.setConsumerKey(tokenInfo.getConsumerKey());
             apiKeyValidationInfoDTO.setIssuedTime(tokenInfo.getIssuedTime());
             apiKeyValidationInfoDTO.setValidityPeriod(tokenInfo.getValidityPeriod());

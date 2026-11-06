@@ -876,22 +876,11 @@ public class AMDefaultKeyManagerImpl extends AbstractKeyManager {
                 tokenInfo.setApplicationToken(true);
             }
 
-            // Opaque path: resolve Keycloak/OIDC login name for gateway audit properties.kcUserName.
-            // Application tokens: introspect often has no end-user; kcUserName is enriched later from
+            // Opaque path: resolve Keycloak/OIDC login name + email/phone for gateway audit properties.
+            // Application tokens: introspect often has no end-user; fields are enriched later from
             // am_subscriber (application owner) after subscription validation.
             if (StringUtils.isNotEmpty(username)) {
-                String kcUserName = resolveKcUserNameFromIntrospection(introspectInfo, username, accessToken);
-                if (StringUtils.isNotEmpty(kcUserName)) {
-                    tokenInfo.setKcUserName(kcUserName);
-                    tokenInfo.addParameter(APIConstants.KC_USER_NAME, kcUserName);
-                    log.info("[kcUserName] resolved from KM introspection/claims, endUser="
-                            + username + ", appToken=" + tokenInfo.isApplicationToken()
-                            + ", kcUserName=" + kcUserName);
-                } else {
-                    log.info("[kcUserName] not resolved at introspect for endUser=" + username
-                            + ", appToken=" + tokenInfo.isApplicationToken()
-                            + " (will try am_subscriber owner enrich if applicable)");
-                }
+                enrichOpaqueAuditFields(tokenInfo, introspectInfo, username, accessToken);
             } else if (tokenInfo.isApplicationToken()) {
                 log.info("[kcUserName] application token without introspect username, clientId="
                         + tokenInfo.getConsumerKey()
@@ -907,65 +896,108 @@ public class AMDefaultKeyManagerImpl extends AbstractKeyManager {
     }
 
     /**
-     * Resolve login display name for opaque tokens.
-     * Order: introspect {@code preferred_username} → KM user claims
-     * ({@code preferred_username} / displayName / nickname / email / mobile).
+     * Resolve login display name + email/phone for opaque tokens into {@link AccessTokenInfo}.
+     * Order for kcUserName: introspect {@code preferred_username} → KM user claims.
+     * Email/phone always prefer KM user claims (UM_USER_ATTRIBUTE after jwt-bearer persist).
      */
-    private String resolveKcUserNameFromIntrospection(IntrospectInfo introspectInfo, String endUserName,
-                                                      String accessToken) {
+    private void enrichOpaqueAuditFields(AccessTokenInfo tokenInfo, IntrospectInfo introspectInfo,
+                                         String endUserName, String accessToken) {
         String tenantAwareEndUser = MultitenantUtils.getTenantAwareUsername(endUserName);
+        String kcUserName = null;
         if (introspectInfo != null && StringUtils.isNotEmpty(introspectInfo.getPreferredUsername())) {
             String preferred = introspectInfo.getPreferredUsername().trim();
             if (!preferred.equals(tenantAwareEndUser) && !preferred.equals(endUserName)) {
+                kcUserName = preferred;
                 log.info("[kcUserName] source=introspect.preferred_username, endUser="
                         + endUserName + ", value=" + preferred);
-                return preferred;
+            } else {
+                log.info("[kcUserName] introspect.preferred_username ignored (same as endUser), endUser="
+                        + endUserName);
             }
-            log.info("[kcUserName] introspect.preferred_username ignored (same as endUser), endUser="
-                    + endUserName);
         } else {
             log.info("[kcUserName] introspect.preferred_username empty, endUser=" + endUserName
                     + "; falling back to KM user claims");
         }
+        Map<String, String> claims = null;
         try {
             Map<String, Object> props = new HashMap<>();
             if (StringUtils.isNotEmpty(accessToken)) {
                 props.put(APIConstants.KeyManager.ACCESS_TOKEN, accessToken);
             }
             props.put(APIConstants.KeyManager.BINDING_FEDERATED_USER_CLAIMS, Boolean.TRUE.toString());
-            Map<String, String> claims = getUserClaims(endUserName, props);
-            if (claims == null || claims.isEmpty()) {
-                log.info("[kcUserName] KM user claims empty for endUser=" + endUserName);
-                return null;
-            }
-            log.info("[kcUserName] KM user claims keys=" + claims.keySet() + ", endUser=" + endUserName);
-            String[] claimKeys = {
-                    APIConstants.PREFERRED_USERNAME_CLAIM,
-                    "username",
-                    APIConstants.DISPLAY_NAME_CLAIM,
-                    APIConstants.NICKNAME_CLAIM,
-                    APIConstants.EMAIL_CLAIM,
-                    APIConstants.MOBILE_CLAIM,
-                    "mobile",
-                    "phone",
-                    "phone_number"
-            };
-            for (String key : claimKeys) {
-                String value = firstClaimValue(claims, key);
-                // Skip values that are just the APIM subject (userId@tenant)
-                if (StringUtils.isNotEmpty(value)
-                        && !value.equals(tenantAwareEndUser)
-                        && !value.equals(endUserName)) {
-                    log.info("[kcUserName] source=userClaims[" + key + "], endUser="
-                            + endUserName + ", value=" + value);
-                    return value;
-                }
-            }
-            log.info("[kcUserName] no usable claim among preferred_username/username/displayName/"
-                    + "nickname/email/mobile for endUser=" + endUserName);
+            claims = getUserClaims(endUserName, props);
         } catch (Exception e) {
             log.info("[kcUserName] KM user claims lookup failed for endUser=" + endUserName
                     + ", err=" + e.getMessage());
+        }
+        if (claims == null || claims.isEmpty()) {
+            log.info("[kcUserName] KM user claims empty for endUser=" + endUserName);
+        } else {
+            log.info("[kcUserName] KM user claims keys=" + claims.keySet() + ", endUser=" + endUserName);
+            if (StringUtils.isEmpty(kcUserName)) {
+                String[] claimKeys = {
+                        APIConstants.PREFERRED_USERNAME_CLAIM,
+                        "username",
+                        APIConstants.DISPLAY_NAME_CLAIM,
+                        APIConstants.NICKNAME_CLAIM,
+                        APIConstants.EMAIL_CLAIM,
+                        APIConstants.MOBILE_CLAIM,
+                        "mobile",
+                        "phone",
+                        "phone_number",
+                        "phoneNumber"
+                };
+                for (String key : claimKeys) {
+                    String value = firstClaimValue(claims, key);
+                    if (StringUtils.isNotEmpty(value)
+                            && !value.equals(tenantAwareEndUser)
+                            && !value.equals(endUserName)) {
+                        kcUserName = value;
+                        log.info("[kcUserName] source=userClaims[" + key + "], endUser="
+                                + endUserName + ", value=" + value);
+                        break;
+                    }
+                }
+                if (StringUtils.isEmpty(kcUserName)) {
+                    log.info("[kcUserName] no usable claim among preferred_username/username/displayName/"
+                            + "nickname/email/mobile for endUser=" + endUserName);
+                }
+            }
+            String email = firstClaimValue(claims, APIConstants.EMAIL_CLAIM, "email", "emailaddress");
+            String phone = firstClaimValue(claims, APIConstants.MOBILE_CLAIM, "phoneNumber",
+                    "phone_number", "mobile", "phone");
+            if (StringUtils.isNotEmpty(email)) {
+                tokenInfo.setEmail(email);
+                tokenInfo.addParameter(APIConstants.KC_EMAIL, email);
+            }
+            if (StringUtils.isNotEmpty(phone)) {
+                tokenInfo.setPhone(phone);
+                tokenInfo.addParameter(APIConstants.KC_PHONE, phone);
+            }
+        }
+        if (StringUtils.isNotEmpty(kcUserName)) {
+            tokenInfo.setKcUserName(kcUserName);
+            tokenInfo.addParameter(APIConstants.KC_USER_NAME, kcUserName);
+            log.info("[kcUserName] resolved from KM introspection/claims, endUser="
+                    + endUserName + ", appToken=" + tokenInfo.isApplicationToken()
+                    + ", kcUserName=" + kcUserName
+                    + ", email=" + tokenInfo.getEmail() + ", phone=" + tokenInfo.getPhone());
+        } else {
+            log.info("[kcUserName] not resolved at introspect for endUser=" + endUserName
+                    + ", appToken=" + tokenInfo.isApplicationToken()
+                    + " (will try am_subscriber owner enrich if applicable)");
+        }
+    }
+
+    private static String firstClaimValue(Map<String, String> claims, String... keys) {
+        if (claims == null || keys == null) {
+            return null;
+        }
+        for (String key : keys) {
+            String value = firstClaimValue(claims, key);
+            if (StringUtils.isNotEmpty(value)) {
+                return value;
+            }
         }
         return null;
     }

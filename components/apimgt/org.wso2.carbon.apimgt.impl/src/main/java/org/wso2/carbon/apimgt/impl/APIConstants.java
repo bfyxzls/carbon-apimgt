@@ -1472,6 +1472,10 @@ public final class APIConstants {
      * {@code properties.kcUserName}. Distinct from endUserName ({@code sub@carbon.super}).
      */
     public static final String KC_USER_NAME = "kcUserName";
+    /** Audit {@code properties.email} (from JWT / UM email claim). */
+    public static final String KC_EMAIL = "email";
+    /** Audit {@code properties.phone} (from JWT / UM mobile / phoneNumber claim). */
+    public static final String KC_PHONE = "phone";
     public static final String PREFERRED_USERNAME_CLAIM = "preferred_username";
 
     //URI Authentication Schemes

@@ -52,6 +52,10 @@ public class APIMgtGatewayConstants {
      * Distinct from { @link #END_USER_NAME} which is typically {@code sub@carbon.super}.
      */
     public static final String KC_USER_NAME = "kcUserName";
+    /** User email for audit {@code properties.email}. */
+    public static final String KC_EMAIL = "email";
+    /** User phone/mobile for audit {@code properties.phone}. */
+    public static final String KC_PHONE = "phone";
     public static final String X_FORWARDED_FOR = "X-Forwarded-For";
     /** Inbound / upstream header carrying the request correlation id. */
     public static final String X_REQUEST_ID_HEADER = "x-request-id";

@@ -468,22 +468,52 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
      * falls back to {@link APIMgtGatewayConstants#JWT_CLAIMS}. Never overwrites top-level userName.
      */
     private String resolveKcUserNameForAnalytics() {
-        if (messageContext.getPropertyKeySet().contains(APIMgtGatewayConstants.KC_USER_NAME)) {
-            Object preSet = messageContext.getProperty(APIMgtGatewayConstants.KC_USER_NAME);
-            if (preSet != null) {
-                String text = String.valueOf(preSet).trim();
-                if (StringUtils.isNotEmpty(text)) {
-                    return text;
-                }
-            }
+        String fromCtx = readStringProperty(APIMgtGatewayConstants.KC_USER_NAME);
+        if (StringUtils.isNotEmpty(fromCtx)) {
+            return fromCtx;
         }
-        if (messageContext.getPropertyKeySet().contains(APIMgtGatewayConstants.JWT_CLAIMS)) {
-            Object claimsObj = messageContext.getProperty(APIMgtGatewayConstants.JWT_CLAIMS);
-            if (claimsObj instanceof Map) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> claims = (Map<String, Object>) claimsObj;
-                return GatewayUtils.resolveKcUserName(claims);
-            }
+        Map<String, Object> claims = readJwtClaims();
+        return claims == null ? null : GatewayUtils.resolveKcUserName(claims);
+    }
+
+    private String resolveEmailForAnalytics() {
+        String fromCtx = readStringProperty(APIMgtGatewayConstants.KC_EMAIL);
+        if (StringUtils.isNotEmpty(fromCtx)) {
+            return fromCtx;
+        }
+        Map<String, Object> claims = readJwtClaims();
+        return claims == null ? null : GatewayUtils.resolveEmail(claims);
+    }
+
+    private String resolvePhoneForAnalytics() {
+        String fromCtx = readStringProperty(APIMgtGatewayConstants.KC_PHONE);
+        if (StringUtils.isNotEmpty(fromCtx)) {
+            return fromCtx;
+        }
+        Map<String, Object> claims = readJwtClaims();
+        return claims == null ? null : GatewayUtils.resolvePhone(claims);
+    }
+
+    private String readStringProperty(String key) {
+        if (!messageContext.getPropertyKeySet().contains(key)) {
+            return null;
+        }
+        Object preSet = messageContext.getProperty(key);
+        if (preSet == null) {
+            return null;
+        }
+        String text = String.valueOf(preSet).trim();
+        return StringUtils.isNotEmpty(text) ? text : null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> readJwtClaims() {
+        if (!messageContext.getPropertyKeySet().contains(APIMgtGatewayConstants.JWT_CLAIMS)) {
+            return null;
+        }
+        Object claimsObj = messageContext.getProperty(APIMgtGatewayConstants.JWT_CLAIMS);
+        if (claimsObj instanceof Map) {
+            return (Map<String, Object>) claimsObj;
         }
         return null;
     }
@@ -525,6 +555,14 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
             log.info("[kcUserName] properties.kcUserName omitted: not found on MessageContext"
                     + " (ctxProp=" + hasCtxProp + ", jwtClaims=" + hasJwtClaims
                     + ", userName=" + getUserName() + ")");
+        }
+        String email = resolveEmailForAnalytics();
+        if (StringUtils.isNotEmpty(email)) {
+            customProperties.put(Constants.EMAIL_KEY, email);
+        }
+        String phone = resolvePhoneForAnalytics();
+        if (StringUtils.isNotEmpty(phone)) {
+            customProperties.put(Constants.PHONE_KEY, phone);
         }
         customProperties.put(Constants.API_CONTEXT_KEY, getApiContext());
         customProperties.put(Constants.RESPONSE_SIZE, getResponseSize());

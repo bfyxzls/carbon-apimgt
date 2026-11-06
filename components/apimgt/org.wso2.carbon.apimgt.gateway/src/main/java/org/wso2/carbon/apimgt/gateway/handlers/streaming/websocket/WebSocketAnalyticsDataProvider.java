@@ -327,24 +327,60 @@ public class WebSocketAnalyticsDataProvider implements AnalyticsDataProvider {
         if (StringUtils.isNotEmpty(kcUserName)) {
             customProperties.put(Constants.KC_USER_NAME_KEY, kcUserName);
         }
+        String email = resolveEmailForAnalytics();
+        if (StringUtils.isNotEmpty(email)) {
+            customProperties.put(Constants.EMAIL_KEY, email);
+        }
+        String phone = resolvePhoneForAnalytics();
+        if (StringUtils.isNotEmpty(phone)) {
+            customProperties.put(Constants.PHONE_KEY, phone);
+        }
         customProperties.put(Constants.API_CONTEXT_KEY, getApiContext());
         customProperties.put(Constants.RESPONSE_SIZE, getResponseSize());
         return customProperties;
     }
 
     private String resolveKcUserNameForAnalytics() {
-        Object preSet = WebSocketUtils.getPropertyFromChannel(APIMgtGatewayConstants.KC_USER_NAME, ctx);
-        if (preSet != null) {
-            String text = String.valueOf(preSet).trim();
-            if (StringUtils.isNotEmpty(text)) {
-                return text;
-            }
+        String fromCtx = readChannelString(APIMgtGatewayConstants.KC_USER_NAME);
+        if (StringUtils.isNotEmpty(fromCtx)) {
+            return fromCtx;
         }
+        Map<String, Object> claims = readJwtClaims();
+        return claims == null ? null : GatewayUtils.resolveKcUserName(claims);
+    }
+
+    private String resolveEmailForAnalytics() {
+        String fromCtx = readChannelString(APIMgtGatewayConstants.KC_EMAIL);
+        if (StringUtils.isNotEmpty(fromCtx)) {
+            return fromCtx;
+        }
+        Map<String, Object> claims = readJwtClaims();
+        return claims == null ? null : GatewayUtils.resolveEmail(claims);
+    }
+
+    private String resolvePhoneForAnalytics() {
+        String fromCtx = readChannelString(APIMgtGatewayConstants.KC_PHONE);
+        if (StringUtils.isNotEmpty(fromCtx)) {
+            return fromCtx;
+        }
+        Map<String, Object> claims = readJwtClaims();
+        return claims == null ? null : GatewayUtils.resolvePhone(claims);
+    }
+
+    private String readChannelString(String key) {
+        Object preSet = WebSocketUtils.getPropertyFromChannel(key, ctx);
+        if (preSet == null) {
+            return null;
+        }
+        String text = String.valueOf(preSet).trim();
+        return StringUtils.isNotEmpty(text) ? text : null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> readJwtClaims() {
         Object claimsObj = WebSocketUtils.getPropertyFromChannel(APIMgtGatewayConstants.JWT_CLAIMS, ctx);
         if (claimsObj instanceof Map) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> claims = (Map<String, Object>) claimsObj;
-            return GatewayUtils.resolveKcUserName(claims);
+            return (Map<String, Object>) claimsObj;
         }
         return null;
     }

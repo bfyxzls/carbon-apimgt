@@ -236,7 +236,7 @@ public class APIKeyValidationService {
     }
 
     /**
-     * When {@code kcUserName} is still empty, resolve from application owner ({@code am_subscriber})
+     * When audit fields are still empty, resolve from application owner ({@code am_subscriber})
      * / endUser via KM user claims. Used especially for application opaque tokens.
      */
     private void enrichKcUserNameFromOwner(TokenValidationContext ctx) {
@@ -244,7 +244,10 @@ public class APIKeyValidationService {
             return;
         }
         APIKeyValidationInfoDTO dto = ctx.getValidationInfoDTO();
-        if (StringUtils.isNotEmpty(dto.getKcUserName())) {
+        boolean needKc = StringUtils.isEmpty(dto.getKcUserName());
+        boolean needEmail = StringUtils.isEmpty(dto.getEmail());
+        boolean needPhone = StringUtils.isEmpty(dto.getPhone());
+        if (!needKc && !needEmail && !needPhone) {
             return;
         }
         String ownerUser = dto.getEndUserName();
@@ -276,19 +279,47 @@ public class APIKeyValidationService {
             // Username-based claims for application owner; do not pass application access token as user token
             props.put(APIConstants.KeyManager.BINDING_FEDERATED_USER_CLAIMS, Boolean.TRUE.toString());
             Map<String, String> claims = keyManager.getUserClaims(ownerUser, props);
-            String kcUserName = pickKcUserNameFromClaims(claims, ownerUser);
-            if (StringUtils.isNotEmpty(kcUserName)) {
-                dto.setKcUserName(kcUserName);
-                log.info("[kcUserName] resolved from owner claims, ownerUser=" + ownerUser
-                        + ", kcUserName=" + kcUserName);
-            } else {
-                log.info("[kcUserName] owner claims empty/unusable, ownerUser=" + ownerUser
-                        + ", claimKeys=" + (claims == null ? "null" : claims.keySet()));
+            if (needKc) {
+                String kcUserName = pickKcUserNameFromClaims(claims, ownerUser);
+                if (StringUtils.isNotEmpty(kcUserName)) {
+                    dto.setKcUserName(kcUserName);
+                    log.info("[kcUserName] resolved from owner claims, ownerUser=" + ownerUser
+                            + ", kcUserName=" + kcUserName);
+                } else {
+                    log.info("[kcUserName] owner claims empty/unusable, ownerUser=" + ownerUser
+                            + ", claimKeys=" + (claims == null ? "null" : claims.keySet()));
+                }
+            }
+            if (needEmail) {
+                String email = pickClaimFromMap(claims, APIConstants.EMAIL_CLAIM, "email", "emailaddress");
+                if (StringUtils.isNotEmpty(email)) {
+                    dto.setEmail(email);
+                }
+            }
+            if (needPhone) {
+                String phone = pickClaimFromMap(claims, APIConstants.MOBILE_CLAIM, "phoneNumber",
+                        "phone_number", "mobile", "phone");
+                if (StringUtils.isNotEmpty(phone)) {
+                    dto.setPhone(phone);
+                }
             }
         } catch (Exception e) {
             log.info("[kcUserName] owner claim enrich failed, ownerUser=" + ownerUser
                     + ", err=" + e.getMessage());
         }
+    }
+
+    private static String pickClaimFromMap(Map<String, String> claims, String... keys) {
+        if (claims == null || claims.isEmpty() || keys == null) {
+            return null;
+        }
+        for (String key : keys) {
+            String value = firstClaimValue(claims, key);
+            if (StringUtils.isNotEmpty(value)) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private KeyManager resolveKeyManagerForClaims(TokenValidationContext ctx, String tenantDomain) {
@@ -330,7 +361,8 @@ public class APIKeyValidationService {
                 APIConstants.MOBILE_CLAIM,
                 "mobile",
                 "phone",
-                "phone_number"
+                "phone_number",
+                "phoneNumber"
         };
         for (String key : claimKeys) {
             String value = firstClaimValue(claims, key);

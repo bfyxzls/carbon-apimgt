@@ -360,11 +360,18 @@ public class OAuthAuthenticator implements Authenticator {
             if (StringUtils.isNotEmpty(info.getKcUserName())) {
                 synCtx.setProperty(APIMgtGatewayConstants.KC_USER_NAME, info.getKcUserName());
                 log.info("[kcUserName] opaque auth set MessageContext kcUserName="
-                        + info.getKcUserName() + ", endUser=" + info.getEndUserName());
+                        + info.getKcUserName() + ", endUser=" + info.getEndUserName()
+                        + ", email=" + info.getEmail() + ", phone=" + info.getPhone());
             } else {
                 log.info("[kcUserName] opaque auth DTO.kcUserName empty, endUser="
                         + info.getEndUserName()
                         + " (KM did not resolve preferred_username/claims)");
+            }
+            if (StringUtils.isNotEmpty(info.getEmail())) {
+                synCtx.setProperty(APIMgtGatewayConstants.KC_EMAIL, info.getEmail());
+            }
+            if (StringUtils.isNotEmpty(info.getPhone())) {
+                synCtx.setProperty(APIMgtGatewayConstants.KC_PHONE, info.getPhone());
             }
             synCtx.setProperty(APIMgtGatewayConstants.SCOPES, info.getScopes() == null ? null : info.getScopes()
                                                                                                     .toString());
@@ -411,6 +418,12 @@ public class OAuthAuthenticator implements Authenticator {
             synCtx.setProperty("userName",info.getEndUserName());
             if (StringUtils.isNotEmpty(info.getKcUserName())) {
                 synCtx.setProperty(APIMgtGatewayConstants.KC_USER_NAME, info.getKcUserName());
+            }
+            if (StringUtils.isNotEmpty(info.getEmail())) {
+                synCtx.setProperty(APIMgtGatewayConstants.KC_EMAIL, info.getEmail());
+            }
+            if (StringUtils.isNotEmpty(info.getPhone())) {
+                synCtx.setProperty(APIMgtGatewayConstants.KC_PHONE, info.getPhone());
             }
 
             /* GraphQL Query Analysis Information */
