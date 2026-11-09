@@ -60,15 +60,21 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  *
  */
 public class APIKeyValidationService {
     private static final Log log = LogFactory.getLog(APIKeyValidationService.class);
+
+    /** Member-token scope stores Keycloak userId as a UUID. */
+    private static final Pattern MEMBER_USER_ID_SCOPE_PATTERN = Pattern.compile(
+            "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
 
     /**
      * Validates the access tokens issued for a particular user to access an API.
@@ -167,6 +173,7 @@ public class APIKeyValidationService {
         }
         log.debug("State after calling validateSubscription... " + state);
 
+        boolean subUserProfileEnriched = false;
         if (state) {
             if (validationContext.getTokenInfo() != null
                     && validationContext.getTokenInfo().isApplicationToken()) {
@@ -176,6 +183,8 @@ public class APIKeyValidationService {
             }
             // Application (and other) tokens: fill kcUserName from am_subscriber / endUser claims when missing
             enrichKcUserNameFromOwner(validationContext);
+            // Member tokens: UUID-shaped scope → sub-account audit fields
+            subUserProfileEnriched = enrichSubUserFromMemberScope(validationContext);
 
             // Validate scopes
             Timer timer4 = MetricManager.timer(org.wso2.carbon.metrics.manager.Level.INFO, MetricManager.name(
@@ -199,7 +208,8 @@ public class APIKeyValidationService {
         }
         log.debug("State after calling generateConsumerToken... " + state);
 
-        if (!validationContext.isCacheHit()) {
+        // Also rewrite cache when cache-hit path later filled missing subUser profile fields.
+        if (!validationContext.isCacheHit() || subUserProfileEnriched) {
             APIKeyMgtUtil.writeToKeyManagerCache(cacheKey, validationContext.getValidationInfoDTO());
         }
         if (log.isDebugEnabled() && axis2MessageContext != null) {
@@ -259,11 +269,11 @@ public class APIKeyValidationService {
             }
         }
         if (StringUtils.isEmpty(ownerUser)) {
-            log.info("[kcUserName] skip owner enrich: no endUser/subscriber on validation DTO");
+            log.debug("[kcUserName] skip owner enrich: no endUser/subscriber on validation DTO");
             return;
         }
         boolean appToken = ctx.getTokenInfo() != null && ctx.getTokenInfo().isApplicationToken();
-        log.info("[kcUserName] enrich from am_subscriber/owner claims, appToken=" + appToken
+        log.debug("[kcUserName] enrich from am_subscriber/owner claims, appToken=" + appToken
                 + ", ownerUser=" + ownerUser + ", subscriber=" + dto.getSubscriber());
         try {
             String tenantDomain = ctx.getTenantDomain();
@@ -283,10 +293,10 @@ public class APIKeyValidationService {
                 String kcUserName = pickKcUserNameFromClaims(claims, ownerUser);
                 if (StringUtils.isNotEmpty(kcUserName)) {
                     dto.setKcUserName(kcUserName);
-                    log.info("[kcUserName] resolved from owner claims, ownerUser=" + ownerUser
+                    log.debug("[kcUserName] resolved from owner claims, ownerUser=" + ownerUser
                             + ", kcUserName=" + kcUserName);
                 } else {
-                    log.info("[kcUserName] owner claims empty/unusable, ownerUser=" + ownerUser
+                    log.debug("[kcUserName] owner claims empty/unusable, ownerUser=" + ownerUser
                             + ", claimKeys=" + (claims == null ? "null" : claims.keySet()));
                 }
             }
@@ -307,6 +317,150 @@ public class APIKeyValidationService {
             log.info("[kcUserName] owner claim enrich failed, ownerUser=" + ownerUser
                     + ", err=" + e.getMessage());
         }
+    }
+
+    /**
+     * Member tokens store the sub-account Keycloak userId as a UUID-shaped token scope.
+     * Resolve that UUID into audit fields {@code subUserId/Name/Phone/Email} via KM claims.
+     * <p>
+     * Username forms to try (jwt-bearer persists attributes under the raw {@code sub} UUID;
+     * federated AUTHZ_USER often uses {@code {uuid}}):
+     * raw uuid, {@code uuid@carbon.super}, {@code {uuid}}, {@code {uuid}@carbon.super}.
+     *
+     * @return true when DTO profile fields were newly filled (caller should refresh KM cache)
+     */
+    private boolean enrichSubUserFromMemberScope(TokenValidationContext ctx) {
+        if (ctx == null || ctx.getValidationInfoDTO() == null) {
+            return false;
+        }
+        APIKeyValidationInfoDTO dto = ctx.getValidationInfoDTO();
+        boolean profileAlreadyFilled = StringUtils.isNotEmpty(dto.getSubUserName())
+                || StringUtils.isNotEmpty(dto.getSubUserPhone())
+                || StringUtils.isNotEmpty(dto.getSubUserEmail());
+        if (StringUtils.isNotEmpty(dto.getSubUserId()) && profileAlreadyFilled) {
+            return false;
+        }
+        // Avoid repeated failed IS lookups on every cached validation. After deploying the
+        // raw-UUID username fix, restart gateway or clear KM cache so entries re-enrich.
+        if (ctx.isCacheHit() && StringUtils.isNotEmpty(dto.getSubUserId()) && !profileAlreadyFilled) {
+            log.info("[subUser] skip claims on cache hit with empty profile, subUserId="
+                    + dto.getSubUserId() + " (clear KM cache to re-enrich)");
+            return false;
+        }
+        String subUserId = dto.getSubUserId();
+        if (StringUtils.isEmpty(subUserId)) {
+            subUserId = extractMemberUserIdFromScopes(collectTokenScopes(ctx, dto));
+            if (StringUtils.isEmpty(subUserId)) {
+                return false;
+            }
+            dto.setSubUserId(subUserId);
+            log.info("[subUser] found member UUID scope, subUserId=" + subUserId);
+        }
+
+        // Prefer raw UUID first: JWTUserAttributePersister writes UM_USER under JWT sub (no braces).
+        String[] claimUsernames = {
+                subUserId,
+                subUserId + "@" + APIConstants.SUPER_TENANT_DOMAIN,
+                "{" + subUserId + "}",
+                "{" + subUserId + "}@" + APIConstants.SUPER_TENANT_DOMAIN
+        };
+        boolean enriched = false;
+        try {
+            String tenantDomain = ctx.getTenantDomain();
+            if (StringUtils.isEmpty(tenantDomain)) {
+                tenantDomain = APIConstants.SUPER_TENANT_DOMAIN;
+            }
+            KeyManager keyManager = resolveKeyManagerForClaims(ctx, tenantDomain);
+            if (keyManager == null) {
+                log.info("[subUser] no KeyManager for claims lookup, subUserId=" + subUserId);
+                return false;
+            }
+            Map<String, Object> props = new HashMap<>();
+            props.put(APIConstants.KeyManager.BINDING_FEDERATED_USER_CLAIMS, Boolean.TRUE.toString());
+            Map<String, String> claims = null;
+            String resolvedAs = null;
+            for (String claimUsername : claimUsernames) {
+                try {
+                    claims = keyManager.getUserClaims(claimUsername, props);
+                    if (claims != null && !claims.isEmpty()) {
+                        resolvedAs = claimUsername;
+                        break;
+                    }
+                    log.info("[subUser] getUserClaims empty for username=" + claimUsername);
+                } catch (Exception e) {
+                    log.info("[subUser] getUserClaims failed for " + claimUsername
+                            + ", err=" + e.getMessage());
+                }
+            }
+            if (claims == null || claims.isEmpty()) {
+                log.info("[subUser] claims empty for subUserId=" + subUserId
+                        + " (tried raw uuid / uuid@tenant / {uuid} / {uuid}@tenant)");
+                return false;
+            }
+            log.info("[subUser] claims keys via " + resolvedAs + ": " + claims.keySet());
+            if (StringUtils.isEmpty(dto.getSubUserName())) {
+                String subUserName = pickKcUserNameFromClaims(claims, resolvedAs);
+                if (StringUtils.isNotEmpty(subUserName)) {
+                    dto.setSubUserName(subUserName);
+                    enriched = true;
+                }
+            }
+            if (StringUtils.isEmpty(dto.getSubUserEmail())) {
+                String email = pickClaimFromMap(claims, APIConstants.EMAIL_CLAIM, "email", "emailaddress");
+                if (StringUtils.isNotEmpty(email)) {
+                    dto.setSubUserEmail(email);
+                    enriched = true;
+                }
+            }
+            if (StringUtils.isEmpty(dto.getSubUserPhone())) {
+                String phone = pickClaimFromMap(claims, APIConstants.MOBILE_CLAIM, "phoneNumber",
+                        "phone_number", "mobile", "phone");
+                if (StringUtils.isNotEmpty(phone)) {
+                    dto.setSubUserPhone(phone);
+                    enriched = true;
+                }
+            }
+            log.info("[subUser] resolved claims via " + resolvedAs
+                    + ", subUserId=" + subUserId
+                    + ", subUserName=" + dto.getSubUserName()
+                    + ", email=" + dto.getSubUserEmail()
+                    + ", phone=" + dto.getSubUserPhone());
+        } catch (Exception e) {
+            log.info("[subUser] claim enrich failed, subUserId=" + subUserId
+                    + ", err=" + e.getMessage());
+        }
+        return enriched;
+    }
+
+    private static Set<String> collectTokenScopes(TokenValidationContext ctx, APIKeyValidationInfoDTO dto) {
+        Set<String> scopes = new HashSet<>();
+        if (dto.getScopes() != null) {
+            scopes.addAll(dto.getScopes());
+        }
+        if (ctx.getTokenInfo() != null && ctx.getTokenInfo().getScopes() != null) {
+            for (String scope : ctx.getTokenInfo().getScopes()) {
+                if (StringUtils.isNotEmpty(scope)) {
+                    scopes.add(scope.trim());
+                }
+            }
+        }
+        return scopes;
+    }
+
+    private static String extractMemberUserIdFromScopes(Set<String> scopes) {
+        if (scopes == null || scopes.isEmpty()) {
+            return null;
+        }
+        for (String scope : scopes) {
+            if (scope == null) {
+                continue;
+            }
+            String trimmed = scope.trim();
+            if (MEMBER_USER_ID_SCOPE_PATTERN.matcher(trimmed).matches()) {
+                return trimmed;
+            }
+        }
+        return null;
     }
 
     private static String pickClaimFromMap(Map<String, String> claims, String... keys) {
@@ -352,11 +506,18 @@ public class APIKeyValidationService {
             return null;
         }
         String tenantAware = MultitenantUtils.getTenantAwareUsername(ownerUser);
+        // Strip federated brace form so "{uuid}" does not block a usable preferred_username.
+        String bareOwner = stripFederatedBraces(tenantAware);
         String[] claimKeys = {
                 APIConstants.PREFERRED_USERNAME_CLAIM,
                 "username",
                 APIConstants.DISPLAY_NAME_CLAIM,
+                // jwt-bearer persister writes lowercase displayname URI
+                "http://wso2.org/claims/displayname",
+                "displayName",
+                "displayname",
                 APIConstants.NICKNAME_CLAIM,
+                "nickname",
                 APIConstants.EMAIL_CLAIM,
                 APIConstants.MOBILE_CLAIM,
                 "mobile",
@@ -368,11 +529,24 @@ public class APIKeyValidationService {
             String value = firstClaimValue(claims, key);
             if (StringUtils.isNotEmpty(value)
                     && !value.equals(tenantAware)
-                    && !value.equals(ownerUser)) {
+                    && !value.equals(ownerUser)
+                    && !value.equals(bareOwner)
+                    && !value.equals("{" + bareOwner + "}")) {
                 return value;
             }
         }
         return null;
+    }
+
+    private static String stripFederatedBraces(String username) {
+        if (username == null) {
+            return null;
+        }
+        String trimmed = username.trim();
+        if (trimmed.length() >= 2 && trimmed.charAt(0) == '{' && trimmed.charAt(trimmed.length() - 1) == '}') {
+            return trimmed.substring(1, trimmed.length() - 1);
+        }
+        return trimmed;
     }
 
     private static String firstClaimValue(Map<String, String> claims, String keyOrUri) {

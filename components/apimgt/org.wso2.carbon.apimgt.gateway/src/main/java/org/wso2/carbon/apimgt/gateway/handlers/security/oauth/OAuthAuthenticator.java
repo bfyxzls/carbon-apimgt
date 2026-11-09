@@ -359,19 +359,27 @@ public class OAuthAuthenticator implements Authenticator {
             synCtx.setProperty(APIMgtGatewayConstants.END_USER_NAME, info.getEndUserName());
             if (StringUtils.isNotEmpty(info.getKcUserName())) {
                 synCtx.setProperty(APIMgtGatewayConstants.KC_USER_NAME, info.getKcUserName());
-                log.info("[kcUserName] opaque auth set MessageContext kcUserName="
+                log.debug("[kcUserName] opaque auth set MessageContext kcUserName="
                         + info.getKcUserName() + ", endUser=" + info.getEndUserName()
                         + ", email=" + info.getEmail() + ", phone=" + info.getPhone());
-            } else {
-                log.info("[kcUserName] opaque auth DTO.kcUserName empty, endUser="
-                        + info.getEndUserName()
-                        + " (KM did not resolve preferred_username/claims)");
             }
             if (StringUtils.isNotEmpty(info.getEmail())) {
                 synCtx.setProperty(APIMgtGatewayConstants.KC_EMAIL, info.getEmail());
             }
             if (StringUtils.isNotEmpty(info.getPhone())) {
                 synCtx.setProperty(APIMgtGatewayConstants.KC_PHONE, info.getPhone());
+            }
+            if (StringUtils.isNotEmpty(info.getSubUserId())) {
+                synCtx.setProperty(APIMgtGatewayConstants.SUB_USER_ID, info.getSubUserId());
+            }
+            if (StringUtils.isNotEmpty(info.getSubUserName())) {
+                synCtx.setProperty(APIMgtGatewayConstants.SUB_USER_NAME, info.getSubUserName());
+            }
+            if (StringUtils.isNotEmpty(info.getSubUserPhone())) {
+                synCtx.setProperty(APIMgtGatewayConstants.SUB_USER_PHONE, info.getSubUserPhone());
+            }
+            if (StringUtils.isNotEmpty(info.getSubUserEmail())) {
+                synCtx.setProperty(APIMgtGatewayConstants.SUB_USER_EMAIL, info.getSubUserEmail());
             }
             synCtx.setProperty(APIMgtGatewayConstants.SCOPES, info.getScopes() == null ? null : info.getScopes()
                                                                                                     .toString());

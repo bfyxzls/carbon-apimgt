@@ -39,6 +39,14 @@ public class Constants {
     public static final String EMAIL_KEY = "email";
     /** User phone/mobile for ES {@code properties.phone} */
     public static final String PHONE_KEY = "phone";
+    /** Member-token sub-account userId for ES {@code properties.subUserId} */
+    public static final String SUB_USER_ID_KEY = "subUserId";
+    /** Member-token sub-account display name for ES {@code properties.subUserName} */
+    public static final String SUB_USER_NAME_KEY = "subUserName";
+    /** Member-token sub-account phone for ES {@code properties.subUserPhone} */
+    public static final String SUB_USER_PHONE_KEY = "subUserPhone";
+    /** Member-token sub-account email for ES {@code properties.subUserEmail} */
+    public static final String SUB_USER_EMAIL_KEY = "subUserEmail";
     public static final String API_CONTEXT_KEY = "apiContext";
     public static final String RESPONSE_SIZE = "responseSize";
     public static final String REQUEST_SIZE = "requestSize";

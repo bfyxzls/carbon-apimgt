@@ -650,7 +650,6 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
                 // Sample Warn String (default): APIAuthenticationHandler API authentication failure due to The
                 // access token does not allow you to access the requested resource for appName=test
                 // userName=admin@carbon.super for requestURI=/pizzashack/1.0.0/order
-                log.warn("API authentication failure due to " + errorMessage + warnDetails);
 
                 if (log.isDebugEnabled()) {
                     log.debug("API authentication failed with error " + e.getErrorCode(), e);

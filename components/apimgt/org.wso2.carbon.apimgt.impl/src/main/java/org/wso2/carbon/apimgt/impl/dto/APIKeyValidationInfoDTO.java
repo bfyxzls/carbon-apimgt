@@ -51,6 +51,14 @@ public class APIKeyValidationInfoDTO implements Serializable {
     private String email;
     /** User phone/mobile for audit properties.phone. */
     private String phone;
+    /** Member-token sub-account userId (UUID scope) for audit properties.subUserId. */
+    private String subUserId;
+    /** Member-token sub-account display name for audit properties.subUserName. */
+    private String subUserName;
+    /** Member-token sub-account phone for audit properties.subUserPhone. */
+    private String subUserPhone;
+    /** Member-token sub-account email for audit properties.subUserEmail. */
+    private String subUserEmail;
     private String applicationId;
     private String applicationName;
     private String applicationTier;
@@ -196,6 +204,38 @@ public class APIKeyValidationInfoDTO implements Serializable {
 
     public void setPhone(String phone) {
         this.phone = phone;
+    }
+
+    public String getSubUserId() {
+        return subUserId;
+    }
+
+    public void setSubUserId(String subUserId) {
+        this.subUserId = subUserId;
+    }
+
+    public String getSubUserName() {
+        return subUserName;
+    }
+
+    public void setSubUserName(String subUserName) {
+        this.subUserName = subUserName;
+    }
+
+    public String getSubUserPhone() {
+        return subUserPhone;
+    }
+
+    public void setSubUserPhone(String subUserPhone) {
+        this.subUserPhone = subUserPhone;
+    }
+
+    public String getSubUserEmail() {
+        return subUserEmail;
+    }
+
+    public void setSubUserEmail(String subUserEmail) {
+        this.subUserEmail = subUserEmail;
     }
 
     public String getApplicationId() {

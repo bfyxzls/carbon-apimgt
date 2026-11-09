@@ -494,6 +494,28 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         return claims == null ? null : GatewayUtils.resolvePhone(claims);
     }
 
+    /**
+     * Publish member-token sub-account fields set at opaque auth into ES {@code properties}.
+     */
+    private void putSubUserProperties(Map<String, Object> customProperties) {
+        String subUserId = readStringProperty(APIMgtGatewayConstants.SUB_USER_ID);
+        if (StringUtils.isNotEmpty(subUserId)) {
+            customProperties.put(Constants.SUB_USER_ID_KEY, subUserId);
+        }
+        String subUserName = readStringProperty(APIMgtGatewayConstants.SUB_USER_NAME);
+        if (StringUtils.isNotEmpty(subUserName)) {
+            customProperties.put(Constants.SUB_USER_NAME_KEY, subUserName);
+        }
+        String subUserPhone = readStringProperty(APIMgtGatewayConstants.SUB_USER_PHONE);
+        if (StringUtils.isNotEmpty(subUserPhone)) {
+            customProperties.put(Constants.SUB_USER_PHONE_KEY, subUserPhone);
+        }
+        String subUserEmail = readStringProperty(APIMgtGatewayConstants.SUB_USER_EMAIL);
+        if (StringUtils.isNotEmpty(subUserEmail)) {
+            customProperties.put(Constants.SUB_USER_EMAIL_KEY, subUserEmail);
+        }
+    }
+
     private String readStringProperty(String key) {
         if (!messageContext.getPropertyKeySet().contains(key)) {
             return null;
@@ -564,6 +586,7 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         if (StringUtils.isNotEmpty(phone)) {
             customProperties.put(Constants.PHONE_KEY, phone);
         }
+        putSubUserProperties(customProperties);
         customProperties.put(Constants.API_CONTEXT_KEY, getApiContext());
         customProperties.put(Constants.RESPONSE_SIZE, getResponseSize());
         customProperties.put(Constants.RESPONSE_CONTENT_TYPE, getResponseContentType());

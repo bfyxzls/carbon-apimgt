@@ -56,6 +56,14 @@ public class APIMgtGatewayConstants {
     public static final String KC_EMAIL = "email";
     /** User phone/mobile for audit {@code properties.phone}. */
     public static final String KC_PHONE = "phone";
+    /** Member-token sub-account userId for audit {@code properties.subUserId}. */
+    public static final String SUB_USER_ID = "subUserId";
+    /** Member-token sub-account display name for audit {@code properties.subUserName}. */
+    public static final String SUB_USER_NAME = "subUserName";
+    /** Member-token sub-account phone for audit {@code properties.subUserPhone}. */
+    public static final String SUB_USER_PHONE = "subUserPhone";
+    /** Member-token sub-account email for audit {@code properties.subUserEmail}. */
+    public static final String SUB_USER_EMAIL = "subUserEmail";
     public static final String X_FORWARDED_FOR = "X-Forwarded-For";
     /** Inbound / upstream header carrying the request correlation id. */
     public static final String X_REQUEST_ID_HEADER = "x-request-id";
