@@ -881,13 +881,6 @@ public class AMDefaultKeyManagerImpl extends AbstractKeyManager {
             // am_subscriber (application owner) after subscription validation.
             if (StringUtils.isNotEmpty(username)) {
                 enrichOpaqueAuditFields(tokenInfo, introspectInfo, username, accessToken);
-            } else if (tokenInfo.isApplicationToken()) {
-                log.info("[kcUserName] application token without introspect username, clientId="
-                        + tokenInfo.getConsumerKey()
-                        + "; defer to am_subscriber owner enrich after subscription validation");
-            } else {
-                log.info("[kcUserName] skip resolve: introspect username empty, clientId="
-                        + tokenInfo.getConsumerKey());
             }
             return tokenInfo;
         } catch (KeyManagerClientException e) {
@@ -908,15 +901,12 @@ public class AMDefaultKeyManagerImpl extends AbstractKeyManager {
             String preferred = introspectInfo.getPreferredUsername().trim();
             if (!preferred.equals(tenantAwareEndUser) && !preferred.equals(endUserName)) {
                 kcUserName = preferred;
-                log.info("[kcUserName] source=introspect.preferred_username, endUser="
+                log.debug("[kcUserName] source=introspect.preferred_username, endUser="
                         + endUserName + ", value=" + preferred);
             } else {
-                log.info("[kcUserName] introspect.preferred_username ignored (same as endUser), endUser="
+                log.debug("[kcUserName] introspect.preferred_username ignored (same as endUser), endUser="
                         + endUserName);
             }
-        } else {
-            log.info("[kcUserName] introspect.preferred_username empty, endUser=" + endUserName
-                    + "; falling back to KM user claims");
         }
         Map<String, String> claims = null;
         try {
@@ -927,13 +917,11 @@ public class AMDefaultKeyManagerImpl extends AbstractKeyManager {
             props.put(APIConstants.KeyManager.BINDING_FEDERATED_USER_CLAIMS, Boolean.TRUE.toString());
             claims = getUserClaims(endUserName, props);
         } catch (Exception e) {
-            log.info("[kcUserName] KM user claims lookup failed for endUser=" + endUserName
+            log.error("[kcUserName] KM user claims lookup failed for endUser=" + endUserName
                     + ", err=" + e.getMessage());
         }
-        if (claims == null || claims.isEmpty()) {
-            log.info("[kcUserName] KM user claims empty for endUser=" + endUserName);
-        } else {
-            log.info("[kcUserName] KM user claims keys=" + claims.keySet() + ", endUser=" + endUserName);
+        if (claims != null && !claims.isEmpty()) {
+            log.debug("[kcUserName] KM user claims keys=" + claims.keySet() + ", endUser=" + endUserName);
             if (StringUtils.isEmpty(kcUserName)) {
                 String[] claimKeys = {
                         APIConstants.PREFERRED_USERNAME_CLAIM,
@@ -953,14 +941,10 @@ public class AMDefaultKeyManagerImpl extends AbstractKeyManager {
                             && !value.equals(tenantAwareEndUser)
                             && !value.equals(endUserName)) {
                         kcUserName = value;
-                        log.info("[kcUserName] source=userClaims[" + key + "], endUser="
+                        log.debug("[kcUserName] source=userClaims[" + key + "], endUser="
                                 + endUserName + ", value=" + value);
                         break;
                     }
-                }
-                if (StringUtils.isEmpty(kcUserName)) {
-                    log.info("[kcUserName] no usable claim among preferred_username/username/displayName/"
-                            + "nickname/email/mobile for endUser=" + endUserName);
                 }
             }
             String email = firstClaimValue(claims, APIConstants.EMAIL_CLAIM, "email", "emailaddress");
@@ -978,14 +962,10 @@ public class AMDefaultKeyManagerImpl extends AbstractKeyManager {
         if (StringUtils.isNotEmpty(kcUserName)) {
             tokenInfo.setKcUserName(kcUserName);
             tokenInfo.addParameter(APIConstants.KC_USER_NAME, kcUserName);
-            log.info("[kcUserName] resolved from KM introspection/claims, endUser="
+            log.debug("[kcUserName] resolved from KM introspection/claims, endUser="
                     + endUserName + ", appToken=" + tokenInfo.isApplicationToken()
                     + ", kcUserName=" + kcUserName
                     + ", email=" + tokenInfo.getEmail() + ", phone=" + tokenInfo.getPhone());
-        } else {
-            log.info("[kcUserName] not resolved at introspect for endUser=" + endUserName
-                    + ", appToken=" + tokenInfo.isApplicationToken()
-                    + " (will try am_subscriber owner enrich if applicable)");
         }
     }
 

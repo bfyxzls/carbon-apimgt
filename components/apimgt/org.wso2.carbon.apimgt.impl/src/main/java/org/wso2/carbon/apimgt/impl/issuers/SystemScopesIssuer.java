@@ -30,7 +30,6 @@ import org.opensaml.saml.saml2.core.Assertion;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder;
-import org.wso2.carbon.apimgt.impl.utils.FederatedUserSyncUtil;
 import org.wso2.carbon.apimgt.impl.utils.SystemScopeUtils;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatedUser;
@@ -681,23 +680,10 @@ public class SystemScopesIssuer implements ScopeValidator {
         user.setUserAttributes(userAttributes);
         tokReqMsgCtx.setAuthorizedUser(user);
 
-        // Sync federated user to um_user table after JWT bearer grant type token request
-        // This handles the case where user is persisted to idn_auth_user but no event is published
-        if (!isExchangeGrant && claimsSet != null && tenantDomain != null) {
-            try {
-                // Get username from JWT sub claim (federated user ID)
-                String userName = claimsSet.getSubject();
-                if (StringUtils.isNotEmpty(userName) && tokReqMsgCtx.getOauth2AccessTokenReqDTO() != null &&
-                        tokReqMsgCtx.getOauth2AccessTokenReqDTO().getGrantType()
-                                .equalsIgnoreCase("urn:ietf:params:oauth:grant-type:jwt-bearer")) {
-                    // Sync user to um_user table if it exists in idn_auth_user but not in um_user
-                    FederatedUserSyncUtil.syncFederatedUserToUMUser(tenantDomain, userName);
-                }
-            } catch (Exception e) {
-                // Log error but don't throw to avoid breaking token generation flow
-                log.error("Error while synchronizing federated user to UM_USER table after JWT bearer grant", e);
-            }
-        }
+        // NOTE: Do NOT call FederatedUserSyncUtil here for jwt-bearer.
+        // JWTUserAttributePersister (identity-oauth2-grant-jwt) already creates the local user
+        // with email/nickname/mobile claims during validateGrant. A bare UM_USER insert here
+        // (or on PRE_ADD_USER) races with that path and leaves um_user_attribute empty.
     }
 
     /**

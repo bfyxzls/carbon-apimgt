@@ -68,6 +68,15 @@ public class FederatedUserSyncHandler extends AbstractEventHandler {
         // Log all events to debug which events are triggered during JWT bearer grant type authentication
         log.info("FederatedUserSyncHandler handleEvent - Event Name: " + eventName);
 
+        // Skip PRE_ADD_USER*: AbstractUserStoreManager fires these BEFORE existence check / claim write.
+        // Inserting a bare UM_USER here races with JWTUserAttributePersister.addUser(..., claims) and
+        // leaves um_user_attribute empty on the first jwt-bearer for a new user.
+        if (isPreAddUserEvent(eventName)) {
+            log.info("FederatedUserSyncHandler skipping " + eventName
+                    + " to avoid racing JWT claim persist (bare UM_USER insert)");
+            return;
+        }
+
         // Log all event properties for debugging
         if (event.getEventProperties() != null) {
             log.info("FederatedUserSyncHandler - Event Properties: " + event.getEventProperties().toString());
@@ -129,6 +138,19 @@ public class FederatedUserSyncHandler extends AbstractEventHandler {
                 // Don't throw exception to avoid breaking the authentication flow
             }
         }
+    }
+
+    /**
+     * PRE_ADD_USER / PRE_ADD_USER_WITH_ID fire before UserStoreManager writes claims.
+     * Syncing on those events creates an empty shell row and breaks first-time JWT attribute persist.
+     */
+    private static boolean isPreAddUserEvent(String eventName) {
+        if (StringUtils.isEmpty(eventName)) {
+            return false;
+        }
+        return IdentityEventConstants.Event.PRE_ADD_USER.equals(eventName)
+                || IdentityEventConstants.Event.PRE_ADD_USER_WITH_ID.equals(eventName)
+                || eventName.startsWith("PRE_ADD_USER");
     }
 
     /**
