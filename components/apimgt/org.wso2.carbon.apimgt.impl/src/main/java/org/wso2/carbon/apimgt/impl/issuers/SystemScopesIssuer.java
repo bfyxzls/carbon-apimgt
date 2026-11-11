@@ -225,7 +225,8 @@ public class SystemScopesIssuer implements ScopeValidator {
                 return true;
             }
             userRoles = getUserRoles(authenticatedUser);
-            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser,accessTokenDO.getGrantType());
+            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser,
+                    accessTokenDO.getGrantType());
             oAuth2TokenValidationMessageContext.getResponseDTO().setScope(authorizedScopes.toArray(
                     new String[authorizedScopes.size()]));
         }
@@ -294,7 +295,7 @@ public class SystemScopesIssuer implements ScopeValidator {
             if (accessTokenDO != null) {
                 grantType = accessTokenDO.getGrantType();
             }
-            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser,grantType);
+            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser, grantType);
         }
         return authorizedScopes;
     }
@@ -319,7 +320,8 @@ public class SystemScopesIssuer implements ScopeValidator {
                 return getAllowedScopes(requestedScopes);
             }
             String[] userRoles = getUserRoles(authenticatedUser);
-            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser,scopeValidationCallback.getGrantType());
+            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser,
+                    scopeValidationCallback.getGrantType());
         }
         return authorizedScopes;
     }
@@ -375,8 +377,7 @@ public class SystemScopesIssuer implements ScopeValidator {
             } else {
                 userRoles = getUserRoles(authenticatedUser);
             }
-
-            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser,grantType);
+            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser, grantType);
         }
         return authorizedScopes;
     }
@@ -428,7 +429,8 @@ public class SystemScopesIssuer implements ScopeValidator {
      * @return authorized scopes list
      */
     private List<String> getAuthorizedScopes(String[] userRoles, List<String> requestedScopes,
-                                             Map<String, String> appScopes, AuthenticatedUser authenticatedUser,String grantType) {
+                                             Map<String, String> appScopes, AuthenticatedUser authenticatedUser,
+                                             String grantType) {
 
         List<String> defaultScope = new ArrayList<>();
         defaultScope.add(DEFAULT_SCOPE_NAME);
@@ -481,17 +483,16 @@ public class SystemScopesIssuer implements ScopeValidator {
                 authorizedScopes.add(scope);
             }
         }
-        // return (!authorizedScopes.isEmpty()) ? authorizedScopes : defaultScope;
-        // 下面代码在客户端认证时，如果包含用户信息（即这个是用户建立的应用，通过应用的client credential授权），则默认添加openid scope，其他情况默认添加default scope
+        // client_credentials 校验失败时降级为 openid（项目已基本不用 default）
         if (!authorizedScopes.isEmpty()) {
             return authorizedScopes;
-        } else {
-            authorizedScopes.add(DEFAULT_SCOPE_NAME);
-            if (authenticatedUser != null && grantType != null && grantType.equalsIgnoreCase("client_credentials")) {
-                authorizedScopes.add("openid");
-            }
-            return authorizedScopes;
         }
+        if (authenticatedUser != null && grantType != null && grantType.equalsIgnoreCase("client_credentials")) {
+            List<String> openIdFallback = new ArrayList<>();
+            openIdFallback.add("openid");
+            return openIdFallback;
+        }
+        return defaultScope;
     }
 
     /**
