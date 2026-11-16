@@ -203,6 +203,18 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
                         "Access token is missing");
             }
             MCPUtils.discardPassthroughMessage(messageContext);
+            // Fault responses also need Content-Type dedup; otherwise MCP clients may fail with
+            // "unexpected content type: application/json,application/json" and hide the error body.
+            org.apache.axis2.context.MessageContext faultAxis2MessageContext =
+                    ((Axis2MessageContext) messageContext).getAxis2MessageContext();
+            Map faultHeaders = (Map) faultAxis2MessageContext
+                    .getProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS);
+            if (faultHeaders == null) {
+                faultHeaders = new HashMap<>();
+                faultAxis2MessageContext.setProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS,
+                        faultHeaders);
+            }
+            synchronizeContentTypeHeaders(faultAxis2MessageContext, faultHeaders);
             // Preserve skip decision before clearing isMcp/mcpToolName; analytics runs later on response out-flow.
             markSkipAnalyticsIfNotAuditableMcpRequest(messageContext);
             clearMcpMessageContextProperties(messageContext);
@@ -254,10 +266,7 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
                 }
             }
         }
-        // Fix duplicate Content-Type issue: PassThrough Transport combines TRANSPORT_HEADERS Content-Type
-        // with Axis2 Configuration.CONTENT_TYPE property, causing duplicates like
-        // "text/event-stream,text/event-stream; charset=UTF-8"
-        // Solution: Remove the Axis2 CONTENT_TYPE property so only TRANSPORT_HEADERS Content-Type is used
+        // Fix duplicate Content-Type: PassThrough combines TRANSPORT_HEADERS + Axis2 CONTENT_TYPE.
         synchronizeContentTypeHeaders(axis2MessageContext, headers);
         // Parse MCP response and extract isError from result
         parseMcpResponseAndExtractIsError(messageContext, axis2MessageContext);
@@ -280,7 +289,25 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
      */
     private void synchronizeContentTypeHeaders(org.apache.axis2.context.MessageContext axis2MessageContext,
                                                Map headers) {
+        if (headers == null) {
+            return;
+        }
         Object transportContentType = headers.get(APIConstants.HEADER_CONTENT_TYPE);
+        if (transportContentType == null) {
+            // Case-insensitive lookup (TRANSPORT_HEADERS may be a plain HashMap on fault paths).
+            for (Object keyObj : new HashMap<>(headers).keySet()) {
+                if (keyObj != null
+                        && APIConstants.HEADER_CONTENT_TYPE.equalsIgnoreCase(String.valueOf(keyObj))) {
+                    transportContentType = headers.get(keyObj);
+                    break;
+                }
+            }
+        }
+        // Fall back to Axis2 CONTENT_TYPE when transport header is absent but Axis2 property is set
+        // (e.g. fault body writers that only set Configuration.CONTENT_TYPE).
+        if (transportContentType == null) {
+            transportContentType = axis2MessageContext.getProperty(Constants.Configuration.CONTENT_TYPE);
+        }
 
         if (transportContentType != null) {
             String contentTypeStr = transportContentType.toString();
@@ -290,9 +317,12 @@ public class McpInitHandler extends AbstractHandler implements ManagedLifecycle 
 
             if (baseMediaType != null) {
                 // Remove Content-Type from transport headers completely to prevent duplication
-                headers.remove(APIConstants.HEADER_CONTENT_TYPE);
-                headers.remove("content-type");  // Also try lowercase variant
-                headers.remove("Content-type");  // Mixed case
+                for (Object keyObj : new HashMap<>(headers).keySet()) {
+                    if (keyObj != null
+                            && APIConstants.HEADER_CONTENT_TYPE.equalsIgnoreCase(String.valueOf(keyObj))) {
+                        headers.remove(keyObj);
+                    }
+                }
 
                 // Set Axis2 properties to the base media type without any charset
                 axis2MessageContext.setProperty(org.apache.axis2.Constants.Configuration.CONTENT_TYPE,

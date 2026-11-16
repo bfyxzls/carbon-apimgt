@@ -83,6 +83,10 @@ public class SubscriptionDataHolder {
         return null;
     }
 
+    public Map<String, SubscriptionDataStore> getTenantSubscriptionStoreMap() {
+        return subscriptionStore;
+    }
+
     public void refreshSubscriptionStore() {
         subscriptionStore.keySet().forEach(tenant -> {
             // Cleaning the existing SubscriptionDataStore instance before re-population

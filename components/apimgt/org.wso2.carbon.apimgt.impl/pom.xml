@@ -166,6 +166,14 @@
             <artifactId>gson</artifactId>
         </dependency>
         <dependency>
+            <groupId>org.apache.servicemix.bundles</groupId>
+            <artifactId>org.apache.servicemix.bundles.jedis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpmime</artifactId>
         </dependency>
@@ -655,7 +663,10 @@
                             org.wso2.securevault.*,
                             org.wso2.carbon.registry.*;version="${carbon.registry.imp.pkg.version}",
                             okio.*;version="${okio.wso2.version}",
-                            okhttp3.*;version="${okhttp.wso2.version}"
+                            okhttp3.*;version="${okhttp.wso2.version}",
+                            redis.clients.jedis.*;version="[3.3.0,4.0.0)",
+                            redis.clients.jedis.params.*;version="[3.3.0,4.0.0)",
+                            org.apache.commons.pool2.*;version="[2.8.0,3.0.0)",
                             *;resolution:=optional
                         </Import-Package>
                         <DynamicImport-Package>*</DynamicImport-Package>

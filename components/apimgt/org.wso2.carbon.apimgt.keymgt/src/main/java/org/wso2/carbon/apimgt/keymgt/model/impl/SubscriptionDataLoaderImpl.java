@@ -32,6 +32,9 @@ import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.dto.EventHubConfigurationDto;
 import org.wso2.carbon.apimgt.impl.dto.GatewayArtifactSynchronizerProperties;
+import org.wso2.carbon.apimgt.impl.dto.RedisConfig;
+import org.wso2.carbon.apimgt.impl.subscription.cache.SubscriptionDataCacheService;
+import org.wso2.carbon.apimgt.impl.subscription.cache.SubscriptionDataRedisStore;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.apimgt.keymgt.internal.ServiceReferenceHolder;
 import org.wso2.carbon.apimgt.keymgt.model.SubscriptionDataLoader;
@@ -82,6 +85,10 @@ public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
     @Override
     public List<Subscription> loadAllSubscriptions(String tenantDomain) throws DataLoadingException {
 
+        List<Subscription> fromRedis = loadSubscriptionsFromRedis(tenantDomain);
+        if (fromRedis != null) {
+            return fromRedis;
+        }
         String subscriptionsEP = APIConstants.SubscriptionValidationResources.SUBSCRIPTIONS;
         List<Subscription> subscriptions = new ArrayList<>();
         String responseString = null;
@@ -101,6 +108,10 @@ public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
     @Override
     public List<Application> loadAllApplications(String tenantDomain) throws DataLoadingException {
 
+        List<Application> fromRedis = loadApplicationsFromRedis(tenantDomain);
+        if (fromRedis != null) {
+            return fromRedis;
+        }
         String applicationsEP = APIConstants.SubscriptionValidationResources.APPLICATIONS;
         List<Application> applications = new ArrayList<>();
         String responseString = null;
@@ -120,6 +131,10 @@ public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
     @Override
     public List<ApplicationKeyMapping> loadAllKeyMappings(String tenantDomain) throws DataLoadingException {
 
+        List<ApplicationKeyMapping> fromRedis = loadKeyMappingsFromRedis(tenantDomain);
+        if (fromRedis != null) {
+            return fromRedis;
+        }
         String applicationsEP = APIConstants.SubscriptionValidationResources.APPLICATION_KEY_MAPPINGS;
         List<ApplicationKeyMapping> applicationKeyMappings = new ArrayList<>();
         String responseString = null;
@@ -134,6 +149,64 @@ public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
             applicationKeyMappings = (new Gson().fromJson(responseString, ApplicationKeyMappingList.class)).getList();
         }
         return applicationKeyMappings;
+    }
+
+    private boolean isSubscriptionRedisCacheReadable(String tenantDomain) {
+        RedisConfig redisConfig = ServiceReferenceHolder.getInstance().getAPIManagerConfigurationService()
+                .getAPIManagerConfiguration().getRedisConfig();
+        if (redisConfig == null || !redisConfig.isRedisEnabled() || !redisConfig.isSubscriptionDataCacheEnabled()) {
+            return false;
+        }
+        SubscriptionDataRedisStore store = SubscriptionDataCacheService.getInstance().getStore();
+        return store != null && store.isWarm(tenantDomain);
+    }
+
+    private List<Application> loadApplicationsFromRedis(String tenantDomain) {
+        if (!isSubscriptionRedisCacheReadable(tenantDomain)) {
+            return null;
+        }
+        List<Application> applications = new ArrayList<>();
+        Gson gson = new Gson();
+        for (String json : SubscriptionDataCacheService.getInstance().getStore()
+                .getApplicationJsonValues(tenantDomain)) {
+            applications.add(gson.fromJson(json, Application.class));
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("Loaded " + applications.size() + " applications from Redis for " + tenantDomain);
+        }
+        return applications;
+    }
+
+    private List<Subscription> loadSubscriptionsFromRedis(String tenantDomain) {
+        if (!isSubscriptionRedisCacheReadable(tenantDomain)) {
+            return null;
+        }
+        List<Subscription> subscriptions = new ArrayList<>();
+        Gson gson = new Gson();
+        for (String json : SubscriptionDataCacheService.getInstance().getStore()
+                .getSubscriptionJsonValues(tenantDomain)) {
+            subscriptions.add(gson.fromJson(json, Subscription.class));
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("Loaded " + subscriptions.size() + " subscriptions from Redis for " + tenantDomain);
+        }
+        return subscriptions;
+    }
+
+    private List<ApplicationKeyMapping> loadKeyMappingsFromRedis(String tenantDomain) {
+        if (!isSubscriptionRedisCacheReadable(tenantDomain)) {
+            return null;
+        }
+        List<ApplicationKeyMapping> keyMappings = new ArrayList<>();
+        Gson gson = new Gson();
+        for (String json : SubscriptionDataCacheService.getInstance().getStore()
+                .getKeyMappingJsonValues(tenantDomain)) {
+            keyMappings.add(gson.fromJson(json, ApplicationKeyMapping.class));
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("Loaded " + keyMappings.size() + " key mappings from Redis for " + tenantDomain);
+        }
+        return keyMappings;
     }
 
     @Override

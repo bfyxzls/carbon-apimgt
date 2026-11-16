@@ -23,6 +23,7 @@ import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.model.subscription.ApplicationKeyMapping;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.dao.SubscriptionValidationDAO;
+import org.wso2.carbon.apimgt.impl.subscription.cache.SubscriptionDataCacheService;
 import org.wso2.carbon.apimgt.internal.service.ApplicationKeyMappingsApiService;
 import org.apache.cxf.jaxrs.ext.MessageContext;
 import org.wso2.carbon.apimgt.internal.service.utils.SubscriptionValidationDataUtil;
@@ -55,8 +56,8 @@ public class ApplicationKeyMappingsApiServiceImpl implements ApplicationKeyMappi
         }
         if (StringUtils.isNotEmpty(organization) && !organization.equalsIgnoreCase(APIConstants.ORG_ALL_QUERY_PARAM))   {
             return Response.ok().entity(SubscriptionValidationDataUtil.
-                    fromApplicationKeyMappingToApplicationKeyMappingListDTO(subscriptionValidationDAO.
-                            getAllApplicationKeyMappingsByOrganization(organization))).build();
+                    fromApplicationKeyMappingToApplicationKeyMappingListDTO(SubscriptionDataCacheService.getInstance().
+                            getKeyMappingsByOrganization(organization))).build();
         } else if (StringUtils.isNotEmpty(organization) && organization.equalsIgnoreCase(APIConstants.ORG_ALL_QUERY_PARAM) &&
                 xWSO2Tenant.equalsIgnoreCase(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME)) {
             return Response.ok().entity(SubscriptionValidationDataUtil.
@@ -64,8 +65,8 @@ public class ApplicationKeyMappingsApiServiceImpl implements ApplicationKeyMappi
                             getAllApplicationKeyMappings())).build();
         } else if (StringUtils.isNotEmpty(xWSO2Tenant)) {
             return Response.ok().entity(SubscriptionValidationDataUtil.
-                    fromApplicationKeyMappingToApplicationKeyMappingListDTO(subscriptionValidationDAO.
-                            getAllApplicationKeyMappings(xWSO2Tenant))).build();
+                    fromApplicationKeyMappingToApplicationKeyMappingListDTO(SubscriptionDataCacheService.getInstance().
+                            getKeyMappingsByOrganization(xWSO2Tenant))).build();
 
         }
         return null;

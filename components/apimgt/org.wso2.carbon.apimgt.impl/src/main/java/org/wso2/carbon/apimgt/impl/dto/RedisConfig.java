@@ -45,6 +45,25 @@ public class RedisConfig {
     private long minGatewayCount;
     private long keyLockRetrievalTimeout;
     private String hybridThrottleProcessorType;
+    private boolean subscriptionDataCacheEnabled = false;
+    private java.util.List<String> subscriptionCacheOrganizations = new java.util.ArrayList<>();
+
+    public boolean isSubscriptionDataCacheEnabled() {
+        return subscriptionDataCacheEnabled;
+    }
+
+    public void setSubscriptionDataCacheEnabled(boolean subscriptionDataCacheEnabled) {
+        this.subscriptionDataCacheEnabled = subscriptionDataCacheEnabled;
+    }
+
+    public java.util.List<String> getSubscriptionCacheOrganizations() {
+        return subscriptionCacheOrganizations;
+    }
+
+    public void setSubscriptionCacheOrganizations(java.util.List<String> subscriptionCacheOrganizations) {
+        this.subscriptionCacheOrganizations = subscriptionCacheOrganizations;
+    }
+
     public int getMaxTotal() {
 
         return maxTotal;

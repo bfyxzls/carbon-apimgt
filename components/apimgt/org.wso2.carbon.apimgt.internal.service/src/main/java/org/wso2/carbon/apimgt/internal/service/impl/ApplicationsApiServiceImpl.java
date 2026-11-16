@@ -23,6 +23,7 @@ import org.apache.cxf.jaxrs.ext.MessageContext;
 import org.wso2.carbon.apimgt.api.model.subscription.Application;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.dao.SubscriptionValidationDAO;
+import org.wso2.carbon.apimgt.impl.subscription.cache.SubscriptionDataCacheService;
 import org.wso2.carbon.apimgt.internal.service.ApplicationsApiService;
 import org.wso2.carbon.apimgt.internal.service.utils.SubscriptionValidationDataUtil;
 import org.wso2.carbon.apimgt.rest.api.util.utils.RestApiUtil;
@@ -54,7 +55,7 @@ public class ApplicationsApiServiceImpl implements ApplicationsApiService {
         }
         if (StringUtils.isNotEmpty(xWSO2Tenant)) {
             return Response.ok().entity(SubscriptionValidationDataUtil.fromApplicationToApplicationListDTO(
-                    subscriptionValidationDAO.getAllApplications(xWSO2Tenant)))
+                    SubscriptionDataCacheService.getInstance().getApplicationsByOrganization(xWSO2Tenant)))
                     .build();
         }
         return Response.ok().entity(SubscriptionValidationDataUtil.fromApplicationToApplicationListDTO(

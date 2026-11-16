@@ -567,14 +567,14 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         String kcUserName = resolveKcUserNameForAnalytics();
         if (StringUtils.isNotEmpty(kcUserName)) {
             customProperties.put(Constants.KC_USER_NAME_KEY, kcUserName);
-            log.info("[kcUserName] publish properties.kcUserName=" + kcUserName
+            log.debug("[kcUserName] publish properties.kcUserName=" + kcUserName
                     + ", userName=" + getUserName());
         } else {
             boolean hasCtxProp = messageContext.getPropertyKeySet()
                     .contains(APIMgtGatewayConstants.KC_USER_NAME);
             boolean hasJwtClaims = messageContext.getPropertyKeySet()
                     .contains(APIMgtGatewayConstants.JWT_CLAIMS);
-            log.info("[kcUserName] properties.kcUserName omitted: not found on MessageContext"
+            log.debug("[kcUserName] properties.kcUserName omitted: not found on MessageContext"
                     + " (ctxProp=" + hasCtxProp + ", jwtClaims=" + hasJwtClaims
                     + ", userName=" + getUserName() + ")");
         }

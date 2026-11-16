@@ -1009,6 +1009,10 @@
                 <HTTPMethods>GET</HTTPMethods>
             </AllowedURI>
             <AllowedURI>
+                <URI>/internal/data/v1/subscription-cache-health</URI>
+                <HTTPMethods>GET</HTTPMethods>
+            </AllowedURI>
+            <AllowedURI>
                 <URI>/api/am/devportal/{version}/marketplace-assistant/api-count</URI>
                 <HTTPMethods>GET</HTTPMethods>
             </AllowedURI>
@@ -1577,6 +1581,8 @@
         {% endif %}
         {% if apim.redis_config.database_id is defined %}
         <RedisDatabaseId>{{apim.redis_config.database_id}}</RedisDatabaseId>
+        {% elif apim.redis_config.database_index is defined %}
+        <RedisDatabaseId>{{apim.redis_config.database_index}}</RedisDatabaseId>
         {% endif %}
         {% if apim.redis_config.connection_timeout is defined %}
         <RedisConnectionTimeout>{{apim.redis_config.connection_timeout}}</RedisConnectionTimeout>
@@ -1594,6 +1600,12 @@
         <KeyLockRetrievalTimeout>{{apim.redis_config.key_lock_retrieval_timeout}}</KeyLockRetrievalTimeout>
         {% else %}
         <KeyLockRetrievalTimeout>50</KeyLockRetrievalTimeout>
+        {% endif %}
+        {% if apim.redis_config.subscription_data_cache_enabled is defined %}
+        <SubscriptionDataCacheEnabled>{{apim.redis_config.subscription_data_cache_enabled}}</SubscriptionDataCacheEnabled>
+        {% endif %}
+        {% if apim.redis_config.subscription_cache_organizations is defined %}
+        <SubscriptionCacheOrganizations>{{apim.redis_config.subscription_cache_organizations}}</SubscriptionCacheOrganizations>
         {% endif %}
         <Properties>
             {% if apim.redis_config.pool_options is defined %}

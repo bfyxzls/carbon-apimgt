@@ -71,6 +71,21 @@ public class PreAuthenticationInterceptor extends AbstractPhaseInterceptor {
                     RestApiConstants.PLATFORM_GATEWAY_API_KEY);
             return;
         }
+        // K8s readiness probe for ACP subscription Redis cache warm state (no auth headers).
+        boolean isSubscriptionCacheHealth = StringUtils.isNotBlank(path)
+                && (StringUtils.endsWith(path, "/subscription-cache-health")
+                || StringUtils.endsWith(path, internalWebAppPath + "/subscription-cache-health"));
+        if (isSubscriptionCacheHealth && StringUtils.equalsIgnoreCase(httpMethod, "GET")) {
+            if (logger.isDebugEnabled()) {
+                logger.debug("Allowing subscription-cache-health without authentication");
+            }
+            message.put(RestApiConstants.AUTHENTICATION_REQUIRED, false);
+            PrivilegedCarbonContext carbonContext = PrivilegedCarbonContext.getThreadLocalCarbonContext();
+            carbonContext.setUsername(CarbonConstants.REGISTRY_ANONNYMOUS_USERNAME);
+            carbonContext.setTenantDomain(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
+            carbonContext.setTenantId(MultitenantConstants.SUPER_TENANT_ID);
+            return;
+        }
         if (path.contains(APIConstants.RestApiConstants.REST_API_OLD_VERSION)) {
             path = path.replace("/" + APIConstants.RestApiConstants.REST_API_OLD_VERSION, "");
         }

@@ -78,6 +78,9 @@ public class SubscriptionDataStoreImpl implements SubscriptionDataStore {
     private Map<String, Scope> scopesMap;
     private boolean apisInitialized;
     private boolean apiPoliciesInitialized;
+    private volatile boolean applicationsInitialized;
+    private volatile boolean subscriptionsInitialized;
+    private volatile boolean applicationKeyMappingsInitialized;
     private String tenantDomain;
 
     private static final AtomicInteger POOL_NUMBER = new AtomicInteger(1);
@@ -432,7 +435,10 @@ public class SubscriptionDataStoreImpl implements SubscriptionDataStore {
                 () -> {
                     try {
                         log.debug("Calling loadAllSubscriptions.");
-                        return new SubscriptionDataLoaderImpl().loadAllSubscriptions(tenantDomain);
+                        List<Subscription> subscriptions =
+                                new SubscriptionDataLoaderImpl().loadAllSubscriptions(tenantDomain);
+                        subscriptionsInitialized = true;
+                        return subscriptions;
                     } catch (APIManagementException e) {
                         log.error("Exception while loading Subscriptions " + e);
                     }
@@ -447,7 +453,10 @@ public class SubscriptionDataStoreImpl implements SubscriptionDataStore {
                 () -> {
                     try {
                         log.debug("Calling loadAllApplications.");
-                        return new SubscriptionDataLoaderImpl().loadAllApplications(tenantDomain);
+                        List<Application> applications =
+                                new SubscriptionDataLoaderImpl().loadAllApplications(tenantDomain);
+                        applicationsInitialized = true;
+                        return applications;
                     } catch (APIManagementException e) {
                         log.error("Exception while loading Applications " + e);
                     }
@@ -461,7 +470,10 @@ public class SubscriptionDataStoreImpl implements SubscriptionDataStore {
                         () -> {
                             try {
                                 log.debug("Calling loadAllKeyMappings.");
-                                return new SubscriptionDataLoaderImpl().loadAllKeyMappings(tenantDomain);
+                                List<ApplicationKeyMapping> keyMappings =
+                                        new SubscriptionDataLoaderImpl().loadAllKeyMappings(tenantDomain);
+                                applicationKeyMappingsInitialized = true;
+                                return keyMappings;
                             } catch (APIManagementException e) {
                                 log.error("Exception while loading ApplicationKeyMapping " + e);
                             }
@@ -540,6 +552,26 @@ public class SubscriptionDataStoreImpl implements SubscriptionDataStore {
     public boolean isApiPoliciesInitialized() {
 
         return apiPoliciesInitialized;
+    }
+
+    @Override
+    public boolean isApplicationsInitialized() {
+        return applicationsInitialized;
+    }
+
+    @Override
+    public boolean isSubscriptionsInitialized() {
+        return subscriptionsInitialized;
+    }
+
+    @Override
+    public boolean isApplicationKeyMappingsInitialized() {
+        return applicationKeyMappingsInitialized;
+    }
+
+    @Override
+    public boolean isSubscriptionValidationDataReady() {
+        return applicationsInitialized && subscriptionsInitialized && applicationKeyMappingsInitialized;
     }
 
     @Override

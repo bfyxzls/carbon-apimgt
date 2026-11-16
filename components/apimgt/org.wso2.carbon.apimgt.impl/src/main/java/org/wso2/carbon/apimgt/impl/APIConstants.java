@@ -1813,6 +1813,8 @@ public final class APIConstants {
     public static final String CONFIG_REDIS_MIN_GATEWAY_COUNT = "MinGatewayCount";
 
     public static final String CONFIG_REDIS_KEY_LOCK_RETRIEVAL_TIMEOUT = "KeyLockRetrievalTimeout";
+    public static final String CONFIG_REDIS_SUBSCRIPTION_DATA_CACHE_ENABLED = "SubscriptionDataCacheEnabled";
+    public static final String CONFIG_REDIS_SUBSCRIPTION_CACHE_ORGANIZATIONS = "SubscriptionCacheOrganizations";
     public static final String HYBRID_THROTTLE_PROCESSOR_TYPE_START_TIME_BASED = "start_time_based";
 
     // Distributed Throttle Configuration constants

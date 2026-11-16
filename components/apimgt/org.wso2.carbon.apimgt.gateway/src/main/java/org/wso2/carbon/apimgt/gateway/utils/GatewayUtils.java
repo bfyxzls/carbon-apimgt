@@ -1782,6 +1782,29 @@ public class GatewayUtils {
         return DataHolder.getInstance().isTenantsProvisioned();
     }
 
+    /**
+     * Whether application/subscription/key-mapping validation data finished loading for registered tenants.
+     */
+    public static boolean isSubscriptionValidationDataReady() {
+        org.wso2.carbon.apimgt.keymgt.model.SubscriptionDataStore superTenantStore =
+                org.wso2.carbon.apimgt.keymgt.SubscriptionDataHolder.getInstance()
+                        .getTenantSubscriptionStore(
+                                org.wso2.carbon.base.MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
+        if (superTenantStore == null || !superTenantStore.isSubscriptionValidationDataReady()) {
+            return false;
+        }
+        java.util.Map<String, org.wso2.carbon.apimgt.keymgt.model.SubscriptionDataStore> tenantStores =
+                org.wso2.carbon.apimgt.keymgt.SubscriptionDataHolder.getInstance().getTenantSubscriptionStoreMap();
+        if (tenantStores != null) {
+            for (org.wso2.carbon.apimgt.keymgt.model.SubscriptionDataStore store : tenantStores.values()) {
+                if (store != null && !store.isSubscriptionValidationDataReady()) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     public static List<String> getKeyManagers(org.apache.synapse.MessageContext messageContext) {
 
         API api = getAPI(messageContext);

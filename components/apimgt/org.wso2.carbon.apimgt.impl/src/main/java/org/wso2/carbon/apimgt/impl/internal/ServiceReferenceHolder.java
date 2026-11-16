@@ -46,9 +46,11 @@ import org.wso2.carbon.apimgt.impl.importexport.ImportExportAPI;
 import org.wso2.carbon.apimgt.impl.keymgt.KeyManagerConfigurationService;
 import org.wso2.carbon.apimgt.impl.notifier.Notifier;
 import org.wso2.carbon.apimgt.impl.recommendationmgt.AccessTokenGenerator;
+import org.wso2.carbon.apimgt.impl.subscription.cache.SubscriptionDataRedisStore;
 import org.wso2.carbon.apimgt.impl.token.OpaqueAPIKeyNotifier;
 import org.wso2.carbon.apimgt.impl.workflow.DefaultWorkflowTaskService;
 import org.wso2.carbon.event.output.adapter.core.OutputEventAdapterService;
+import redis.clients.jedis.JedisPool;
 import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
 import org.wso2.carbon.registry.core.service.RegistryService;
 import org.wso2.carbon.registry.indexing.service.TenantIndexingLoader;
@@ -96,6 +98,8 @@ public class ServiceReferenceHolder {
     private FederatedAPIDiscoveryService federatedAPIDiscoveryService;
     private OpaqueAPIKeyNotifier opaqueApiKeyNotifier;
     private ConsumptionDataExportService consumptionDataExportService;
+    private JedisPool subscriptionDataJedisPool;
+    private SubscriptionDataRedisStore subscriptionDataRedisStore;
 
     private Map<String, LLMProviderService> llmProviderServiceMap = new HashMap();
 
@@ -497,6 +501,22 @@ public class ServiceReferenceHolder {
 
     public void setConsumptionDataExportService(ConsumptionDataExportService consumptionDataExportService) {
         this.consumptionDataExportService = consumptionDataExportService;
+    }
+
+    public JedisPool getSubscriptionDataJedisPool() {
+        return subscriptionDataJedisPool;
+    }
+
+    public void setSubscriptionDataJedisPool(JedisPool subscriptionDataJedisPool) {
+        this.subscriptionDataJedisPool = subscriptionDataJedisPool;
+    }
+
+    public SubscriptionDataRedisStore getSubscriptionDataRedisStore() {
+        return subscriptionDataRedisStore;
+    }
+
+    public void setSubscriptionDataRedisStore(SubscriptionDataRedisStore subscriptionDataRedisStore) {
+        this.subscriptionDataRedisStore = subscriptionDataRedisStore;
     }
 
 }

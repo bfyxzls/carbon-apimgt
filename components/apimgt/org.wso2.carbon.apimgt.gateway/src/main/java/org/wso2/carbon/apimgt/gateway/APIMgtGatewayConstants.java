@@ -71,6 +71,10 @@ public class APIMgtGatewayConstants {
     public static final String REQUEST_ID_RESPONSE_HEADER = "request_id";
     /** Synapse message context property used to carry the captured request id to the response flow. */
     public static final String REQUEST_ID_PROPERTY = "api.ut.request_id";
+    /** Inbound / upstream User-Agent header name. */
+    public static final String USER_AGENT_HEADER = "User-Agent";
+    /** Synapse message context property used to carry the captured User-Agent for upstream forward. */
+    public static final String USER_AGENT_PROPERTY = "api.ut.user_agent";
     public static final String REQUEST_RECEIVED_TIME = "wso2statistics.request.received.time";
     public static final String AUTHORIZATION = "Authorization";
     public static final String ACCESS_TOKEN = "ACCESS_TOKEN";

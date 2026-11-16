@@ -11,6 +11,7 @@ import java.util.Objects;
 import javax.xml.bind.annotation.*;
 import org.wso2.carbon.apimgt.rest.api.common.annotations.Scope;
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
 
 
 
@@ -20,8 +21,11 @@ public class DeployResponseDTO   {
     @XmlType(name="DeployStatusEnum")
     @XmlEnum(String.class)
     public enum DeployStatusEnum {
+        @JsonProperty("DEPLOYED")
         DEPLOYED("DEPLOYED"),
+        @JsonProperty("UNDEPLOYED")
         UNDEPLOYED("UNDEPLOYED"),
+        @JsonProperty("ERROR")
         ERROR("ERROR");
         private String value;
 
@@ -29,6 +33,7 @@ public class DeployResponseDTO   {
             value = v;
         }
 
+        @JsonValue
         public String value() {
             return value;
         }
@@ -38,7 +43,7 @@ public class DeployResponseDTO   {
             return String.valueOf(value);
         }
 
-        @JsonCreator
+        @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
         public static DeployStatusEnum fromValue(String v) {
             for (DeployStatusEnum b : DeployStatusEnum.values()) {
                 if (String.valueOf(b.value).equals(v)) {

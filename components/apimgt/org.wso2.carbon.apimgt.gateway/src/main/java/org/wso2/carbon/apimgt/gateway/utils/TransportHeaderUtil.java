@@ -152,6 +152,73 @@ public class TransportHeaderUtil {
     }
 
     /**
+     * Captures inbound {@code User-Agent} into a message-context property.
+     * The header itself is left unchanged so the upstream backend can still receive it
+     * (together with {@link #ensureUserAgentForward(MessageContext)} and
+     * {@code http.user.agent.preserve=true}).
+     *
+     * @param synCtx Synapse Message Context
+     */
+    public static void captureUserAgentHeader(MessageContext synCtx) {
+        if (synCtx == null) {
+            return;
+        }
+        Object existing = synCtx.getProperty(APIMgtGatewayConstants.USER_AGENT_PROPERTY);
+        if (existing != null && StringUtils.isNotEmpty(String.valueOf(existing))) {
+            return;
+        }
+        Map transportHeaders = getTransportHeaders(synCtx);
+        String userAgentValue = extractHeaderIgnoreCase(transportHeaders, APIMgtGatewayConstants.USER_AGENT_HEADER);
+        if (StringUtils.isEmpty(userAgentValue)) {
+            return;
+        }
+        synCtx.setProperty(APIMgtGatewayConstants.USER_AGENT_PROPERTY, userAgentValue);
+        if (log.isDebugEnabled()) {
+            log.debug("Captured " + APIMgtGatewayConstants.USER_AGENT_HEADER + "=" + userAgentValue
+                    + " for upstream forward");
+        }
+    }
+
+    /**
+     * Ensures the captured inbound {@code User-Agent} is present on TRANSPORT_HEADERS before
+     * the request is sent upstream. Safe to call when the property is absent.
+     *
+     * @param synCtx Synapse Message Context
+     */
+    public static void ensureUserAgentForward(MessageContext synCtx) {
+        if (synCtx == null) {
+            return;
+        }
+        Object userAgentObj = synCtx.getProperty(APIMgtGatewayConstants.USER_AGENT_PROPERTY);
+        if (userAgentObj == null) {
+            return;
+        }
+        String userAgentValue = String.valueOf(userAgentObj);
+        if (StringUtils.isEmpty(userAgentValue)) {
+            return;
+        }
+        Map transportHeaders = getTransportHeaders(synCtx);
+        if (transportHeaders == null) {
+            transportHeaders = new java.util.HashMap();
+            ((Axis2MessageContext) synCtx).getAxis2MessageContext()
+                    .setProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS, transportHeaders);
+        }
+        // Normalize case variants so Synapse/PassThrough sees a single User-Agent entry.
+        for (Object keyObj : new ArrayList(transportHeaders.keySet())) {
+            if (keyObj != null
+                    && APIMgtGatewayConstants.USER_AGENT_HEADER.equalsIgnoreCase(String.valueOf(keyObj))
+                    && !APIMgtGatewayConstants.USER_AGENT_HEADER.equals(String.valueOf(keyObj))) {
+                transportHeaders.remove(keyObj);
+            }
+        }
+        transportHeaders.put(APIMgtGatewayConstants.USER_AGENT_HEADER, userAgentValue);
+        if (log.isDebugEnabled()) {
+            log.debug("Ensured upstream header " + APIMgtGatewayConstants.USER_AGENT_HEADER
+                    + "=" + userAgentValue);
+        }
+    }
+
+    /**
      * Adds {@code request_id} to the client response headers using the value captured from
      * inbound {@code x-request-id}. Safe to call when the property is absent.
      *

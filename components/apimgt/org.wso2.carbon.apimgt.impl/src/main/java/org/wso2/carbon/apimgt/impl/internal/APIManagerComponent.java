@@ -67,7 +67,12 @@ import org.wso2.carbon.apimgt.impl.DependencyConstants;
 import org.wso2.carbon.apimgt.impl.dao.ApiMgtDAO;
 import org.wso2.carbon.apimgt.impl.ExternalEnvironment;
 import org.wso2.carbon.apimgt.impl.dto.EventHubConfigurationDto;
+import org.wso2.carbon.apimgt.impl.dto.RedisConfig;
 import org.wso2.carbon.apimgt.impl.dto.ThrottleProperties;
+import org.wso2.carbon.apimgt.impl.subscription.cache.RedisPoolFactory;
+import org.wso2.carbon.apimgt.impl.subscription.cache.SubscriptionDataCacheService;
+import org.wso2.carbon.apimgt.impl.subscription.cache.SubscriptionDataRedisStore;
+import redis.clients.jedis.JedisPool;
 import org.wso2.carbon.apimgt.impl.factory.SQLConstantManagerFactory;
 import org.wso2.carbon.apimgt.impl.gatewayartifactsynchronizer.ArtifactRetriever;
 import org.wso2.carbon.apimgt.impl.gatewayartifactsynchronizer.ArtifactSaver;
@@ -226,6 +231,7 @@ public class APIManagerComponent {
             }
             APIManagerConfigurationServiceImpl configurationService = new APIManagerConfigurationServiceImpl(configuration);
             ServiceReferenceHolder.getInstance().setAPIManagerConfigurationService(configurationService);
+            initSubscriptionDataRedisCache(configuration);
             APIMDependencyConfigurationServiceImpl dependencyConfigurationService = new APIMDependencyConfigurationServiceImpl(
                     dependencyConfigurations);
             ServiceReferenceHolder.getInstance().setAPIMDependencyConfigurationService(dependencyConfigurationService);
@@ -1167,5 +1173,37 @@ public class APIManagerComponent {
 
     protected void unsetConsumptionDataExportService(ConsumptionDataExportService consumptionDataExportService) {
         ServiceReferenceHolder.getInstance().setConsumptionDataExportService(null);
+    }
+
+    private void initSubscriptionDataRedisCache(APIManagerConfiguration configuration) {
+        RedisConfig redisConfig = configuration.getRedisConfig();
+        boolean cacheEnabled = redisConfig != null && redisConfig.isRedisEnabled()
+                && (redisConfig.isSubscriptionDataCacheEnabled()
+                || Boolean.parseBoolean(System.getProperty("apim.subscription.data.cache.enabled", "false")));
+        if (!cacheEnabled) {
+            return;
+        }
+        try {
+            JedisPool jedisPool = RedisPoolFactory.create(redisConfig);
+            SubscriptionDataRedisStore store = new SubscriptionDataRedisStore(jedisPool);
+            ServiceReferenceHolder.getInstance().setSubscriptionDataJedisPool(jedisPool);
+            ServiceReferenceHolder.getInstance().setSubscriptionDataRedisStore(store);
+            Thread warmThread = new Thread(() -> {
+                try {
+                    // Allow DB and event hub wiring to settle before bulk warm.
+                    Thread.sleep(Math.max(1000L, configuration.getEventHubConfigurationDto().getInitDelay()));
+                    SubscriptionDataCacheService.getInstance().warmDefaultOrganizations();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } catch (Exception e) {
+                    log.error("Failed to warm subscription data Redis cache", e);
+                }
+            }, "SubscriptionDataCacheWarmTask");
+            warmThread.setDaemon(true);
+            warmThread.start();
+            log.info("Subscription data Redis cache enabled; warm task scheduled");
+        } catch (Exception e) {
+            log.error("Failed to initialize subscription data Redis cache", e);
+        }
     }
 }

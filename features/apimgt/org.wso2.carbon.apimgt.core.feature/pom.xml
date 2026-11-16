@@ -90,6 +90,15 @@
             <groupId>org.wso2.carbon</groupId>
             <artifactId>org.wso2.carbon.usage.data.exporter</artifactId>
         </dependency>
+        <!-- Required by org.wso2.carbon.apimgt.impl subscription Redis cache (ACP/TM, not only Gateway). -->
+        <dependency>
+            <groupId>org.apache.servicemix.bundles</groupId>
+            <artifactId>org.apache.servicemix.bundles.jedis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
+        </dependency>
     </dependencies>
     <build>
         <plugins>
@@ -248,6 +257,8 @@
                                 <bundleDef>org.wso2.carbon.apimgt:org.wso2.carbon.apimgt.spec.parser:${carbon.apimgt.version}</bundleDef>
                                 <bundleDef>com.damnhandy.wso2:handy-uri-templates:${damnhandy.version}</bundleDef>
                                 <bundleDef>org.wso2.carbon:org.wso2.carbon.usage.data.exporter</bundleDef>
+                                <bundleDef>org.apache.servicemix.bundles:org.apache.servicemix.bundles.jedis:${servicemix.bundles.jedis.version}</bundleDef>
+                                <bundleDef>org.apache.commons:commons-pool2:${apache.commons.version}</bundleDef>
                             </bundles>
                         </configuration>
                     </execution>

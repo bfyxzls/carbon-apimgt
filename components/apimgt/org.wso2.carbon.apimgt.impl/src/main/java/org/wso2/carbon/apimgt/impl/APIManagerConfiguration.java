@@ -530,6 +530,23 @@ public class APIManagerConfiguration {
                 if (redisIsSslEnabled != null) {
                     redisConfig.setSslEnabled(Boolean.parseBoolean(redisIsSslEnabled.getText()));
                 }
+                OMElement subscriptionDataCacheEnabled = element.getFirstChildWithName(
+                        new QName(APIConstants.CONFIG_REDIS_SUBSCRIPTION_DATA_CACHE_ENABLED));
+                if (subscriptionDataCacheEnabled != null) {
+                    redisConfig.setSubscriptionDataCacheEnabled(
+                            Boolean.parseBoolean(subscriptionDataCacheEnabled.getText()));
+                }
+                OMElement subscriptionCacheOrganizations = element.getFirstChildWithName(
+                        new QName(APIConstants.CONFIG_REDIS_SUBSCRIPTION_CACHE_ORGANIZATIONS));
+                if (subscriptionCacheOrganizations != null && StringUtils.isNotEmpty(subscriptionCacheOrganizations.getText())) {
+                    java.util.List<String> orgs = new java.util.ArrayList<>();
+                    for (String org : subscriptionCacheOrganizations.getText().split(",")) {
+                        if (StringUtils.isNotBlank(org)) {
+                            orgs.add(org.trim());
+                        }
+                    }
+                    redisConfig.setSubscriptionCacheOrganizations(orgs);
+                }
                 if (propertiesElement != null) {
                     Iterator<OMElement> properties = propertiesElement.getChildElements();
                     if (properties != null) {
@@ -555,6 +572,19 @@ public class APIManagerConfiguration {
                                 redisConfig.setTimeBetweenEvictionRunsMillis(Long.parseLong(propertyNode.getText()));
                             } else if (APIConstants.CONFIG_REDIS_NUM_TESTS_PER_EVICTION_RUNS.equals(propertyNode.getLocalName())) {
                                 redisConfig.setNumTestsPerEvictionRun(Integer.parseInt(propertyNode.getText()));
+                            } else if (APIConstants.CONFIG_REDIS_SUBSCRIPTION_DATA_CACHE_ENABLED
+                                    .equals(propertyNode.getLocalName())) {
+                                redisConfig.setSubscriptionDataCacheEnabled(
+                                        Boolean.parseBoolean(propertyNode.getText()));
+                            } else if (APIConstants.CONFIG_REDIS_SUBSCRIPTION_CACHE_ORGANIZATIONS
+                                    .equals(propertyNode.getLocalName())) {
+                                java.util.List<String> orgs = new java.util.ArrayList<>();
+                                for (String org : propertyNode.getText().split(",")) {
+                                    if (StringUtils.isNotBlank(org)) {
+                                        orgs.add(org.trim());
+                                    }
+                                }
+                                redisConfig.setSubscriptionCacheOrganizations(orgs);
                             }
                         }
                     }

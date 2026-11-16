@@ -158,6 +158,18 @@ public class APIHandlerServiceComponent {
             context.getBundleContext().registerService(DistributedCounterManager.class,
                     redisBaseDistributedCountManager, null);
             ServiceReferenceHolder.getInstance().setRedisPool(getJedisPool(redisConfig));
+            boolean subscriptionCacheEnabled = redisConfig.isSubscriptionDataCacheEnabled()
+                    || Boolean.parseBoolean(System.getProperty("apim.subscription.data.cache.enabled", "false"));
+            if (subscriptionCacheEnabled) {
+                JedisPool subscriptionJedisPool = getJedisPool(redisConfig);
+                org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder.getInstance()
+                        .setSubscriptionDataJedisPool(subscriptionJedisPool);
+                org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder.getInstance()
+                        .setSubscriptionDataRedisStore(
+                                new org.wso2.carbon.apimgt.impl.subscription.cache.SubscriptionDataRedisStore(
+                                        subscriptionJedisPool));
+                log.info("Gateway subscription data Redis cache reader initialized");
+            }
         }
 
         if (ThrottleServiceDataHolder.getInstance().getThrottleProperties().isThrottleSyncAsyncHybridModeEnabled()) {

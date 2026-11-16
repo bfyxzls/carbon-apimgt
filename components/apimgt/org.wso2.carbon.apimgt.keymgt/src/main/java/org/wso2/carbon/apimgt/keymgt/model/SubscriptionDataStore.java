@@ -192,6 +192,14 @@ public interface SubscriptionDataStore {
 
     boolean isApiPoliciesInitialized();
 
+    boolean isApplicationsInitialized();
+
+    boolean isSubscriptionsInitialized();
+
+    boolean isApplicationKeyMappingsInitialized();
+
+    boolean isSubscriptionValidationDataReady();
+
     API getDefaultApiByContext(String context);
 
     void addOrUpdateScope(Scope scope);

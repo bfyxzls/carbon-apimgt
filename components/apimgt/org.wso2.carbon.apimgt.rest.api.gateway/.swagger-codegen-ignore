@@ -26,3 +26,5 @@
 **/test/**
 swagger.json
 pom.xml
+# Hand-written implementations live under src/main/.../impl; do not emit stubs into src/gen.
+**/*ApiServiceImpl.java

@@ -50,6 +50,7 @@ public class TransportHeaderHandler extends AbstractSynapseHandler {
      */
     public boolean handleRequestInFlow(MessageContext synCtx) {
         TransportHeaderUtil.captureRequestIdHeader(synCtx);
+        TransportHeaderUtil.captureUserAgentHeader(synCtx);
         return true;
     }
 
@@ -64,9 +65,12 @@ public class TransportHeaderHandler extends AbstractSynapseHandler {
             log.debug("Starting to remove standard Response headers defined from the request out flow.");
 	}
         TransportHeaderUtil.captureRequestIdHeader(synCtx);
+        TransportHeaderUtil.captureUserAgentHeader(synCtx);
         //Remove all the standard well known response headers from the request outgoing
         TransportHeaderUtil.removeTransportHeadersFromList(synCtx, this.standardResponseHeaders);
         TransportHeaderUtil.removeExcessTransportHeadersFromList(synCtx, this.standardResponseHeaders);
+        // Re-apply inbound User-Agent after header cleanup so upstream still sees the client UA.
+        TransportHeaderUtil.ensureUserAgentForward(synCtx);
 	if (log.isDebugEnabled()) {
             log.debug("Removing headers completed in request out flow");
 	}

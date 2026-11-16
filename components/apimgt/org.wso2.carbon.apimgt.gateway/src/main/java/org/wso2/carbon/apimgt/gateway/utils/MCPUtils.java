@@ -461,8 +461,10 @@ public class MCPUtils {
 
                     //process headers
                     processHeaders(messageContext, resolvedRequest);
-                    // Keep x-request-id for upstream; capture for response header request_id.
+                    // Keep x-request-id / User-Agent for upstream.
                     TransportHeaderUtil.captureRequestIdHeader(messageContext);
+                    TransportHeaderUtil.captureUserAgentHeader(messageContext);
+                    TransportHeaderUtil.ensureUserAgentForward(messageContext);
 
                     //process request body
                     SchemaMapping parsedSchemaDefinition = parser.parse(schemaDefinition);

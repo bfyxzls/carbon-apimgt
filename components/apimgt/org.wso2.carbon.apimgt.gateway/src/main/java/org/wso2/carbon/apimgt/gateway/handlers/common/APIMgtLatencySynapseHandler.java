@@ -43,8 +43,9 @@ public class APIMgtLatencySynapseHandler extends AbstractSynapseHandler {
 
     @Override
     public boolean handleRequestInFlow(MessageContext messageContext) {
-        // Keep x-request-id for upstream; stash value for response header request_id.
+        // Keep x-request-id / User-Agent for upstream; stash for response / restore on out.
         TransportHeaderUtil.captureRequestIdHeader(messageContext);
+        TransportHeaderUtil.captureUserAgentHeader(messageContext);
 
         TracingTracer tracer = ServiceReferenceHolder.getInstance().getTracer();
         TelemetryTracer telemetryTracer = ServiceReferenceHolder.getInstance().getTelemetryTracer();
@@ -86,8 +87,10 @@ public class APIMgtLatencySynapseHandler extends AbstractSynapseHandler {
 
     @Override
     public boolean handleRequestOutFlow(MessageContext messageContext) {
-        // Ensure value is captured even if request-in was skipped for some paths.
+        // Ensure values are captured even if request-in was skipped for some paths.
         TransportHeaderUtil.captureRequestIdHeader(messageContext);
+        TransportHeaderUtil.captureUserAgentHeader(messageContext);
+        TransportHeaderUtil.ensureUserAgentForward(messageContext);
 
         TracingTracer tracer = ServiceReferenceHolder.getInstance().getTracer();
         TelemetryTracer telemetryTracer = ServiceReferenceHolder.getInstance().getTelemetryTracer();

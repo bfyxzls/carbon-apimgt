@@ -24,6 +24,7 @@ import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.model.subscription.Subscription;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.dao.SubscriptionValidationDAO;
+import org.wso2.carbon.apimgt.impl.subscription.cache.SubscriptionDataCacheService;
 import org.wso2.carbon.apimgt.internal.service.SubscriptionsApiService;
 import org.wso2.carbon.apimgt.internal.service.utils.SubscriptionValidationDataUtil;
 import org.wso2.carbon.apimgt.rest.api.util.utils.RestApiUtil;
@@ -63,14 +64,14 @@ public class SubscriptionsApiServiceImpl implements SubscriptionsApiService {
         } else if (StringUtils.isNotEmpty(organization) &&
                 !organization.equalsIgnoreCase(APIConstants.ORG_ALL_QUERY_PARAM)) {
             result = Response.ok().entity(SubscriptionValidationDataUtil.fromSubscriptionToSubscriptionListDTO(
-                    subscriptionValidationDAO.getAllSubscriptionsByOrganization(organization))).build();
+                    SubscriptionDataCacheService.getInstance().getSubscriptionsByOrganization(organization))).build();
         } else if (StringUtils.isNotEmpty(organization) && organization.equalsIgnoreCase(APIConstants.ORG_ALL_QUERY_PARAM) &&
                 xWSO2Tenant.equalsIgnoreCase(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME)) {
             result = Response.ok().entity(SubscriptionValidationDataUtil.fromSubscriptionToSubscriptionListDTO(
                     subscriptionValidationDAO.getAllSubscriptions())).build();
         } else if (StringUtils.isNotEmpty(xWSO2Tenant)) {
             result = Response.ok().entity(SubscriptionValidationDataUtil.fromSubscriptionToSubscriptionListDTO(
-                    subscriptionValidationDAO.getAllSubscriptions(xWSO2Tenant))).build();
+                    SubscriptionDataCacheService.getInstance().getSubscriptionsByOrganization(xWSO2Tenant))).build();
         } else {
             result = Response.ok().entity(SubscriptionValidationDataUtil.fromSubscriptionToSubscriptionListDTO(
                     subscriptionValidationDAO.getAllSubscriptions())).build();

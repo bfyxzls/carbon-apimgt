@@ -21,6 +21,7 @@ package org.wso2.carbon.apimgt.impl.notifier;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.notifier.events.Event;
 import org.wso2.carbon.apimgt.impl.notifier.exceptions.NotifierException;
+import org.wso2.carbon.apimgt.impl.subscription.cache.SubscriptionDataCacheUpdater;
 
 /**
  * The default Application Registration notification service implementation in which Application Registration creation
@@ -32,6 +33,7 @@ public class ApplicationRegistrationNotifier extends AbstractNotifier {
     public boolean publishEvent(Event event) throws NotifierException {
 
         publishEventToEventHub(event);
+        SubscriptionDataCacheUpdater.handleEvent(event);
         return true;
     }
 
