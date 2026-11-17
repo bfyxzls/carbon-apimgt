@@ -12,6 +12,8 @@ target
 *.trace.db
 *-api.yaml.sha256
 *.war
+dist-jars
+gen
 components/apimgt/org.wso2.carbon.apimgt.internal.service/.swagger-codegen/VERSION
 features/apimgt/org.wso2.carbon.apimgt.core.feature/src/main/resources/libs/Saxon-HE-9.5.1-8.jar
 features/apimgt/org.wso2.carbon.apimgt.core.feature/src/main/resources/workflowextensions/default-workflow-extensions.xml
