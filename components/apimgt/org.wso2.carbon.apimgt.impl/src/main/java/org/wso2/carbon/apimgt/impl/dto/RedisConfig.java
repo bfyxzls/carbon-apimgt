@@ -47,6 +47,10 @@ public class RedisConfig {
     private String hybridThrottleProcessorType;
     private boolean subscriptionDataCacheEnabled = false;
     private java.util.List<String> subscriptionCacheOrganizations = new java.util.ArrayList<>();
+    // Default true so profile cache works when Redis is configured even if product
+    // api-manager.xml.j2 has not yet been upgraded with UserProfileCacheEnabled.
+    private boolean userProfileCacheEnabled = true;
+    private int userProfileCacheTtlSeconds = 900;
 
     public boolean isSubscriptionDataCacheEnabled() {
         return subscriptionDataCacheEnabled;
@@ -62,6 +66,35 @@ public class RedisConfig {
 
     public void setSubscriptionCacheOrganizations(java.util.List<String> subscriptionCacheOrganizations) {
         this.subscriptionCacheOrganizations = subscriptionCacheOrganizations;
+    }
+
+    public boolean isUserProfileCacheEnabled() {
+        return userProfileCacheEnabled;
+    }
+
+    public void setUserProfileCacheEnabled(boolean userProfileCacheEnabled) {
+        this.userProfileCacheEnabled = userProfileCacheEnabled;
+    }
+
+    public int getUserProfileCacheTtlSeconds() {
+        // Optional override when api-manager.xml.j2 in the product image does not yet
+        // emit <UserProfileCacheTtlSeconds> from deployment.toml.
+        String override = System.getProperty("apim.user.profile.cache.ttl.seconds");
+        if (override != null && !override.trim().isEmpty()) {
+            try {
+                int parsed = Integer.parseInt(override.trim());
+                if (parsed > 0) {
+                    return parsed;
+                }
+            } catch (NumberFormatException ignored) {
+                // fall through to configured / default value
+            }
+        }
+        return userProfileCacheTtlSeconds;
+    }
+
+    public void setUserProfileCacheTtlSeconds(int userProfileCacheTtlSeconds) {
+        this.userProfileCacheTtlSeconds = userProfileCacheTtlSeconds;
     }
 
     public int getMaxTotal() {

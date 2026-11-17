@@ -47,6 +47,7 @@ import org.wso2.carbon.apimgt.impl.keymgt.KeyManagerConfigurationService;
 import org.wso2.carbon.apimgt.impl.notifier.Notifier;
 import org.wso2.carbon.apimgt.impl.recommendationmgt.AccessTokenGenerator;
 import org.wso2.carbon.apimgt.impl.subscription.cache.SubscriptionDataRedisStore;
+import org.wso2.carbon.apimgt.impl.userprofile.UserProfileRedisStore;
 import org.wso2.carbon.apimgt.impl.token.OpaqueAPIKeyNotifier;
 import org.wso2.carbon.apimgt.impl.workflow.DefaultWorkflowTaskService;
 import org.wso2.carbon.event.output.adapter.core.OutputEventAdapterService;
@@ -100,6 +101,7 @@ public class ServiceReferenceHolder {
     private ConsumptionDataExportService consumptionDataExportService;
     private JedisPool subscriptionDataJedisPool;
     private SubscriptionDataRedisStore subscriptionDataRedisStore;
+    private UserProfileRedisStore userProfileRedisStore;
 
     private Map<String, LLMProviderService> llmProviderServiceMap = new HashMap();
 
@@ -517,6 +519,14 @@ public class ServiceReferenceHolder {
 
     public void setSubscriptionDataRedisStore(SubscriptionDataRedisStore subscriptionDataRedisStore) {
         this.subscriptionDataRedisStore = subscriptionDataRedisStore;
+    }
+
+    public UserProfileRedisStore getUserProfileRedisStore() {
+        return userProfileRedisStore;
+    }
+
+    public void setUserProfileRedisStore(UserProfileRedisStore userProfileRedisStore) {
+        this.userProfileRedisStore = userProfileRedisStore;
     }
 
 }

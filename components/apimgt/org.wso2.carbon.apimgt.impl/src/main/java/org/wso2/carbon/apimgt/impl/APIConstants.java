@@ -1815,6 +1815,8 @@ public final class APIConstants {
     public static final String CONFIG_REDIS_KEY_LOCK_RETRIEVAL_TIMEOUT = "KeyLockRetrievalTimeout";
     public static final String CONFIG_REDIS_SUBSCRIPTION_DATA_CACHE_ENABLED = "SubscriptionDataCacheEnabled";
     public static final String CONFIG_REDIS_SUBSCRIPTION_CACHE_ORGANIZATIONS = "SubscriptionCacheOrganizations";
+    public static final String CONFIG_REDIS_USER_PROFILE_CACHE_ENABLED = "UserProfileCacheEnabled";
+    public static final String CONFIG_REDIS_USER_PROFILE_CACHE_TTL_SECONDS = "UserProfileCacheTtlSeconds";
     public static final String HYBRID_THROTTLE_PROCESSOR_TYPE_START_TIME_BASED = "start_time_based";
 
     // Distributed Throttle Configuration constants

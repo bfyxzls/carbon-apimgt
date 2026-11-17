@@ -232,6 +232,7 @@ public class APIManagerComponent {
             APIManagerConfigurationServiceImpl configurationService = new APIManagerConfigurationServiceImpl(configuration);
             ServiceReferenceHolder.getInstance().setAPIManagerConfigurationService(configurationService);
             initSubscriptionDataRedisCache(configuration);
+            initUserProfileRedisCache(configuration);
             APIMDependencyConfigurationServiceImpl dependencyConfigurationService = new APIMDependencyConfigurationServiceImpl(
                     dependencyConfigurations);
             ServiceReferenceHolder.getInstance().setAPIMDependencyConfigurationService(dependencyConfigurationService);
@@ -1204,6 +1205,37 @@ public class APIManagerComponent {
             log.info("Subscription data Redis cache enabled; warm task scheduled");
         } catch (Exception e) {
             log.error("Failed to initialize subscription data Redis cache", e);
+        }
+    }
+
+    private void initUserProfileRedisCache(APIManagerConfiguration configuration) {
+        RedisConfig redisConfig = configuration.getRedisConfig();
+        if (redisConfig == null || !redisConfig.isRedisEnabled()) {
+            log.info("User profile Redis cache skipped: RedisConfig disabled/absent");
+            return;
+        }
+        boolean cacheEnabled = redisConfig.isUserProfileCacheEnabled()
+                || Boolean.parseBoolean(System.getProperty("apim.user.profile.cache.enabled", "false"));
+        if (!cacheEnabled) {
+            log.info("User profile Redis cache skipped: userProfileCacheEnabled=false");
+            return;
+        }
+        try {
+            JedisPool jedisPool = ServiceReferenceHolder.getInstance().getSubscriptionDataJedisPool();
+            if (jedisPool == null) {
+                jedisPool = RedisPoolFactory.create(redisConfig);
+                ServiceReferenceHolder.getInstance().setSubscriptionDataJedisPool(jedisPool);
+            }
+            org.wso2.carbon.apimgt.impl.userprofile.UserProfileRedisStore store =
+                    new org.wso2.carbon.apimgt.impl.userprofile.UserProfileRedisStore(
+                            jedisPool, redisConfig.getUserProfileCacheTtlSeconds());
+            ServiceReferenceHolder.getInstance().setUserProfileRedisStore(store);
+            log.info("User profile Redis cache enabled; ttlSeconds="
+                    + redisConfig.getUserProfileCacheTtlSeconds()
+                    + ", databaseId=" + redisConfig.getDatabaseId()
+                    + ", keyPrefix=apim:userprofile:");
+        } catch (Exception e) {
+            log.error("Failed to initialize user profile Redis cache", e);
         }
     }
 }

@@ -1607,6 +1607,12 @@
         {% if apim.redis_config.subscription_cache_organizations is defined %}
         <SubscriptionCacheOrganizations>{{apim.redis_config.subscription_cache_organizations}}</SubscriptionCacheOrganizations>
         {% endif %}
+        {% if apim.redis_config.user_profile_cache_enabled is defined %}
+        <UserProfileCacheEnabled>{{apim.redis_config.user_profile_cache_enabled}}</UserProfileCacheEnabled>
+        {% endif %}
+        {% if apim.redis_config.user_profile_cache_ttl_seconds is defined %}
+        <UserProfileCacheTtlSeconds>{{apim.redis_config.user_profile_cache_ttl_seconds}}</UserProfileCacheTtlSeconds>
+        {% endif %}
         <Properties>
             {% if apim.redis_config.pool_options is defined %}
                 {% if apim.redis_config.pool_options.max_total is defined %}

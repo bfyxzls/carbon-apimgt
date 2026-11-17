@@ -547,6 +547,17 @@ public class APIManagerConfiguration {
                     }
                     redisConfig.setSubscriptionCacheOrganizations(orgs);
                 }
+                OMElement userProfileCacheEnabled = element.getFirstChildWithName(
+                        new QName(APIConstants.CONFIG_REDIS_USER_PROFILE_CACHE_ENABLED));
+                if (userProfileCacheEnabled != null) {
+                    redisConfig.setUserProfileCacheEnabled(
+                            Boolean.parseBoolean(userProfileCacheEnabled.getText()));
+                }
+                OMElement userProfileCacheTtl = element.getFirstChildWithName(
+                        new QName(APIConstants.CONFIG_REDIS_USER_PROFILE_CACHE_TTL_SECONDS));
+                if (userProfileCacheTtl != null && StringUtils.isNotEmpty(userProfileCacheTtl.getText())) {
+                    redisConfig.setUserProfileCacheTtlSeconds(Integer.parseInt(userProfileCacheTtl.getText().trim()));
+                }
                 if (propertiesElement != null) {
                     Iterator<OMElement> properties = propertiesElement.getChildElements();
                     if (properties != null) {
@@ -585,6 +596,14 @@ public class APIManagerConfiguration {
                                     }
                                 }
                                 redisConfig.setSubscriptionCacheOrganizations(orgs);
+                            } else if (APIConstants.CONFIG_REDIS_USER_PROFILE_CACHE_ENABLED
+                                    .equals(propertyNode.getLocalName())) {
+                                redisConfig.setUserProfileCacheEnabled(
+                                        Boolean.parseBoolean(propertyNode.getText()));
+                            } else if (APIConstants.CONFIG_REDIS_USER_PROFILE_CACHE_TTL_SECONDS
+                                    .equals(propertyNode.getLocalName())) {
+                                redisConfig.setUserProfileCacheTtlSeconds(
+                                        Integer.parseInt(propertyNode.getText().trim()));
                             }
                         }
                     }

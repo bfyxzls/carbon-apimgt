@@ -170,6 +170,27 @@ public class APIHandlerServiceComponent {
                                         subscriptionJedisPool));
                 log.info("Gateway subscription data Redis cache reader initialized");
             }
+            boolean userProfileCacheEnabled = redisConfig.isUserProfileCacheEnabled()
+                    || Boolean.parseBoolean(System.getProperty("apim.user.profile.cache.enabled", "false"));
+            if (userProfileCacheEnabled) {
+                JedisPool profilePool = org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder.getInstance()
+                        .getSubscriptionDataJedisPool();
+                if (profilePool == null) {
+                    profilePool = getJedisPool(redisConfig);
+                    org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder.getInstance()
+                            .setSubscriptionDataJedisPool(profilePool);
+                }
+                org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder.getInstance()
+                        .setUserProfileRedisStore(
+                                new org.wso2.carbon.apimgt.impl.userprofile.UserProfileRedisStore(
+                                        profilePool, redisConfig.getUserProfileCacheTtlSeconds()));
+                log.info("Gateway user profile Redis cache initialized; ttlSeconds="
+                        + redisConfig.getUserProfileCacheTtlSeconds()
+                        + ", databaseId=" + redisConfig.getDatabaseId()
+                        + ", keyPrefix=apim:userprofile:");
+            } else {
+                log.info("Gateway user profile Redis cache skipped: userProfileCacheEnabled=false");
+            }
         }
 
         if (ThrottleServiceDataHolder.getInstance().getThrottleProperties().isThrottleSyncAsyncHybridModeEnabled()) {

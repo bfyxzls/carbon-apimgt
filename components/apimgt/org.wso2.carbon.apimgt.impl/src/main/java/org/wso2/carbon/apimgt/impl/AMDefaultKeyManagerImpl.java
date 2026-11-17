@@ -1690,20 +1690,38 @@ public class AMDefaultKeyManagerImpl extends AbstractKeyManager {
     public Map<String, String> getUserClaims(String username, Map<String, Object> properties)
             throws APIManagementException {
 
-        Map<String, String> map = new HashMap<String, String>();
+        String tenantDomain = MultitenantUtils.getTenantDomain(username);
         String tenantAwareUserName = MultitenantUtils.getTenantAwareUsername(username);
+        org.wso2.carbon.apimgt.impl.userprofile.UserProfileRedisStore profileStore =
+                ServiceReferenceHolder.getInstance().getUserProfileRedisStore();
+        if (profileStore != null) {
+            // Single canonical Redis key; uuid / uuid@tenant / {uuid} all normalize the same.
+            Map<String, String> cached = profileStore.getProfileClaims(tenantDomain, tenantAwareUserName);
+            if (cached != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("User profile Redis cache hit for username=" + tenantAwareUserName
+                            + ", tenant=" + tenantDomain + ", keys=" + cached.keySet());
+                }
+                return cached;
+            }
+        } else if (log.isDebugEnabled()) {
+            log.debug("User profile Redis store is null; getUserClaims will not cache for username="
+                    + tenantAwareUserName);
+        }
+
+        Map<String, String> map = new HashMap<String, String>();
         UserInfoDTO userinfo = new UserInfoDTO();
         userinfo.setUsername(tenantAwareUserName);
         if (tenantAwareUserName.contains(CarbonConstants.DOMAIN_SEPARATOR)) {
             userinfo.setDomain(tenantAwareUserName.split(CarbonConstants.DOMAIN_SEPARATOR)[0]);
         }
-        if (properties.containsKey(APIConstants.KeyManager.ACCESS_TOKEN)) {
+        if (properties != null && properties.containsKey(APIConstants.KeyManager.ACCESS_TOKEN)) {
             userinfo.setAccessToken(properties.get(APIConstants.KeyManager.ACCESS_TOKEN).toString());
         }
-        if (properties.containsKey(APIConstants.KeyManager.CLAIM_DIALECT)) {
+        if (properties != null && properties.containsKey(APIConstants.KeyManager.CLAIM_DIALECT)) {
             userinfo.setDialectURI(properties.get(APIConstants.KeyManager.CLAIM_DIALECT).toString());
         }
-        if (properties.containsKey(APIConstants.KeyManager.BINDING_FEDERATED_USER_CLAIMS)) {
+        if (properties != null && properties.containsKey(APIConstants.KeyManager.BINDING_FEDERATED_USER_CLAIMS)) {
             userinfo.setBindFederatedUserClaims(Boolean.valueOf(properties.
                     get(APIConstants.KeyManager.BINDING_FEDERATED_USER_CLAIMS).toString()));
         }
@@ -1717,6 +1735,26 @@ public class AMDefaultKeyManagerImpl extends AbstractKeyManager {
             }
         } catch (KeyManagerClientException e) {
             handleException("Error while getting user info", e);
+        }
+        // jwt-bearer persists 4 audit fields into local UM; if KM userinfo returned nothing,
+        // fall back so Redis / enrichment can still be warmed from UM_USER_ATTRIBUTE.
+        if (map.isEmpty()) {
+            try {
+                Map<String, String> localClaims =
+                        org.wso2.carbon.apimgt.impl.utils.APIRealmUtils.getUserClaims(username);
+                if (localClaims != null && !localClaims.isEmpty()) {
+                    map.putAll(localClaims);
+                    log.info("getUserClaims filled from local user store for username="
+                            + tenantAwareUserName + ", claimKeys=" + localClaims.keySet());
+                }
+            } catch (Exception e) {
+                log.debug("Local user-store claim fallback failed for username=" + tenantAwareUserName
+                        + ": " + e.getMessage());
+            }
+        }
+        if (profileStore != null) {
+            // One HASH under canonical uuid/username key (aliases collapsed on read/write).
+            profileStore.putProfileClaims(tenantDomain, tenantAwareUserName, map);
         }
         return map;
     }
