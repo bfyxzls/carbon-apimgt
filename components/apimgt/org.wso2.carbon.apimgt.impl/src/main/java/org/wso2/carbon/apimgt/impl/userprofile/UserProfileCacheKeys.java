@@ -77,4 +77,18 @@ public final class UserProfileCacheKeys {
         String tenant = tenantDomain == null || tenantDomain.isEmpty() ? "carbon.super" : tenantDomain;
         return KEY_PREFIX + tenant + ":" + canonicalizeUserKey(userKey);
     }
+
+    /**
+     * Whether the string looks like a Keycloak / OAuth {@code sub} (used for federated shadow users).
+     */
+    public static boolean isUuidShape(String value) {
+        if (value == null) {
+            return false;
+        }
+        String candidate = value.trim();
+        if (candidate.startsWith("{") && candidate.endsWith("}") && candidate.length() > 2) {
+            candidate = candidate.substring(1, candidate.length() - 1).trim();
+        }
+        return UUID_PATTERN.matcher(candidate).matches();
+    }
 }

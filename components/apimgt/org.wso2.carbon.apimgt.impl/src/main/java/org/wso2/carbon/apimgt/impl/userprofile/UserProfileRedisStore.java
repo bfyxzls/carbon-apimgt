@@ -79,14 +79,9 @@ public class UserProfileRedisStore {
         if (StringUtils.isBlank(userKey)) {
             return;
         }
-        Map<String, String> slim = slimFromClaims(claims);
-        // Prefer userid claim as canonical id when present (covers non-uuid login names probing by sub).
-        String canonicalInput = userKey;
-        String claimUserId = slim.get(UserProfileCacheKeys.FIELD_USER_ID);
-        if (StringUtils.isNotBlank(claimUserId)) {
-            canonicalInput = claimUserId;
-        }
-        String redisKey = UserProfileCacheKeys.profileKey(tenantDomain, canonicalInput);
+        Map<String, String> slim = slimFromClaims(claims, userKey);
+        // Redis key follows the lookup identity (KC uuid / login name), not IS internal userid.
+        String redisKey = UserProfileCacheKeys.profileKey(tenantDomain, userKey);
         boolean empty = StringUtils.isBlank(slim.get(UserProfileCacheKeys.FIELD_USER_ID))
                 && StringUtils.isBlank(slim.get(UserProfileCacheKeys.FIELD_USERNAME))
                 && StringUtils.isBlank(slim.get(UserProfileCacheKeys.FIELD_EMAIL))
@@ -114,15 +109,23 @@ public class UserProfileRedisStore {
     }
 
     public static Map<String, String> slimFromClaims(Map<String, String> claims) {
+        return slimFromClaims(claims, null);
+    }
+
+    /**
+     * Extract audit slim fields. For federated (jwt-bearer) users, {@code sub} / Keycloak uuid is
+     * {@code userId}; login display name lives in {@code nickname} / {@code preferred_username}, not
+     * {@code http://wso2.org/claims/username} (Carbon account name = uuid).
+     *
+     * @param lookupUserKey same as {@link org.wso2.carbon.apimgt.impl.AMDefaultKeyManagerImpl#getUserClaims} username
+     */
+    public static Map<String, String> slimFromClaims(Map<String, String> claims, String lookupUserKey) {
         Map<String, String> slim = new HashMap<>();
         if (claims == null || claims.isEmpty()) {
             return slim;
         }
-        String userId = firstClaim(claims,
-                "http://wso2.org/claims/userid", "userid", "userId", "sub");
-        String username = firstClaim(claims,
-                APIConstants.PREFERRED_USERNAME_CLAIM, "username", "http://wso2.org/claims/username",
-                APIConstants.NICKNAME_CLAIM, "nickname", "displayName", "http://wso2.org/claims/displayname");
+        String userId = resolveUserIdForCache(claims, lookupUserKey);
+        String username = resolveUsernameForCache(claims, lookupUserKey);
         String email = firstClaim(claims,
                 APIConstants.EMAIL_CLAIM, "email", "emailaddress");
         String phone = firstClaim(claims,
@@ -180,6 +183,93 @@ public class UserProfileRedisStore {
             map.put("phone", phone);
         }
         return map;
+    }
+
+    /**
+     * Prefer OAuth {@code sub} / lookup uuid for external user id; avoid WSO2 UM internal userid when both exist.
+     */
+    private static String resolveUserIdForCache(Map<String, String> claims, String lookupUserKey) {
+        String sub = firstClaim(claims, "sub");
+        String wso2UserId = firstClaim(claims,
+                "http://wso2.org/claims/userid", "userid", "userId");
+        String lookupCanonical = UserProfileCacheKeys.canonicalizeUserKey(lookupUserKey);
+        if (StringUtils.isNotBlank(sub)) {
+            String subTrim = sub.trim();
+            if (UserProfileCacheKeys.isUuidShape(subTrim)) {
+                return subTrim;
+            }
+        }
+        if (UserProfileCacheKeys.isUuidShape(lookupCanonical)) {
+            return lookupCanonical;
+        }
+        if (StringUtils.isNotBlank(wso2UserId)) {
+            return wso2UserId.trim();
+        }
+        if (StringUtils.isNotBlank(sub)) {
+            return sub.trim();
+        }
+        return null;
+    }
+
+    /**
+     * Align with {@code APIKeyValidationService.pickKcUserNameFromClaims}: nickname / preferred_username
+     * before Carbon {@code username} claim (often the federated uuid login).
+     */
+    private static String resolveUsernameForCache(Map<String, String> claims, String lookupUserKey) {
+        String loginBare = bareLoginName(lookupUserKey);
+        String[] usernameClaimKeys = {
+                APIConstants.PREFERRED_USERNAME_CLAIM,
+                APIConstants.NICKNAME_CLAIM,
+                "nickname",
+                APIConstants.DISPLAY_NAME_CLAIM,
+                "http://wso2.org/claims/displayname",
+                "displayName",
+                "displayname",
+                "username",
+                "http://wso2.org/claims/username"
+        };
+        for (String key : usernameClaimKeys) {
+            String value = firstClaim(claims, key);
+            if (isUsableDisplayName(value, lookupUserKey, loginBare)) {
+                return value.trim();
+            }
+        }
+        return null;
+    }
+
+    private static String bareLoginName(String lookupUserKey) {
+        if (StringUtils.isBlank(lookupUserKey)) {
+            return "";
+        }
+        String bare = UserProfileCacheKeys.canonicalizeUserKey(lookupUserKey);
+        if (StringUtils.isNotBlank(bare)) {
+            return bare;
+        }
+        return lookupUserKey.trim();
+    }
+
+    private static boolean isUsableDisplayName(String value, String lookupUserKey, String loginBare) {
+        if (StringUtils.isBlank(value)) {
+            return false;
+        }
+        String trimmed = value.trim();
+        if (trimmed.equals(lookupUserKey) || trimmed.equals(loginBare)) {
+            return false;
+        }
+        if (StringUtils.isNotBlank(loginBare) && UserProfileCacheKeys.isUuidShape(loginBare)
+                && trimmed.equals(loginBare)) {
+            return false;
+        }
+        String braceForm = "{" + loginBare + "}";
+        if (trimmed.equals(braceForm)) {
+            return false;
+        }
+        // Do not store uuid as "username" when login is already uuid-shaped (need nickname/preferred).
+        if (UserProfileCacheKeys.isUuidShape(trimmed) && UserProfileCacheKeys.isUuidShape(loginBare)
+                && trimmed.equalsIgnoreCase(loginBare)) {
+            return false;
+        }
+        return true;
     }
 
     private static String firstClaim(Map<String, String> claims, String... keys) {

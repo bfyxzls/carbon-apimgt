@@ -31,6 +31,12 @@ public final class RedisPoolFactory {
     private RedisPoolFactory() {
     }
 
+    /**
+     * Socket read timeout for large HSCAN/HSET workloads. connectionTimeout alone (often 5s)
+     * is too short for multi-million-field subscription hashes.
+     */
+    private static final int DEFAULT_SO_TIMEOUT_MS = 120000;
+
     public static JedisPool create(RedisConfig redisConfig) {
         JedisPoolConfig jedisPoolConfig = new JedisPoolConfig();
         jedisPoolConfig.setMaxTotal(redisConfig.getMaxTotal());
@@ -41,16 +47,30 @@ public final class RedisPoolFactory {
         jedisPoolConfig.setMinEvictableIdleTimeMillis(redisConfig.getMinEvictableIdleTimeMillis());
         jedisPoolConfig.setTimeBetweenEvictionRunsMillis(redisConfig.getTimeBetweenEvictionRunsMillis());
         jedisPoolConfig.setNumTestsPerEvictionRun(redisConfig.getNumTestsPerEvictionRun());
+        int connectionTimeout = Math.max(redisConfig.getConnectionTimeout(), 1000);
+        int soTimeout = Math.max(connectionTimeout, DEFAULT_SO_TIMEOUT_MS);
+        String soOverride = System.getProperty("apim.subscription.cache.redis.soTimeoutMs");
+        if (StringUtils.isNotBlank(soOverride)) {
+            try {
+                soTimeout = Math.max(connectionTimeout, Integer.parseInt(soOverride.trim()));
+            } catch (NumberFormatException ignored) {
+                // keep computed default
+            }
+        }
+        // Jedis 3.x requires clientName when connectionTimeout and soTimeout are both set.
+        String clientName = null;
         if (StringUtils.isNotEmpty(redisConfig.getUser()) && redisConfig.getPassword() != null) {
             return new JedisPool(jedisPoolConfig, redisConfig.getHost(), redisConfig.getPort(),
-                    redisConfig.getConnectionTimeout(), redisConfig.getUser(),
-                    String.valueOf(redisConfig.getPassword()), redisConfig.getDatabaseId(), redisConfig.isSslEnabled());
+                    connectionTimeout, soTimeout, redisConfig.getUser(),
+                    String.valueOf(redisConfig.getPassword()), redisConfig.getDatabaseId(), clientName,
+                    redisConfig.isSslEnabled());
         } else if (redisConfig.getPassword() != null) {
             return new JedisPool(jedisPoolConfig, redisConfig.getHost(), redisConfig.getPort(),
-                    redisConfig.getConnectionTimeout(), String.valueOf(redisConfig.getPassword()),
-                    redisConfig.getDatabaseId(), redisConfig.isSslEnabled());
+                    connectionTimeout, soTimeout, String.valueOf(redisConfig.getPassword()),
+                    redisConfig.getDatabaseId(), clientName, redisConfig.isSslEnabled());
         }
         return new JedisPool(jedisPoolConfig, redisConfig.getHost(), redisConfig.getPort(),
-                redisConfig.getConnectionTimeout(), null, redisConfig.getDatabaseId(), redisConfig.isSslEnabled());
+                connectionTimeout, soTimeout, null, redisConfig.getDatabaseId(), clientName,
+                redisConfig.isSslEnabled());
     }
 }

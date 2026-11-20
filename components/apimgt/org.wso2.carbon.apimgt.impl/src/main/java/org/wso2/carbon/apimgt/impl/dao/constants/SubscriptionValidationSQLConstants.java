@@ -132,6 +132,16 @@ public class SubscriptionValidationSQLConstants {
                     "   SUBS.APPLICATION_ID = APP.APPLICATION_ID AND " +
                     "   APP.SUBSCRIBER_ID = SUB.SUBSCRIBER_ID AND " +
                     "   APP.ORGANIZATION = ? ";
+
+    /**
+     * Keyset-paginated variant for Redis warm (MySQL/MariaDB {@code LIMIT}).
+     * Params: organization, afterSubscriptionId (exclusive), limit.
+     */
+    public static final String GET_ORGANIZATION_SUBSCRIPTIONS_BY_ID_PAGE_SQL =
+            GET_ORGANIZATION_SUBSCRIPTIONS_SQL +
+                    " AND SUBS.SUBSCRIPTION_ID > ? " +
+                    " ORDER BY SUBS.SUBSCRIPTION_ID ASC " +
+                    " LIMIT ? ";
     public static final String GET_ALL_SUBSCRIPTIONS_SQL =
             "SELECT " +
                     "   SUBS.UUID AS SUBSCRIPTION_UUID," +
@@ -560,6 +570,26 @@ public class SubscriptionValidationSQLConstants {
                     " WHERE " +
                     "   MAPPING.APPLICATION_ID = APP.APPLICATION_ID AND APP.SUBSCRIBER_ID = SUB.SUBSCRIBER_ID AND" +
                     "   MAPPING.KEY_MANAGER = KEYM.UUID AND APP.ORGANIZATION = ?";
+
+    /**
+     * Keyset-paginated key-mappings for Redis warm (MySQL/MariaDB {@code LIMIT}).
+     * Cursor is the table PK {@code (APPLICATION_ID, KEY_TYPE, KEY_MANAGER)}.
+     * Params: organization, afterAppId, afterAppId, afterKeyType, afterAppId, afterKeyType,
+     * afterKeyManagerUuid, limit.
+     */
+    public static final String GET_ORGANIZATION_AM_KEY_MAPPING_BY_KEYSET_PAGE_SQL =
+            "SELECT APP.UUID,MAPPING.APPLICATION_ID, MAPPING.CONSUMER_KEY,MAPPING.KEY_TYPE,KEYM.NAME AS KEY_MANAGER," +
+                    "MAPPING.STATE,MAPPING.KEY_MANAGER AS KEY_MANAGER_ID" +
+                    " FROM " +
+                    "   AM_APPLICATION_KEY_MAPPING MAPPING,AM_APPLICATION APP,AM_SUBSCRIBER SUB,AM_KEY_MANAGER KEYM" +
+                    " WHERE " +
+                    "   MAPPING.APPLICATION_ID = APP.APPLICATION_ID AND APP.SUBSCRIBER_ID = SUB.SUBSCRIBER_ID AND" +
+                    "   MAPPING.KEY_MANAGER = KEYM.UUID AND APP.ORGANIZATION = ?" +
+                    " AND (MAPPING.APPLICATION_ID > ?" +
+                    " OR (MAPPING.APPLICATION_ID = ? AND MAPPING.KEY_TYPE > ?)" +
+                    " OR (MAPPING.APPLICATION_ID = ? AND MAPPING.KEY_TYPE = ? AND MAPPING.KEY_MANAGER > ?))" +
+                    " ORDER BY MAPPING.APPLICATION_ID ASC, MAPPING.KEY_TYPE ASC, MAPPING.KEY_MANAGER ASC" +
+                    " LIMIT ?";
 
     public static final String GET_ALL_GLOBAL_POLICIES_SQL =
             " SELECT " +

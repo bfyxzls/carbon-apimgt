@@ -68,6 +68,7 @@ import java.util.Set;
 public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
 
     private static final Log log = LogFactory.getLog(SubscriptionDataLoaderImpl.class);
+    private static final String SUBSCRIPTION_DATA_CACHE_ENABLED_PROPERTY = "apim.subscription.data.cache.enabled";
     private EventHubConfigurationDto getEventHubConfigurationDto;
     private GatewayArtifactSynchronizerProperties gatewayArtifactSynchronizerProperties;
     public static final String UTF8 = "UTF-8";
@@ -87,8 +88,11 @@ public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
 
         List<Subscription> fromRedis = loadSubscriptionsFromRedis(tenantDomain);
         if (fromRedis != null) {
+            log.info("Loaded " + fromRedis.size() + " subscriptions from Redis for tenant=" + tenantDomain);
             return fromRedis;
         }
+        log.warn("Redis subscription cache not readable for tenant=" + tenantDomain
+                + "; falling back to Event Hub internal API for subscriptions");
         String subscriptionsEP = APIConstants.SubscriptionValidationResources.SUBSCRIPTIONS;
         List<Subscription> subscriptions = new ArrayList<>();
         String responseString = null;
@@ -102,6 +106,8 @@ public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
         if (responseString != null && !responseString.isEmpty()) {
             subscriptions = (new Gson().fromJson(responseString, SubscriptionList.class)).getList();
         }
+        log.info("Loaded " + subscriptions.size() + " subscriptions from Event Hub internal API for tenant="
+                + tenantDomain);
         return subscriptions;
     }
 
@@ -110,8 +116,11 @@ public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
 
         List<Application> fromRedis = loadApplicationsFromRedis(tenantDomain);
         if (fromRedis != null) {
+            log.info("Loaded " + fromRedis.size() + " applications from Redis for tenant=" + tenantDomain);
             return fromRedis;
         }
+        log.warn("Redis subscription cache not readable for tenant=" + tenantDomain
+                + "; falling back to Event Hub internal API for applications");
         String applicationsEP = APIConstants.SubscriptionValidationResources.APPLICATIONS;
         List<Application> applications = new ArrayList<>();
         String responseString = null;
@@ -125,6 +134,8 @@ public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
         if (responseString != null && !responseString.isEmpty()) {
             applications = (new Gson().fromJson(responseString, ApplicationList.class)).getList();
         }
+        log.info("Loaded " + applications.size() + " applications from Event Hub internal API for tenant="
+                + tenantDomain);
         return applications;
     }
 
@@ -133,8 +144,11 @@ public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
 
         List<ApplicationKeyMapping> fromRedis = loadKeyMappingsFromRedis(tenantDomain);
         if (fromRedis != null) {
+            log.info("Loaded " + fromRedis.size() + " key mappings from Redis for tenant=" + tenantDomain);
             return fromRedis;
         }
+        log.warn("Redis subscription cache not readable for tenant=" + tenantDomain
+                + "; falling back to Event Hub internal API for key mappings");
         String applicationsEP = APIConstants.SubscriptionValidationResources.APPLICATION_KEY_MAPPINGS;
         List<ApplicationKeyMapping> applicationKeyMappings = new ArrayList<>();
         String responseString = null;
@@ -148,13 +162,20 @@ public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
         if (responseString != null && !responseString.isEmpty()) {
             applicationKeyMappings = (new Gson().fromJson(responseString, ApplicationKeyMappingList.class)).getList();
         }
+        log.info("Loaded " + applicationKeyMappings.size() + " key mappings from Event Hub internal API for tenant="
+                + tenantDomain);
         return applicationKeyMappings;
+    }
+
+    private boolean isSubscriptionDataCacheFlagEnabled(RedisConfig redisConfig) {
+        return redisConfig.isSubscriptionDataCacheEnabled()
+                || Boolean.parseBoolean(System.getProperty(SUBSCRIPTION_DATA_CACHE_ENABLED_PROPERTY, "false"));
     }
 
     private boolean isSubscriptionRedisCacheReadable(String tenantDomain) {
         RedisConfig redisConfig = ServiceReferenceHolder.getInstance().getAPIManagerConfigurationService()
                 .getAPIManagerConfiguration().getRedisConfig();
-        if (redisConfig == null || !redisConfig.isRedisEnabled() || !redisConfig.isSubscriptionDataCacheEnabled()) {
+        if (redisConfig == null || !redisConfig.isRedisEnabled() || !isSubscriptionDataCacheFlagEnabled(redisConfig)) {
             return false;
         }
         SubscriptionDataRedisStore store = SubscriptionDataCacheService.getInstance().getStore();
@@ -165,6 +186,7 @@ public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
         if (!isSubscriptionRedisCacheReadable(tenantDomain)) {
             return null;
         }
+        log.info("Loading applications from Redis for tenant=" + tenantDomain);
         List<Application> applications = new ArrayList<>();
         Gson gson = new Gson();
         for (String json : SubscriptionDataCacheService.getInstance().getStore()
@@ -181,6 +203,7 @@ public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
         if (!isSubscriptionRedisCacheReadable(tenantDomain)) {
             return null;
         }
+        log.info("Loading subscriptions from Redis for tenant=" + tenantDomain);
         List<Subscription> subscriptions = new ArrayList<>();
         Gson gson = new Gson();
         for (String json : SubscriptionDataCacheService.getInstance().getStore()
@@ -197,6 +220,7 @@ public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
         if (!isSubscriptionRedisCacheReadable(tenantDomain)) {
             return null;
         }
+        log.info("Loading key mappings from Redis for tenant=" + tenantDomain);
         List<ApplicationKeyMapping> keyMappings = new ArrayList<>();
         Gson gson = new Gson();
         for (String json : SubscriptionDataCacheService.getInstance().getStore()
@@ -207,6 +231,42 @@ public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
             log.debug("Loaded " + keyMappings.size() + " key mappings from Redis for " + tenantDomain);
         }
         return keyMappings;
+    }
+
+    private Application getApplicationFromRedisPointLookup(String organization, int appId) {
+        if (!isSubscriptionRedisCacheReadable(organization)) {
+            return null;
+        }
+        String json = SubscriptionDataCacheService.getInstance().getStore().getApplicationJson(organization, appId);
+        if (json == null) {
+            return null;
+        }
+        return new Gson().fromJson(json, Application.class);
+    }
+
+    private Subscription getSubscriptionFromRedisPointLookup(String organization, int appId, int apiId) {
+        if (!isSubscriptionRedisCacheReadable(organization)) {
+            return null;
+        }
+        String json = SubscriptionDataCacheService.getInstance().getStore()
+                .getSubscriptionJson(organization, appId, apiId);
+        if (json == null) {
+            return null;
+        }
+        return new Gson().fromJson(json, Subscription.class);
+    }
+
+    private ApplicationKeyMapping getKeyMappingFromRedisPointLookup(String organization, String consumerKey,
+                                                                    String keyManager) {
+        if (!isSubscriptionRedisCacheReadable(organization)) {
+            return null;
+        }
+        String json = SubscriptionDataCacheService.getInstance().getStore()
+                .getKeyMappingJson(organization, consumerKey, keyManager);
+        if (json == null) {
+            return null;
+        }
+        return new Gson().fromJson(json, ApplicationKeyMapping.class);
     }
 
     @Override
@@ -329,6 +389,18 @@ public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
     @Override
     public Subscription getSubscriptionById(String apiId, String appId) throws DataLoadingException {
 
+        try {
+            int apiIdInt = Integer.parseInt(apiId);
+            int appIdInt = Integer.parseInt(appId);
+            Subscription fromRedis = getSubscriptionFromRedisPointLookup(
+                    org.wso2.carbon.utils.multitenancy.MultitenantConstants.SUPER_TENANT_DOMAIN_NAME,
+                    appIdInt, apiIdInt);
+            if (fromRedis != null) {
+                return fromRedis;
+            }
+        } catch (NumberFormatException ignored) {
+            // fall through to internal API
+        }
         String endPoint =
                 APIConstants.SubscriptionValidationResources.SUBSCRIPTIONS + "?apiId=" + apiId + "&appId=" + appId;
         Subscription subscription = null;
@@ -352,6 +424,11 @@ public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
     @Override
     public Application getApplicationById(int appId) throws DataLoadingException {
 
+        Application fromRedis = getApplicationFromRedisPointLookup(
+                org.wso2.carbon.utils.multitenancy.MultitenantConstants.SUPER_TENANT_DOMAIN_NAME, appId);
+        if (fromRedis != null) {
+            return fromRedis;
+        }
         String endPoint = APIConstants.SubscriptionValidationResources.APPLICATIONS + "?appId=" + appId;
         Application application = null;
         String responseString;
@@ -380,6 +457,12 @@ public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
     public ApplicationKeyMapping getKeyMapping(String consumerKey, String keymanager, String tenantDomain)
             throws DataLoadingException {
 
+        String organization = tenantDomain != null ? tenantDomain
+                : org.wso2.carbon.utils.multitenancy.MultitenantConstants.SUPER_TENANT_DOMAIN_NAME;
+        ApplicationKeyMapping fromRedis = getKeyMappingFromRedisPointLookup(organization, consumerKey, keymanager);
+        if (fromRedis != null) {
+            return fromRedis;
+        }
         ApplicationKeyMapping application = null;
         String responseString;
         String endPoint = null;

@@ -26,6 +26,8 @@ import org.wso2.carbon.apimgt.api.model.subscription.CacheableEntity;
 import org.wso2.carbon.apimgt.common.gateway.constants.JWTConstants;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.APIManagerConfiguration;
+import org.wso2.carbon.apimgt.impl.subscription.cache.SubscriptionDataCacheService;
+import org.wso2.carbon.apimgt.impl.subscription.cache.SubscriptionDataRedisStore;
 import org.wso2.carbon.apimgt.impl.caching.CacheInvalidationServiceImpl;
 import org.wso2.carbon.apimgt.impl.dto.EventHubConfigurationDto;
 import org.wso2.carbon.apimgt.impl.notifier.events.DeployAPIInGatewayEvent;
@@ -62,6 +64,8 @@ public class SubscriptionDataStoreImpl implements SubscriptionDataStore {
     public static final String DELEM_PERIOD = ":";
     public static final int LOADING_POOL_SIZE = 7;
     private static final long SUBSCRIPTION_CACHE_TTL_MS = TimeUnit.MINUTES.toMillis(15);
+    private static final String GATEWAY_SKIP_BULK_SUBSCRIPTION_LOAD_PROPERTY =
+            "apim.subscription.cache.gateway.skip.bulk.load";
     private static final Log log = LogFactory.getLog(SubscriptionDataStoreImpl.class);
     private final EventHubConfigurationDto eventHubConfiguration;
     private boolean scopesInitialized;
@@ -431,56 +435,67 @@ public class SubscriptionDataStoreImpl implements SubscriptionDataStore {
 
         executorService.schedule(apiTask, eventHubConfiguration.getInitDelay(), TimeUnit.MILLISECONDS);
 
-        Runnable subscriptionLoadingTask = new PopulateTask<>(subscriptionMap,
-                () -> {
-                    try {
-                        log.debug("Calling loadAllSubscriptions.");
-                        List<Subscription> subscriptions =
-                                new SubscriptionDataLoaderImpl().loadAllSubscriptions(tenantDomain);
-                        subscriptionsInitialized = true;
-                        return subscriptions;
-                    } catch (APIManagementException e) {
-                        log.error("Exception while loading Subscriptions " + e);
-                    }
-                    return null;
-                });
-
-        executorService.schedule(subscriptionLoadingTask, eventHubConfiguration.getInitDelay(), TimeUnit.MILLISECONDS);
         executorService.scheduleAtFixedRate(subscriptionMap::evictExpiredEntries, SUBSCRIPTION_CACHE_TTL_MS,
                 SUBSCRIPTION_CACHE_TTL_MS, TimeUnit.MILLISECONDS);
 
-        Runnable applicationLoadingTask = new PopulateTask<>(applicationMap,
-                () -> {
-                    try {
-                        log.debug("Calling loadAllApplications.");
-                        List<Application> applications =
-                                new SubscriptionDataLoaderImpl().loadAllApplications(tenantDomain);
-                        applicationsInitialized = true;
-                        return applications;
-                    } catch (APIManagementException e) {
-                        log.error("Exception while loading Applications " + e);
-                    }
-                    return null;
-                });
+        if (skipBulkSubscriptionValidationLoad()) {
+            log.info("Skipping bulk applications/subscriptions/keyMappings PopulateTask for tenant=" + tenantDomain
+                    + " (Redis warm; on-demand Redis point lookup enabled)");
+            applicationsInitialized = true;
+            subscriptionsInitialized = true;
+            applicationKeyMappingsInitialized = true;
+        } else {
+            Runnable subscriptionLoadingTask = new PopulateTask<>(subscriptionMap,
+                    () -> {
+                        try {
+                            log.debug("Calling loadAllSubscriptions.");
+                            List<Subscription> subscriptions =
+                                    new SubscriptionDataLoaderImpl().loadAllSubscriptions(tenantDomain);
+                            subscriptionsInitialized = true;
+                            return subscriptions;
+                        } catch (APIManagementException e) {
+                            log.error("Exception while loading Subscriptions " + e);
+                        }
+                        return null;
+                    });
 
-        executorService.schedule(applicationLoadingTask, eventHubConfiguration.getInitDelay(), TimeUnit.MILLISECONDS);
+            executorService.schedule(subscriptionLoadingTask, eventHubConfiguration.getInitDelay(),
+                    TimeUnit.MILLISECONDS);
 
-        Runnable keyMappingsTask =
-                new PopulateTask<>(applicationKeyMappingMap,
-                        () -> {
-                            try {
-                                log.debug("Calling loadAllKeyMappings.");
-                                List<ApplicationKeyMapping> keyMappings =
-                                        new SubscriptionDataLoaderImpl().loadAllKeyMappings(tenantDomain);
-                                applicationKeyMappingsInitialized = true;
-                                return keyMappings;
-                            } catch (APIManagementException e) {
-                                log.error("Exception while loading ApplicationKeyMapping " + e);
-                            }
-                            return null;
-                        });
+            Runnable applicationLoadingTask = new PopulateTask<>(applicationMap,
+                    () -> {
+                        try {
+                            log.debug("Calling loadAllApplications.");
+                            List<Application> applications =
+                                    new SubscriptionDataLoaderImpl().loadAllApplications(tenantDomain);
+                            applicationsInitialized = true;
+                            return applications;
+                        } catch (APIManagementException e) {
+                            log.error("Exception while loading Applications " + e);
+                        }
+                        return null;
+                    });
 
-        executorService.schedule(keyMappingsTask, eventHubConfiguration.getInitDelay(), TimeUnit.MILLISECONDS);
+            executorService.schedule(applicationLoadingTask, eventHubConfiguration.getInitDelay(),
+                    TimeUnit.MILLISECONDS);
+
+            Runnable keyMappingsTask =
+                    new PopulateTask<>(applicationKeyMappingMap,
+                            () -> {
+                                try {
+                                    log.debug("Calling loadAllKeyMappings.");
+                                    List<ApplicationKeyMapping> keyMappings =
+                                            new SubscriptionDataLoaderImpl().loadAllKeyMappings(tenantDomain);
+                                    applicationKeyMappingsInitialized = true;
+                                    return keyMappings;
+                                } catch (APIManagementException e) {
+                                    log.error("Exception while loading ApplicationKeyMapping " + e);
+                                }
+                                return null;
+                            });
+
+            executorService.schedule(keyMappingsTask, eventHubConfiguration.getInitDelay(), TimeUnit.MILLISECONDS);
+        }
 
         Runnable apiPolicyLoadingTask =
                 new PopulateTask<>(apiPolicyMap,
@@ -571,7 +586,21 @@ public class SubscriptionDataStoreImpl implements SubscriptionDataStore {
 
     @Override
     public boolean isSubscriptionValidationDataReady() {
+        if (skipBulkSubscriptionValidationLoad()) {
+            return true;
+        }
         return applicationsInitialized && subscriptionsInitialized && applicationKeyMappingsInitialized;
+    }
+
+    /**
+     * When enabled and Redis is warm, skip loading millions of rows into heap at startup; use L1 + Redis HGET + Internal API.
+     */
+    private boolean skipBulkSubscriptionValidationLoad() {
+        if (!Boolean.parseBoolean(System.getProperty(GATEWAY_SKIP_BULK_SUBSCRIPTION_LOAD_PROPERTY, "false"))) {
+            return false;
+        }
+        SubscriptionDataRedisStore store = SubscriptionDataCacheService.getInstance().getStore();
+        return store != null && store.isWarm(tenantDomain);
     }
 
     @Override

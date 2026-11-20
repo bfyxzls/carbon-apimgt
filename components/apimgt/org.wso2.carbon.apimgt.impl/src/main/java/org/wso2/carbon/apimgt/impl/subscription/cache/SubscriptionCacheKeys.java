@@ -31,6 +31,17 @@ public final class SubscriptionCacheKeys {
     public static final String LOCK = "lock";
     public static final String META_READY = "ready";
     public static final String META_WARMED_AT = "warmedAt";
+    public static final String META_APP_COUNT = "appCount";
+    public static final String META_SUBSCRIPTION_COUNT = "subscriptionCount";
+    public static final String META_KEY_MAPPING_COUNT = "keyMappingCount";
+    /**
+     * Set when an intentionally empty warm is allowed ({@code -Dapim.subscription.cache.warm.allow.empty=true}).
+     * Without this, placeholder-only business hashes are treated as dirty and force re-warm.
+     */
+    public static final String META_EMPTY_WARM = "emptyWarm";
+    /** Placeholder field so an empty HASH key still EXISTS after a successful warm with 0 rows. */
+    public static final String EMPTY_HASH_PLACEHOLDER_FIELD = "__empty__";
+    public static final String EMPTY_HASH_PLACEHOLDER_VALUE = "1";
 
     private SubscriptionCacheKeys() {
     }

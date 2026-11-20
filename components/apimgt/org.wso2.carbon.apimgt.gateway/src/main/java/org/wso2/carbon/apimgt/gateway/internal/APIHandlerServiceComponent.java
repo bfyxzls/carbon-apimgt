@@ -71,6 +71,7 @@ import org.wso2.carbon.apimgt.impl.APIManagerConfigurationService;
 import org.wso2.carbon.apimgt.impl.caching.CacheProvider;
 import org.wso2.carbon.apimgt.impl.dto.GatewayArtifactSynchronizerProperties;
 import org.wso2.carbon.apimgt.impl.dto.RedisConfig;
+import org.wso2.carbon.apimgt.impl.subscription.cache.RedisPoolFactory;
 import org.wso2.carbon.apimgt.impl.gatewayartifactsynchronizer.ArtifactRetriever;
 import org.wso2.carbon.apimgt.impl.jms.listener.JMSListenerShutDownService;
 import org.wso2.carbon.apimgt.impl.jwt.JWTValidationService;
@@ -161,7 +162,7 @@ public class APIHandlerServiceComponent {
             boolean subscriptionCacheEnabled = redisConfig.isSubscriptionDataCacheEnabled()
                     || Boolean.parseBoolean(System.getProperty("apim.subscription.data.cache.enabled", "false"));
             if (subscriptionCacheEnabled) {
-                JedisPool subscriptionJedisPool = getJedisPool(redisConfig);
+                JedisPool subscriptionJedisPool = RedisPoolFactory.create(redisConfig);
                 org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder.getInstance()
                         .setSubscriptionDataJedisPool(subscriptionJedisPool);
                 org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder.getInstance()

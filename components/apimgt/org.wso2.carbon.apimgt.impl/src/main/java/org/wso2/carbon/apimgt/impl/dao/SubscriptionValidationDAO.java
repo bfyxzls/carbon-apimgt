@@ -124,7 +124,45 @@ public class SubscriptionValidationDAO {
                 populateSubscriptionsList(subscriptions, resultSet);
             }
         } catch (SQLException e) {
-            log.error("Error in loading Subscriptions for the organization : " + organization, e);}
+            log.error("Error in loading Subscriptions for the organization : " + organization, e);
+            throw new APIManagementException(
+                    "Error loading Subscriptions for the organization : " + organization, e);
+        }
+        return subscriptions;
+    }
+
+    /**
+     * Load one page of subscriptions for an organization using keyset pagination on
+     * {@code SUBSCRIPTION_ID} (exclusive lower bound). Used by Redis warm to avoid loading
+     * the full result set into heap at once.
+     *
+     * @param organization         organization / tenant domain
+     * @param afterSubscriptionId  return rows with SUBSCRIPTION_ID &gt; this value (use 0 for first page)
+     * @param limit                max rows in this page
+     * @return page of subscriptions ordered by SUBSCRIPTION_ID ascending (never null)
+     * @throws APIManagementException on SQL failures
+     */
+    public List<Subscription> getSubscriptionsByOrganizationPage(String organization, int afterSubscriptionId,
+            int limit) throws APIManagementException {
+
+        if (limit <= 0) {
+            return new ArrayList<>();
+        }
+        List<Subscription> subscriptions = new ArrayList<>(Math.min(limit, 4096));
+        try (Connection conn = APIMgtDBUtil.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     SubscriptionValidationSQLConstants.GET_ORGANIZATION_SUBSCRIPTIONS_BY_ID_PAGE_SQL)) {
+            ps.setString(1, organization);
+            ps.setInt(2, afterSubscriptionId);
+            ps.setInt(3, limit);
+            try (ResultSet resultSet = ps.executeQuery()) {
+                populateSubscriptionsList(subscriptions, resultSet);
+            }
+        } catch (SQLException e) {
+            throw new APIManagementException(
+                    "Error loading subscriptions page for organization " + organization
+                            + " afterId=" + afterSubscriptionId + " limit=" + limit, e);
+        }
         return subscriptions;
     }
 
@@ -533,6 +571,7 @@ public class SubscriptionValidationDAO {
              }
         } catch (SQLException e) {
             log.error("Error in loading Applications for organization : " + organization, e);
+            throw new RuntimeException("Error loading Applications for organization : " + organization, e);
         }
         return applications;
     }
@@ -598,8 +637,96 @@ public class SubscriptionValidationDAO {
             }
         } catch (SQLException e) {
             log.error("Error in loading Application key mappings for organization : " + organization, e);
+            throw new RuntimeException(
+                    "Error loading Application key mappings for organization : " + organization, e);
         }
 
+        return keyMappings;
+    }
+
+    /**
+     * Keyset cursor for {@link #getApplicationKeyMappingsByOrganizationPage}.
+     * Matches PK {@code (APPLICATION_ID, KEY_TYPE, KEY_MANAGER)}.
+     */
+    public static final class KeyMappingPageCursor {
+        private int applicationId;
+        private String keyType = "";
+        private String keyManagerId = "";
+
+        public int getApplicationId() {
+            return applicationId;
+        }
+
+        public String getKeyType() {
+            return keyType == null ? "" : keyType;
+        }
+
+        public String getKeyManagerId() {
+            return keyManagerId == null ? "" : keyManagerId;
+        }
+
+        public void advanceTo(int applicationId, String keyType, String keyManagerId) {
+            this.applicationId = applicationId;
+            this.keyType = keyType == null ? "" : keyType;
+            this.keyManagerId = keyManagerId == null ? "" : keyManagerId;
+        }
+    }
+
+    /**
+     * Load one page of application key mappings using keyset pagination on
+     * {@code (APPLICATION_ID, KEY_TYPE, KEY_MANAGER)}. Updates {@code cursor} to the last row
+     * of the page when non-empty.
+     */
+    public List<ApplicationKeyMapping> getApplicationKeyMappingsByOrganizationPage(String organization,
+            KeyMappingPageCursor cursor, int limit) throws APIManagementException {
+
+        if (limit <= 0) {
+            return new ArrayList<>();
+        }
+        if (cursor == null) {
+            cursor = new KeyMappingPageCursor();
+        }
+        List<ApplicationKeyMapping> keyMappings = new ArrayList<>(Math.min(limit, 4096));
+        int lastAppId = cursor.getApplicationId();
+        String lastKeyType = cursor.getKeyType();
+        String lastKeyManagerId = cursor.getKeyManagerId();
+        try (Connection conn = APIMgtDBUtil.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     SubscriptionValidationSQLConstants.GET_ORGANIZATION_AM_KEY_MAPPING_BY_KEYSET_PAGE_SQL)) {
+            ps.setString(1, organization);
+            ps.setInt(2, cursor.getApplicationId());
+            ps.setInt(3, cursor.getApplicationId());
+            ps.setString(4, cursor.getKeyType());
+            ps.setInt(5, cursor.getApplicationId());
+            ps.setString(6, cursor.getKeyType());
+            ps.setString(7, cursor.getKeyManagerId());
+            ps.setInt(8, limit);
+            try (ResultSet resultSet = ps.executeQuery()) {
+                while (resultSet.next()) {
+                    ApplicationKeyMapping keyMapping = new ApplicationKeyMapping();
+                    keyMapping.setApplicationUUID(resultSet.getString("UUID"));
+                    keyMapping.setApplicationId(resultSet.getInt("APPLICATION_ID"));
+                    keyMapping.setConsumerKey(resultSet.getString("CONSUMER_KEY"));
+                    keyMapping.setKeyType(resultSet.getString("KEY_TYPE"));
+                    keyMapping.setKeyManager(resultSet.getString("KEY_MANAGER"));
+                    keyMapping.setWfState(resultSet.getString("STATE"));
+                    keyMappings.add(keyMapping);
+                    lastAppId = keyMapping.getApplicationId();
+                    lastKeyType = keyMapping.getKeyType();
+                    lastKeyManagerId = resultSet.getString("KEY_MANAGER_ID");
+                }
+            }
+        } catch (SQLException e) {
+            throw new APIManagementException(
+                    "Error loading keyMappings page for organization " + organization
+                            + " afterAppId=" + cursor.getApplicationId()
+                            + " afterKeyType=" + cursor.getKeyType()
+                            + " afterKeyManager=" + cursor.getKeyManagerId()
+                            + " limit=" + limit, e);
+        }
+        if (!keyMappings.isEmpty()) {
+            cursor.advanceTo(lastAppId, lastKeyType, lastKeyManagerId);
+        }
         return keyMappings;
     }
 

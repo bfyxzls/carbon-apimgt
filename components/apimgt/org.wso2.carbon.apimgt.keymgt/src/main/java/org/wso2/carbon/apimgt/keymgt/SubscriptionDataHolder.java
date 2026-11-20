@@ -19,6 +19,8 @@ package org.wso2.carbon.apimgt.keymgt;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.wso2.carbon.apimgt.impl.dto.RedisConfig;
+import org.wso2.carbon.apimgt.impl.subscription.cache.SubscriptionDataCacheService;
 import org.wso2.carbon.apimgt.keymgt.model.SubscriptionDataStore;
 import org.wso2.carbon.apimgt.keymgt.model.impl.SubscriptionDataStoreImpl;
 
@@ -52,10 +54,46 @@ public class SubscriptionDataHolder {
 
     public void initializeSubscriptionStore(String tenantDomain) {
 
+        waitForSubscriptionRedisStoreIfNeeded(tenantDomain);
         SubscriptionDataStore tenantStore = subscriptionStore.get(tenantDomain);
         if (tenantStore != null) {
             tenantStore.init();
         }
+    }
+
+    /**
+     * Avoid PopulateTask falling back to ACP when {@link org.wso2.carbon.apimgt.gateway.internal.APIHandlerServiceComponent}
+     * has not yet registered the Redis store.
+     */
+    private void waitForSubscriptionRedisStoreIfNeeded(String tenantDomain) {
+        if (!isSubscriptionRedisCacheConfigured()) {
+            return;
+        }
+        long deadline = System.currentTimeMillis() + 30_000L;
+        while (SubscriptionDataCacheService.getInstance().getStore() == null
+                && System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(200L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("Interrupted while waiting for subscription Redis store for tenant=" + tenantDomain);
+                return;
+            }
+        }
+        if (SubscriptionDataCacheService.getInstance().getStore() == null) {
+            log.warn("Subscription data Redis store not ready after 30s for tenant=" + tenantDomain
+                    + "; subscription PopulateTask may fall back to Event Hub internal API");
+        }
+    }
+
+    private boolean isSubscriptionRedisCacheConfigured() {
+        RedisConfig redisConfig = org.wso2.carbon.apimgt.keymgt.internal.ServiceReferenceHolder.getInstance()
+                .getAPIManagerConfigurationService().getAPIManagerConfiguration().getRedisConfig();
+        if (redisConfig == null || !redisConfig.isRedisEnabled()) {
+            return false;
+        }
+        return redisConfig.isSubscriptionDataCacheEnabled()
+                || Boolean.parseBoolean(System.getProperty("apim.subscription.data.cache.enabled", "false"));
     }
 
     public void unregisterTenantSubscriptionStore(String tenantDomain) {
