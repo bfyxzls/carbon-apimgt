@@ -38,74 +38,18 @@ import java.util.Map;
 public class UserProfileRedisStore {
 
     private static final Log log = LogFactory.getLog(UserProfileRedisStore.class);
+
     private static final int DEFAULT_TTL_SECONDS = 900;
+
     private static final int NEGATIVE_TTL_SECONDS = 60;
 
     private final JedisPool jedisPool;
+
     private final int ttlSeconds;
 
     public UserProfileRedisStore(JedisPool jedisPool, int ttlSeconds) {
         this.jedisPool = jedisPool;
         this.ttlSeconds = ttlSeconds > 0 ? ttlSeconds : DEFAULT_TTL_SECONDS;
-    }
-
-    /**
-     * @return slim claim map compatible with enrichment pickers, or {@code null} on miss / Redis error
-     */
-    public Map<String, String> getProfileClaims(String tenantDomain, String userKey) {
-        if (StringUtils.isBlank(userKey)) {
-            return null;
-        }
-        String redisKey = UserProfileCacheKeys.profileKey(tenantDomain, userKey);
-        try (Jedis jedis = jedisPool.getResource()) {
-            Map<String, String> hash = jedis.hgetAll(redisKey);
-            if (hash == null || hash.isEmpty()) {
-                return null;
-            }
-            if ("1".equals(hash.get(UserProfileCacheKeys.FIELD_EMPTY))) {
-                return new HashMap<>();
-            }
-            return toClaimMap(hash);
-        } catch (Exception e) {
-            log.warn("Failed to read user profile from Redis for key=" + redisKey + ": " + e.getMessage());
-            return null;
-        }
-    }
-
-    /**
-     * Persist slim profile under a single canonical Redis key.
-     */
-    public void putProfileClaims(String tenantDomain, String userKey, Map<String, String> claims) {
-        if (StringUtils.isBlank(userKey)) {
-            return;
-        }
-        Map<String, String> slim = slimFromClaims(claims, userKey);
-        // Redis key follows the lookup identity (KC uuid / login name), not IS internal userid.
-        String redisKey = UserProfileCacheKeys.profileKey(tenantDomain, userKey);
-        boolean empty = StringUtils.isBlank(slim.get(UserProfileCacheKeys.FIELD_USER_ID))
-                && StringUtils.isBlank(slim.get(UserProfileCacheKeys.FIELD_USERNAME))
-                && StringUtils.isBlank(slim.get(UserProfileCacheKeys.FIELD_EMAIL))
-                && StringUtils.isBlank(slim.get(UserProfileCacheKeys.FIELD_PHONE));
-        int ttl = empty ? NEGATIVE_TTL_SECONDS : ttlSeconds;
-        Map<String, String> hash = new HashMap<>();
-        if (empty) {
-            hash.put(UserProfileCacheKeys.FIELD_EMPTY, "1");
-        } else {
-            hash.putAll(slim);
-            hash.put(UserProfileCacheKeys.FIELD_EMPTY, "0");
-        }
-        try (Jedis jedis = jedisPool.getResource()) {
-            jedis.del(redisKey);
-            jedis.hset(redisKey, hash);
-            jedis.expire(redisKey, ttl);
-            if (log.isInfoEnabled()) {
-                log.info("Wrote user profile Redis key=" + redisKey
-                        + ", empty=" + empty + ", ttlSeconds=" + ttl
-                        + ", fields=" + slim.keySet());
-            }
-        } catch (Exception e) {
-            log.warn("Failed to write user profile to Redis for key=" + redisKey + ": " + e.getMessage());
-        }
     }
 
     public static Map<String, String> slimFromClaims(Map<String, String> claims) {
@@ -290,5 +234,102 @@ public class UserProfileRedisStore {
             }
         }
         return null;
+    }
+
+    /**
+     * @return slim claim map compatible with enrichment pickers, or {@code null} on miss / Redis error
+     */
+    public Map<String, String> getProfileClaims(String tenantDomain, String userKey) {
+        if (StringUtils.isBlank(userKey)) {
+            return null;
+        }
+        String redisKey = UserProfileCacheKeys.profileKey(tenantDomain, userKey);
+        try (Jedis jedis = jedisPool.getResource()) {
+            Map<String, String> hash = jedis.hgetAll(redisKey);
+            if (hash == null || hash.isEmpty()) {
+                return null;
+            }
+            if ("1".equals(hash.get(UserProfileCacheKeys.FIELD_EMPTY))) {
+                return new HashMap<>();
+            }
+            return toClaimMap(hash);
+        } catch (Exception e) {
+            log.warn("Failed to read user profile from Redis for key=" + redisKey + ": " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Persist slim profile under a single canonical Redis key.
+     * <p>
+     * When the incoming claim map is partial (e.g. jwt-bearer only filled empty UM attributes),
+     * existing non-blank Redis hash fields are retained so a partial write cannot wipe
+     * {@code userId}/{@code username}/{@code email}/{@code phone}.
+     */
+    public void putProfileClaims(String tenantDomain, String userKey, Map<String, String> claims) {
+        if (StringUtils.isBlank(userKey)) {
+            return;
+        }
+        Map<String, String> slim = slimFromClaims(claims, userKey);
+        // Redis key follows the lookup identity (KC uuid / login name), not IS internal userid.
+        String redisKey = UserProfileCacheKeys.profileKey(tenantDomain, userKey);
+        try (Jedis jedis = jedisPool.getResource()) {
+            Map<String, String> existing = null;
+            try {
+                existing = jedis.hgetAll(redisKey);
+            } catch (Exception readEx) {
+                log.debug("Could not read existing user profile for merge key=" + redisKey
+                        + ": " + readEx.getMessage());
+            }
+            mergeSlimWithExisting(slim, existing);
+
+            boolean empty = StringUtils.isBlank(slim.get(UserProfileCacheKeys.FIELD_USER_ID))
+                    && StringUtils.isBlank(slim.get(UserProfileCacheKeys.FIELD_USERNAME))
+                    && StringUtils.isBlank(slim.get(UserProfileCacheKeys.FIELD_EMAIL))
+                    && StringUtils.isBlank(slim.get(UserProfileCacheKeys.FIELD_PHONE));
+            int ttl = empty ? NEGATIVE_TTL_SECONDS : ttlSeconds;
+            Map<String, String> hash = new HashMap<>();
+            if (empty) {
+                hash.put(UserProfileCacheKeys.FIELD_EMPTY, "1");
+            } else {
+                hash.putAll(slim);
+                hash.put(UserProfileCacheKeys.FIELD_EMPTY, "0");
+            }
+            jedis.del(redisKey);
+            jedis.hset(redisKey, hash);
+            jedis.expire(redisKey, ttl);
+            log.debug("Wrote user profile Redis key=" + redisKey
+                    + ", empty=" + empty + ", ttlSeconds=" + ttl
+                    + ", fields=" + slim.keySet());
+
+        } catch (Exception e) {
+            log.warn("Failed to write user profile to Redis for key=" + redisKey + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Fill blank slim fields from a prior Redis hash (ignores negative-cache {@code empty=1} entries).
+     */
+    private static void mergeSlimWithExisting(Map<String, String> slim, Map<String, String> existing) {
+        if (slim == null || existing == null || existing.isEmpty()) {
+            return;
+        }
+        if ("1".equals(existing.get(UserProfileCacheKeys.FIELD_EMPTY))) {
+            return;
+        }
+        retainIfBlank(slim, UserProfileCacheKeys.FIELD_USER_ID, existing);
+        retainIfBlank(slim, UserProfileCacheKeys.FIELD_USERNAME, existing);
+        retainIfBlank(slim, UserProfileCacheKeys.FIELD_EMAIL, existing);
+        retainIfBlank(slim, UserProfileCacheKeys.FIELD_PHONE, existing);
+    }
+
+    private static void retainIfBlank(Map<String, String> slim, String field, Map<String, String> existing) {
+        if (StringUtils.isNotBlank(slim.get(field))) {
+            return;
+        }
+        String prior = existing.get(field);
+        if (StringUtils.isNotBlank(prior)) {
+            slim.put(field, prior.trim());
+        }
     }
 }

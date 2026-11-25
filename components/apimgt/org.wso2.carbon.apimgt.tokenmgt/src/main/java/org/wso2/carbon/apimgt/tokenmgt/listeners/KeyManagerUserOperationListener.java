@@ -19,12 +19,14 @@
 package org.wso2.carbon.apimgt.tokenmgt.listeners;
 
 import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.APIManagerConfiguration;
 import org.wso2.carbon.apimgt.impl.dao.ApiMgtDAO;
+import org.wso2.carbon.apimgt.impl.userprofile.UserProfileRedisStore;
 import org.wso2.carbon.apimgt.impl.utils.APIAuthenticationAdminClient;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.apimgt.impl.workflow.WorkflowConstants;
@@ -44,6 +46,7 @@ import org.wso2.carbon.user.core.util.UserCoreUtil;
 import org.wso2.carbon.utils.multitenancy.MultitenantConstants;
 import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -54,6 +57,17 @@ import java.util.Map;
 public class KeyManagerUserOperationListener extends IdentityOathEventListener {
 
     private static final Log log = LogFactory.getLog(KeyManagerUserOperationListener.class);
+
+    /**
+     * Audit fields persisted by jwt-bearer ({@code JWTUserAttributePersister}) into UM_USER_ATTRIBUTE
+     * and cached under {@code apim:userprofile:{tenant}:{kc_user_id}}.
+     */
+    private static final String[] AUDIT_CLAIM_URIS = new String[]{
+            "http://wso2.org/claims/userid",
+            APIConstants.NICKNAME_CLAIM,
+            APIConstants.EMAIL_CLAIM,
+            APIConstants.MOBILE_CLAIM
+    };
 
     /**
      * Bundle execution order id.
@@ -110,6 +124,7 @@ public class KeyManagerUserOperationListener extends IdentityOathEventListener {
             throws org.wso2.carbon.user.core.UserStoreException {
 
         clearGatewayUsernameCache(userName,getTenantDomain());
+        refreshUserProfileRedisCache(userName, claims, userStoreManager);
         return super.doPostAddUser(userName, credential, roleList, claims, profile, userStoreManager);
     }
 
@@ -325,6 +340,8 @@ public class KeyManagerUserOperationListener extends IdentityOathEventListener {
     public boolean doPostSetUserClaimValue(String userName, UserStoreManager userStoreManager)
             throws org.wso2.carbon.user.core.UserStoreException {
 
+        // Single-claim update path (claims map not provided); refresh from UM audit fields.
+        refreshUserProfileRedisCache(userName, null, userStoreManager);
         return super.doPostSetUserClaimValue(userName, userStoreManager);
     }
 
@@ -333,7 +350,68 @@ public class KeyManagerUserOperationListener extends IdentityOathEventListener {
                                             UserStoreManager userStoreManager)
             throws org.wso2.carbon.user.core.UserStoreException {
 
+        // jwt-bearer JWTUserAttributePersister.setUserClaimValues lands here; keep Redis in sync.
+        refreshUserProfileRedisCache(userName, claims, userStoreManager);
         return super.doPostSetUserClaimValues(userName, claims, profileName, userStoreManager);
+    }
+
+    /**
+     * After UM_USER_ATTRIBUTE write (jwt-bearer or admin claim update), refresh
+     * {@code apim:userprofile:{tenant}:{userKey}} so Gateway enrichment does not serve stale /
+     * negative-cached profiles. Failures are logged only — never block user-store or token flow.
+     */
+    private void refreshUserProfileRedisCache(String userName, Map<String, String> claims,
+                                              UserStoreManager userStoreManager) {
+
+        try {
+            UserProfileRedisStore profileStore =
+                    org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder.getInstance()
+                            .getUserProfileRedisStore();
+            if (profileStore == null || StringUtils.isBlank(userName)) {
+                return;
+            }
+            String tenantDomain = getTenantDomain();
+            if (StringUtils.isBlank(tenantDomain)) {
+                tenantDomain = MultitenantConstants.SUPER_TENANT_DOMAIN_NAME;
+            }
+
+            Map<String, String> toCache = new HashMap<>();
+            if (claims != null && !claims.isEmpty()) {
+                toCache.putAll(claims);
+            }
+            if (userStoreManager != null) {
+                try {
+                    Map<String, String> fromStore =
+                            userStoreManager.getUserClaimValues(userName, AUDIT_CLAIM_URIS, null);
+                    if (fromStore != null) {
+                        for (Map.Entry<String, String> entry : fromStore.entrySet()) {
+                            if (StringUtils.isNotBlank(entry.getValue())) {
+                                toCache.put(entry.getKey(), entry.getValue());
+                            }
+                        }
+                    }
+                } catch (Exception readEx) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("User profile Redis refresh: UM claim read-back failed for user="
+                                + userName + ": " + readEx.getMessage());
+                    }
+                }
+            }
+            if (toCache.isEmpty()) {
+                return;
+            }
+            profileStore.putProfileClaims(tenantDomain, userName, toCache);
+            if (log.isDebugEnabled()) {
+                log.debug("Refreshed user profile Redis after claim update: user=" + userName
+                        + ", tenant=" + tenantDomain + ", claimKeys=" + toCache.keySet());
+            }
+        } catch (Exception e) {
+            log.warn("Failed to refresh user profile Redis cache for user=" + userName
+                    + ": " + e.getMessage());
+            if (log.isDebugEnabled()) {
+                log.debug("User profile Redis refresh error", e);
+            }
+        }
     }
 
 }

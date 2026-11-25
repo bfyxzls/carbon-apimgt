@@ -397,7 +397,7 @@ public class APIKeyValidationService {
                         + " (tried raw uuid / uuid@tenant / {uuid} / {uuid}@tenant)");
                 return false;
             }
-            log.info("[subUser] claims keys via " + resolvedAs + ": " + claims.keySet());
+            log.debug("[subUser] claims keys via " + resolvedAs + ": " + claims.keySet());
             if (StringUtils.isEmpty(dto.getSubUserName())) {
                 String subUserName = pickKcUserNameFromClaims(claims, resolvedAs);
                 if (StringUtils.isNotEmpty(subUserName)) {
